@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  ORGANIZATION_ADMIN
+  EMPLOYEE
+}
+
+enum ResourceType {
+  CUBICLE
+  DESK
+  BOARD_ROOM
+  MEETING_ROOM
+}
+
+enum ResourceStatus {
+  ACTIVE
+  DISABLED
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CONFLICT
+  FAILED
+  CANCELLED
+}
+
+enum BookingSource {
+  ONLINE
+  OFFLINE
+}
+
+enum SyncOperationStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REJECTED
+}
+
+model Organization {
+  id             String          @id @default(uuid())
+  name           String
+  code           String          @unique
+  subdomain      String          @unique
+  logoUrl        String?
+  themeColor     String?         @default("#16a34a")
+  timezone       String          @default("UTC")
+  status         String          @default("ACTIVE")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  buildings      Building[]
+  users          User[]
+  bookings       Booking[]
+  syncOperations SyncOperation[]
+  auditLogs      AuditLog[]
+}
+
+model User {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String          @unique
+  passwordHash   String
+  role           Role            @default(EMPLOYEE)
+  department     String?
+  baseBuildingId String?
+  ssoProvider    String?
+  externalId     String?
+  status         String          @default("ACTIVE")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bookings       Booking[]       @relation("UserBookings")
+  proxyBookings  Booking[]       @relation("CreatedByBookings")
+  syncOperations SyncOperation[]
+  auditLogs      AuditLog[]
+}
+
+model Building {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  address        String?
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  floors         Floor[]
+
+  @@unique([organizationId, code])
+}
+
+model Floor {
+  id          String     @id @default(uuid())
+  buildingId  String
+  building    Building   @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name        String
+  floorNumber Int
+  status      String     @default("ACTIVE")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  resources   Resource[]
+
+  @@unique([buildingId, floorNumber])
+}
+
+model Resource {
+  id        String         @id @default(uuid())
+  floorId   String
+  floor     Floor          @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  type      ResourceType   @default(CUBICLE)
+  name      String
+  code      String
+  capacity  Int            @default(1)
+  status    ResourceStatus @default(ACTIVE)
+  features  Json           @default("[]")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  bookings  Booking[]
+
+  @@unique([floorId, code])
+}
+
+model Booking {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resourceId     String
+  resource       Resource      @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User          @relation("UserBookings", fields: [userId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User          @relation("CreatedByBookings", fields: [createdById], references: [id], onDelete: Cascade)
+  startAt        DateTime
+  endAt          DateTime
+  status         BookingStatus @default(CONFIRMED)
+  source         BookingSource @default(ONLINE)
+  operationId    String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  cancelledAt    DateTime?
+}
+
+model SyncOperation {
+  id             String              @id @default(uuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationId    String              @unique
+  operationType  String
+  status         SyncOperationStatus @default(PENDING)
+  requestHash    String
+  responseData   Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model AuditLog {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorUserId    String?
+  actorUser      User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+}
