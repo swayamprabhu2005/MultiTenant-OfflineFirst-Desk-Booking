@@ -10,6 +10,28 @@ Designed for network-constrained building basements or offline enterprise enviro
 
 ---
 
+## ⚙️ Advanced Features (Phase 2 & Phase 3 Complete)
+
+### 1. Visual Floor Map Navigation & Date Filters
+- **Interactive Section Map**: View live office section layout maps in a grid view matching actual desk coords.
+- **Advance Calendar Bound**: Strict, hardcoded 30-day booking calendar limit.
+- **Pre-Flight Conflict Warnings**: Immediate warnings displayed in the confirmation modal if a selected date overlaps with an existing reservation.
+- **Weekday Picker**: Filter specific booking occurrences by selecting individual weekdays (e.g. Mon, Wed, Fri only).
+- **Session Slots**: Support for `FULL_DAY`, `FIRST_HALF` (Morning), and `SECOND_HALF` (Afternoon) slots with non-conflicting time overlaps on the same desk.
+
+### 2. Team Booking & Business Validations
+- **Required Comments**: Form comments are strictly validated and required for boardroom reservations and same-day multi-desk booking occurrences.
+- **Search & Batch Cancellations**: A search bar on the "My Bookings" page with checklist checkboxes allows batch cancellations.
+- **Series Cancellation**: Option to delete "This date only" or "All future occurrences in the series" for recurring chains.
+- **Tech Lead Bulk Booking**: Tech Leads can select multiple team subordinates simultaneously, run bulk bookings, and get a **Partial-Success Execution Receipt** showing succeeded slots and conflict errors.
+
+### 3. User Security & Custom Onboarding
+- **Forced Password Reset**: Any CSV-imported roster accounts with `mustChangePassword: true` are blocked from dashboard entry and redirected to a password reset guard.
+- **One-Time Branch Assignment**: Employees logging in without a base office branch are prompted via a modal selector to assign a home branch. Updates sync immediately or queue offline in the IndexedDB Outbox.
+- **In-App Notifications**: Real-time bell notification dropdown list showing reading alerts (with batch mark-as-read triggers) and background synchronization on reconnect.
+
+---
+
 ## 🛠️ Tech Stack Architecture
 
 - **Frontend (`apps/web`)**: React 18, TypeScript, Vite, Tailwind CSS (Emerald & Slate theme design system), TanStack Query (`@tanstack/react-query`), React Router DOM v6, Lucide React Icons.
@@ -34,9 +56,10 @@ Double-click or run `run.bat` in the terminal:
 ```
 This script will:
 1. Launch PostgreSQL 16 container via Docker Compose on port `5432`.
-2. Install PNPM workspace dependencies.
-3. Generate Prisma client & apply database schema/seed.
-4. Start both API server (`http://localhost:4000`) and Vite Web PWA client (`http://localhost:3000`) in parallel.
+2. Wait 6 seconds for the database service to be fully healthy.
+3. Install PNPM workspace dependencies.
+4. Generate Prisma client & apply database schema/seed.
+5. Start both API server (`http://localhost:4000`) and Vite Web PWA client (`http://localhost:3000`) in parallel.
 
 ### Manual Step-by-Step Launch
 
@@ -80,23 +103,6 @@ Default Password for all accounts: **`Password123!`**
 
 ---
 
-## ⚡ Core Business Logic & Offline Flow
-
-### 1. Offline Booking & IndexedDB Outbox
-When an employee creates a reservation while offline:
-- The reservation is immediately stored in local Dexie IndexedDB with status `PENDING`.
-- An execution record is queued in the Dexie `outbox` table.
-- The UI reflects the pending desk reservation instantly.
-
-### 2. Auto-Sync & "First to Sync Wins" Protocol
-When network connection is restored (or via the manual "Sync Outbox Now" button in Sync Center):
-- The `SyncEngine` batches queued outbox operations and sends them to `/api/sync/operations`.
-- The backend evaluates time overlap inside a database transaction:
-  - If the slot is available: status commits as `CONFIRMED` and returns `SUCCESS`.
-  - If another employee synced an overlapping booking first: the transaction rejects, sets status to `CONFLICT` / `REJECTED`, and dispatches an in-app Toast Alert prompting the user to select another desk!
-
----
-
 ## 📁 Repository Structure
 
 ```
@@ -116,7 +122,7 @@ MultiTenant OfflineFirst DeskBooking/
 ├── packages/
 │   └── shared/                # Shared TypeScript types, DTOs, & Enums
 ├── docker-compose.yml         # PostgreSQL 16 container definition
-├── run.bat                    # One-click startup script for Windows
+├── run.bat                    # Startup script for Windows (optimized with startup delays)
 ├── pnpm-workspace.yaml
 ├── package.json
 └── README.md

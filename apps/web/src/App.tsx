@@ -13,6 +13,7 @@ import { OrganizationsPage } from './pages/admin/OrganizationsPage';
 import { BuildingsManagementPage } from './pages/admin/BuildingsManagementPage';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,28 @@ const queryClient = new QueryClient({
 });
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-xs font-semibold">
+        Loading Tenant Workspace...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const PasswordResetRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
@@ -69,6 +92,15 @@ export const App: React.FC = () => {
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
               </Route>
+
+              <Route
+                path="/change-password"
+                element={
+                  <PasswordResetRoute>
+                    <ChangePasswordPage />
+                  </PasswordResetRoute>
+                }
+              />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

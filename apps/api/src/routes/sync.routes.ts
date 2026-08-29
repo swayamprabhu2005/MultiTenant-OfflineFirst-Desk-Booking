@@ -157,12 +157,28 @@ router.post('/operations', authMiddleware, async (req: AuthenticatedRequest, res
           });
         }
       } else if (operationType === 'CANCEL_BOOKING') {
-        const { bookingId } = payload;
+        const { bookingId, cancelSeries } = payload;
         try {
-          const updated = await prisma.booking.update({
-            where: { id: bookingId },
-            data: { status: BookingStatus.CANCELLED as any, cancelledAt: new Date() },
-          });
+          const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+          
+          let updated;
+          if (cancelSeries && booking?.recurringGroupId) {
+            await prisma.booking.updateMany({
+              where: {
+                recurringGroupId: booking.recurringGroupId,
+                startAt: { gte: booking.startAt },
+                organizationId: orgId,
+                status: { not: BookingStatus.CANCELLED as any },
+              },
+              data: { status: BookingStatus.CANCELLED as any, cancelledAt: new Date() },
+            });
+            updated = await prisma.booking.findUnique({ where: { id: bookingId } });
+          } else {
+            updated = await prisma.booking.update({
+              where: { id: bookingId },
+              data: { status: BookingStatus.CANCELLED as any, cancelledAt: new Date() },
+            });
+          }
 
           await prisma.syncOperation.update({
             where: { operationId },
@@ -173,6 +189,32 @@ router.post('/operations', authMiddleware, async (req: AuthenticatedRequest, res
             operationId,
             status: SyncOperationStatus.SUCCESS,
             booking: updated,
+          });
+        } catch (err: any) {
+          results.push({
+            operationId,
+            status: SyncOperationStatus.FAILED,
+            error: err.message,
+          });
+        }
+      } else if (operationType === 'UPDATE_PROFILE') {
+        const { baseBranchId, baseBuildingId } = payload;
+        try {
+          const updated = await prisma.user.update({
+            where: { id: currentUserId },
+            data: {
+              ...(baseBranchId !== undefined ? { baseBranchId: baseBranchId || null } : {}),
+              ...(baseBuildingId !== undefined ? { baseBuildingId: baseBuildingId || null } : {}),
+            },
+          });
+          await prisma.syncOperation.update({
+            where: { operationId },
+            data: { status: SyncOperationStatus.SUCCESS as any, responseData: updated as any },
+          });
+          results.push({
+            operationId,
+            status: SyncOperationStatus.SUCCESS,
+            user: updated,
           });
         } catch (err: any) {
           results.push({

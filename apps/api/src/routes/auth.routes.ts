@@ -59,6 +59,10 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
         email: user.email,
         role: user.role,
         organizationId: user.organizationId,
+        scopedBranchId: user.scopedBranchId,
+        teamLeadId: user.teamLeadId,
+        mustChangePassword: user.mustChangePassword,
+        baseBranchId: user.baseBranchId,
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -72,7 +76,11 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
         email: user.email,
         role: user.role,
         department: user.department,
+        baseBranchId: user.baseBranchId,
         baseBuildingId: user.baseBuildingId,
+        scopedBranchId: user.scopedBranchId,
+        teamLeadId: user.teamLeadId,
+        mustChangePassword: user.mustChangePassword,
         organizationId: user.organizationId,
       },
       organization: {
@@ -111,7 +119,11 @@ router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respons
         email: user.email,
         role: user.role,
         department: user.department,
+        baseBranchId: user.baseBranchId,
         baseBuildingId: user.baseBuildingId,
+        scopedBranchId: user.scopedBranchId,
+        teamLeadId: user.teamLeadId,
+        mustChangePassword: user.mustChangePassword,
         organizationId: user.organizationId,
       },
       organization: user.organization,
@@ -136,6 +148,81 @@ router.get('/organizations', async (req: TenantRequest, res: Response) => {
       },
     });
     return res.json(orgs);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Change Password (Task 4.5)
+router.post('/change-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password changed successfully',
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        department: updatedUser.department,
+        baseBranchId: updatedUser.baseBranchId,
+        baseBuildingId: updatedUser.baseBuildingId,
+        scopedBranchId: updatedUser.scopedBranchId,
+        teamLeadId: updatedUser.teamLeadId,
+        mustChangePassword: updatedUser.mustChangePassword,
+        organizationId: updatedUser.organizationId,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Update User Profile (Task 4.6)
+router.patch('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { baseBranchId, baseBuildingId } = req.body;
+    const data: any = {};
+    if (baseBranchId !== undefined) data.baseBranchId = baseBranchId || null;
+    if (baseBuildingId !== undefined) data.baseBuildingId = baseBuildingId || null;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user!.id },
+      data,
+    });
+
+    return res.json({
+      success: true,
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        department: updatedUser.department,
+        baseBranchId: updatedUser.baseBranchId,
+        baseBuildingId: updatedUser.baseBuildingId,
+        scopedBranchId: updatedUser.scopedBranchId,
+        teamLeadId: updatedUser.teamLeadId,
+        mustChangePassword: updatedUser.mustChangePassword,
+        organizationId: updatedUser.organizationId,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

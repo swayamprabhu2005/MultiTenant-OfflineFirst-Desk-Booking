@@ -11,7 +11,11 @@ export interface AuthenticatedRequest extends TenantRequest {
     name: string;
     role: Role;
     organizationId: string;
+    baseBranchId?: string | null;
     baseBuildingId?: string | null;
+    scopedBranchId?: string | null;
+    teamLeadId?: string | null;
+    mustChangePassword: boolean;
     department?: string | null;
   };
 }
@@ -41,7 +45,11 @@ export const authMiddleware = async (
         name: true,
         role: true,
         organizationId: true,
+        baseBranchId: true,
         baseBuildingId: true,
+        scopedBranchId: true,
+        teamLeadId: true,
+        mustChangePassword: true,
         department: true,
         status: true,
       },
@@ -72,4 +80,34 @@ export const requireRole = (allowedRoles: Role[]) => {
 
     next();
   };
+};
+
+export const checkBranchScope = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.user.role === 'ORGANIZATION_ADMIN' && req.user.scopedBranchId) {
+    const scopedBranchId = req.user.scopedBranchId;
+    const reqBranchId = req.params.branchId || req.query.branchId || req.body.branchId;
+
+    if (reqBranchId && reqBranchId !== scopedBranchId) {
+      return res.status(403).json({
+        error: 'Forbidden: Access restricted to scoped branch ' + scopedBranchId,
+      });
+    }
+
+    // Enforce parameter matching
+    if (req.method === 'GET') {
+      req.query.branchId = scopedBranchId;
+    } else {
+      req.body.branchId = scopedBranchId;
+    }
+  }
+
+  next();
 };

@@ -6,12 +6,15 @@ import dotenv from 'dotenv';
 import { tenantMiddleware } from './middleware/tenant.middleware';
 import authRoutes from './routes/auth.routes';
 import orgRoutes from './routes/organizations.routes';
+import branchRoutes from './routes/branches.routes';
 import buildingRoutes from './routes/buildings.routes';
+import sectionRoutes from './routes/sections.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import rosterRoutes from './routes/roster.routes';
 import bookingRoutes from './routes/bookings.routes';
 import syncRoutes from './routes/sync.routes';
 import auditRoutes from './routes/audit.routes';
+import notificationsRoutes from './routes/notifications.routes';
 
 dotenv.config();
 
@@ -57,12 +60,15 @@ app.get('/api/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/organizations', orgRoutes);
+app.use('/api/branches', branchRoutes);
 app.use('/api/buildings', buildingRoutes);
+app.use('/api/sections', sectionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/roster', rosterRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

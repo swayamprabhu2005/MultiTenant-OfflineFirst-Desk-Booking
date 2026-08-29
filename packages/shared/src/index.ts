@@ -1,6 +1,7 @@
 export enum Role {
   PLATFORM_ADMIN = 'PLATFORM_ADMIN',
   ORGANIZATION_ADMIN = 'ORGANIZATION_ADMIN',
+  TECH_LEAD = 'TECH_LEAD',
   EMPLOYEE = 'EMPLOYEE',
 }
 
@@ -57,7 +58,11 @@ export interface UserDTO {
   email: string;
   role: Role;
   department?: string | null;
+  baseBranchId?: string | null;
   baseBuildingId?: string | null;
+  scopedBranchId?: string | null;
+  teamLeadId?: string | null;
+  mustChangePassword?: boolean;
   status: string;
   createdAt: string;
 }

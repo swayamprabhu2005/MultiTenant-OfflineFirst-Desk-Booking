@@ -12,12 +12,31 @@ class SyncEngine {
   private isSyncing = false;
 
   constructor() {
-    // Register online event listener for auto background sync
+    // Register online event listener for auto background sync (fallback)
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
-        console.log('🌐 Network restored! Auto-flushing offline outbox...');
-        this.flushOutbox();
+        console.log('🌐 Network restored! Fallback outbox flush...');
+        this.requestSync();
       });
+    }
+  }
+
+  async requestSync(): Promise<void> {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'SyncManager' in window) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await (registration as any).sync.register('outbox-sync');
+        console.log('[SyncEngine] SW Background Sync registered.');
+      } catch (err) {
+        console.warn('[SyncEngine] SW Sync registration failed. Fallback to direct flush.', err);
+        if (navigator.onLine) {
+          this.flushOutbox();
+        }
+      }
+    } else {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        this.flushOutbox();
+      }
     }
   }
 
@@ -76,27 +95,37 @@ class SyncEngine {
 
     await db.outbox.put(outboxItem);
 
-    // 3. Attempt immediate sync if online
-    if (navigator.onLine) {
-      this.flushOutbox();
-    }
+    // 3. Attempt sync or register sync manager tag
+    await this.requestSync();
   }
 
   // Queue booking cancellation operation
-  async queueCancelOperation(bookingId: string, operationId: string, organizationId: string): Promise<void> {
+  async queueCancelOperation(bookingId: string, operationId: string, organizationId: string, cancelSeries?: boolean): Promise<void> {
     const createdAt = new Date().toISOString();
 
     // Update local booking status to CANCELLED locally first
     const local = await db.localBookings.get(bookingId);
     if (local) {
-      await db.localBookings.update(bookingId, { status: 'CANCELLED' });
+      if (cancelSeries && local.recurringGroupId) {
+        const futureBookings = await db.localBookings
+          .where('recurringGroupId')
+          .equals(local.recurringGroupId)
+          .toArray();
+        for (const fb of futureBookings) {
+          if (new Date(fb.startAt) >= new Date(local.startAt)) {
+            await db.localBookings.update(fb.id, { status: 'CANCELLED' });
+          }
+        }
+      } else {
+        await db.localBookings.update(bookingId, { status: 'CANCELLED' });
+      }
     }
 
     const outboxItem: OutboxItem = {
       operationId,
       operationType: 'CANCEL_BOOKING',
-      payload: { bookingId },
-      requestHash: `CANCEL-${bookingId}`,
+      payload: { bookingId, cancelSeries: !!cancelSeries },
+      requestHash: `CANCEL-${bookingId}-${cancelSeries ? 'series' : 'single'}`,
       createdAt,
       status: 'PENDING',
       retryCount: 0,
@@ -104,9 +133,35 @@ class SyncEngine {
 
     await db.outbox.put(outboxItem);
 
-    if (navigator.onLine) {
-      this.flushOutbox();
+    await this.requestSync();
+  }
+
+  // Queue Profile Update operation (Task 4.6)
+  async queueProfileUpdateOperation(baseBranchId: string, baseBuildingId?: string): Promise<void> {
+    const createdAt = new Date().toISOString();
+    const operationId = `PROFILE-UPDATE-${Date.now()}`;
+
+    // Update local cached user profile immediately
+    const cached = await db.cachedUser.toArray();
+    if (cached.length > 0) {
+      await db.cachedUser.update(cached[0].id, {
+        baseBranchId,
+        ...(baseBuildingId ? { baseBuildingId } : {}),
+      });
     }
+
+    const outboxItem: OutboxItem = {
+      operationId,
+      operationType: 'UPDATE_PROFILE',
+      payload: { baseBranchId, baseBuildingId },
+      requestHash: `PROFILE-UPDATE-${baseBranchId}`,
+      createdAt,
+      status: 'PENDING',
+      retryCount: 0,
+    };
+
+    await db.outbox.put(outboxItem);
+    await this.requestSync();
   }
 
   // Flush Outbox Queue to Backend API
@@ -170,6 +225,12 @@ class SyncEngine {
                 operationId: booking.operationId,
                 createdAt: booking.createdAt,
               });
+            }
+            if (res.user) {
+              const cached = await db.cachedUser.toArray();
+              if (cached.length > 0) {
+                await db.cachedUser.update(cached[0].id, res.user);
+              }
             }
           } else if (status === 'REJECTED' || status === 'CONFLICT') {
             conflictCount++;

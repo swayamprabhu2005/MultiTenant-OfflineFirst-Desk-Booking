@@ -16,8 +16,12 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
         floors: {
           orderBy: { floorNumber: 'asc' },
           include: {
-            resources: {
-              orderBy: { code: 'asc' },
+            sections: {
+              include: {
+                resources: {
+                  orderBy: { code: 'asc' },
+                },
+              },
             },
           },
         },
@@ -34,14 +38,15 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
 // POST Create Building (Org Admin / Platform Admin)
 router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { name, code, address } = req.body;
-    if (!name || !code) {
-      return res.status(400).json({ error: 'Building name and code are required' });
+    const { name, code, address, branchId } = req.body;
+    if (!name || !code || !branchId) {
+      return res.status(400).json({ error: 'Building name, code, and branchId are required' });
     }
 
     const building = await prisma.building.create({
       data: {
         organizationId: req.organizationId!,
+        branchId,
         name,
         code: code.toUpperCase(),
         address: address || null,
@@ -98,39 +103,86 @@ router.post('/:buildingId/floors', authMiddleware, requireRole([Role.PLATFORM_AD
   }
 });
 
-// POST Create Resource under Floor
-router.post('/floors/:floorId/resources', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+// POST Create Resource under Section
+router.post('/sections/:sectionId/resources', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { floorId } = req.params;
-    const { name, code, type, capacity, features } = req.body;
+    const { sectionId } = req.params;
+    const { name, code, type, capacity, features, hasPC, columnSpan, sortOrder } = req.body;
 
     if (!name || !code) {
       return res.status(400).json({ error: 'Resource name and code are required' });
     }
 
-    const floor = await prisma.floor.findUnique({
-      where: { id: floorId },
-      include: { building: true },
+    const section = await prisma.section.findUnique({
+      where: { id: sectionId },
+      include: {
+        floor: {
+          include: { building: true },
+        },
+      },
     });
 
-    if (!floor || floor.building.organizationId !== req.organizationId!) {
-      return res.status(404).json({ error: 'Floor not found' });
+    if (!section || section.floor.building.organizationId !== req.organizationId!) {
+      return res.status(404).json({ error: 'Section not found' });
     }
 
     const resource = await prisma.resource.create({
       data: {
-        floorId,
+        sectionId,
         name,
         code: code.toUpperCase(),
         type: (type || ResourceType.CUBICLE) as any,
         capacity: capacity ? parseInt(capacity, 10) : 1,
         features: Array.isArray(features) ? features : [],
+        hasPC: !!hasPC,
+        columnSpan: columnSpan ? parseInt(columnSpan, 10) : 1,
+        sortOrder: sortOrder ? parseInt(sortOrder, 10) : null,
       },
     });
 
     return res.status(201).json(resource);
   } catch (error: any) {
     return res.status(400).json({ error: error.message });
+  }
+});
+
+// GET live occupancy for building
+router.get('/:id/occupancy', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        organizationId: req.organizationId!,
+        status: 'CONFIRMED',
+        startAt: { gte: todayStart },
+        endAt: { lte: todayEnd },
+        resource: {
+          section: {
+            floor: {
+              buildingId: id,
+            },
+          },
+        },
+      },
+      include: {
+        user: {
+          select: { name: true, email: true, department: true },
+        },
+        resource: {
+          select: { name: true, code: true, type: true },
+        },
+      },
+    });
+
+    return res.json(bookings);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 });
 

@@ -10,6 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string, organizationCode?: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await fetchApi<{ user: UserDTO }>('/auth/me');
           setUser(res.user);
           await db.cachedUser.clear();
-          await db.cachedUser.put(res.user);
+          await db.cachedUser.put({ ...res.user, token: savedToken });
         } catch (e) {
           // Token expired or invalid
           console.warn('Auth token verification failed:', e);
@@ -86,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Save to offline storage
     await db.cachedUser.clear();
-    await db.cachedUser.put(res.user);
+    await db.cachedUser.put({ ...res.user, token: res.token });
 
     if (res.organization) {
       await db.organizations.put(res.organization);
@@ -113,6 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
+        refreshUser: initAuth,
       }}
     >
       {children}

@@ -10,7 +10,14 @@ datasource db {
 enum Role {
   PLATFORM_ADMIN
   ORGANIZATION_ADMIN
+  TECH_LEAD
   EMPLOYEE
+}
+
+enum SessionType {
+  FULL_DAY
+  FIRST_HALF
+  SECOND_HALF
 }
 
 enum ResourceType {
@@ -56,6 +63,7 @@ model Organization {
   status         String          @default("ACTIVE")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  branches       Branch[]
   buildings      Building[]
   users          User[]
   bookings       Booking[]
@@ -63,31 +71,59 @@ model Organization {
   auditLogs      AuditLog[]
 }
 
-model User {
+model Branch {
   id             String          @id @default(uuid())
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
-  email          String          @unique
-  passwordHash   String
-  role           Role            @default(EMPLOYEE)
-  department     String?
-  baseBuildingId String?
-  ssoProvider    String?
-  externalId     String?
+  code           String
+  address        String?
   status         String          @default("ACTIVE")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  bookings       Booking[]       @relation("UserBookings")
-  proxyBookings  Booking[]       @relation("CreatedByBookings")
-  syncOperations SyncOperation[]
-  auditLogs      AuditLog[]
+  buildings      Building[]
+  users          User[]          @relation("UserBaseBranch")
+  scopedUsers    User[]          @relation("UserScopedBranch")
+
+  @@unique([organizationId, code])
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  organizationId     String
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String
+  email              String          @unique
+  passwordHash       String
+  role               Role            @default(EMPLOYEE)
+  department         String?
+  baseBranchId       String?
+  baseBranch         Branch?         @relation("UserBaseBranch", fields: [baseBranchId], references: [id], onDelete: SetNull)
+  baseBuildingId     String?
+  scopedBranchId     String?
+  scopedBranch       Branch?         @relation("UserScopedBranch", fields: [scopedBranchId], references: [id], onDelete: SetNull)
+  teamLeadId         String?
+  teamLead           User?           @relation("TeamLead", fields: [teamLeadId], references: [id], onDelete: SetNull)
+  teamMembers        User[]          @relation("TeamLead")
+  ssoProvider        String?
+  externalId         String?
+  mustChangePassword Boolean         @default(true)
+  status             String          @default("ACTIVE")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  bookings           Booking[]       @relation("UserBookings")
+  proxyBookings      Booking[]       @relation("CreatedByBookings")
+  syncOperations     SyncOperation[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
 }
 
 model Building {
   id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   name           String
   code           String
   address        String?
@@ -108,46 +144,67 @@ model Floor {
   status      String     @default("ACTIVE")
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
-  resources   Resource[]
+  sections    Section[]
 
   @@unique([buildingId, floorNumber])
 }
 
-model Resource {
-  id        String         @id @default(uuid())
+model Section {
+  id        String     @id @default(uuid())
   floorId   String
-  floor     Floor          @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  type      ResourceType   @default(CUBICLE)
+  floor     Floor      @relation(fields: [floorId], references: [id], onDelete: Cascade)
   name      String
   code      String
-  capacity  Int            @default(1)
-  status    ResourceStatus @default(ACTIVE)
-  features  Json           @default("[]")
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  bookings  Booking[]
+  columns   Int        @default(4)
+  status    String     @default("ACTIVE")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  resources Resource[]
 
   @@unique([floorId, code])
 }
 
+model Resource {
+  id         String         @id @default(uuid())
+  sectionId  String
+  section    Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  type       ResourceType   @default(CUBICLE)
+  name       String
+  code       String
+  capacity   Int            @default(1)
+  hasPC      Boolean        @default(false)
+  columnSpan Int            @default(1)
+  sortOrder  Int?
+  status     ResourceStatus @default(ACTIVE)
+  features   Json           @default("[]")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  bookings   Booking[]
+
+  @@unique([sectionId, code])
+}
+
 model Booking {
-  id             String        @id @default(uuid())
-  organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  resourceId     String
-  resource       Resource      @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  userId         String
-  user           User          @relation("UserBookings", fields: [userId], references: [id], onDelete: Cascade)
-  createdById    String
-  createdBy      User          @relation("CreatedByBookings", fields: [createdById], references: [id], onDelete: Cascade)
-  startAt        DateTime
-  endAt          DateTime
-  status         BookingStatus @default(CONFIRMED)
-  source         BookingSource @default(ONLINE)
-  operationId    String        @unique
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  cancelledAt    DateTime?
+  id               String        @id @default(uuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resourceId       String
+  resource         Resource      @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User          @relation("UserBookings", fields: [userId], references: [id], onDelete: Cascade)
+  createdById      String
+  createdBy        User          @relation("CreatedByBookings", fields: [createdById], references: [id], onDelete: Cascade)
+  startAt          DateTime
+  endAt            DateTime
+  status           BookingStatus @default(CONFIRMED)
+  source           BookingSource @default(ONLINE)
+  sessionType      SessionType   @default(FULL_DAY)
+  comment          String?
+  recurringGroupId String?
+  operationId      String        @unique
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  cancelledAt      DateTime?
 }
 
 model SyncOperation {
@@ -176,4 +233,15 @@ model AuditLog {
   entityId       String
   metadata       Json?
   createdAt      DateTime      @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  bookingId String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

@@ -46,8 +46,12 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
       include: {
         resource: {
           include: {
-            floor: {
-              include: { building: true },
+            section: {
+              include: {
+                floor: {
+                  include: { building: true },
+                },
+              },
             },
           },
         },
@@ -84,21 +88,57 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       return res.status(400).json({ error: 'Invalid startAt or endAt timeframe' });
     }
 
-    // Determine target user (Proxy booking check)
+    // Determine target user (Proxy / Bulk Booking scoping)
     const effectiveUserId = targetUserId || currentUser.id;
     const createdById = currentUser.id;
 
-    // 1. Fetch resource and floor/building details
+    if (effectiveUserId !== currentUser.id) {
+      if (currentUser.role === Role.EMPLOYEE) {
+        return res.status(403).json({
+          error: 'Forbidden: Regular employees can only create bookings for themselves.',
+        });
+      }
+
+      if (currentUser.role === Role.TECH_LEAD) {
+        const targetUserCheck = await prisma.user.findUnique({
+          where: { id: effectiveUserId },
+          select: { teamLeadId: true },
+        });
+        if (!targetUserCheck || targetUserCheck.teamLeadId !== currentUser.id) {
+          return res.status(403).json({
+            error: 'Forbidden: Tech Leads can only book for their direct team subordinates.',
+          });
+        }
+      }
+
+      if (currentUser.role === Role.ORGANIZATION_ADMIN && currentUser.scopedBranchId) {
+        const targetUserCheck = await prisma.user.findUnique({
+          where: { id: effectiveUserId },
+          select: { baseBranchId: true },
+        });
+        if (!targetUserCheck || targetUserCheck.baseBranchId !== currentUser.scopedBranchId) {
+          return res.status(403).json({
+            error: 'Forbidden: Scoped Branch Admins can only book for employees in their branch.',
+          });
+        }
+      }
+    }
+
+    // 1. Fetch resource and section/floor/building details
     const resource = await prisma.resource.findUnique({
       where: { id: resourceId },
       include: {
-        floor: {
-          include: { building: true },
+        section: {
+          include: {
+            floor: {
+              include: { building: true },
+            },
+          },
         },
       },
     });
 
-    if (!resource || resource.floor.building.organizationId !== req.organizationId!) {
+    if (!resource || resource.section.floor.building.organizationId !== req.organizationId!) {
       return res.status(404).json({ error: 'Resource not found or organization mismatch' });
     }
 
@@ -111,9 +151,9 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ error: 'Target user not found' });
     }
 
-    if (targetUser.baseBuildingId && targetUser.baseBuildingId !== resource.floor.buildingId) {
+    if (targetUser.baseBuildingId && targetUser.baseBuildingId !== resource.section.floor.buildingId) {
       return res.status(403).json({
-        error: `Base Office Restriction: User ${targetUser.name} can only book resources in their assigned building (${resource.floor.building.name} mismatch)`,
+        error: `Base Office Restriction: User ${targetUser.name} can only book resources in their assigned building (${resource.section.floor.building.name} mismatch)`,
       });
     }
 
@@ -214,6 +254,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
 router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const { cancelSeries } = req.query;
     const currentUser = req.user!;
 
     const booking = await prisma.booking.findUnique({
@@ -233,13 +274,32 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ error: 'Forbidden: Cannot cancel another user booking' });
     }
 
-    const updated = await prisma.booking.update({
-      where: { id },
-      data: {
-        status: BookingStatus.CANCELLED as any,
-        cancelledAt: new Date(),
-      },
-    });
+    let updated;
+    if (cancelSeries === 'true' && booking.recurringGroupId) {
+      // Cancel all future occurrences in series
+      await prisma.booking.updateMany({
+        where: {
+          recurringGroupId: booking.recurringGroupId,
+          startAt: { gte: booking.startAt },
+          organizationId: req.organizationId!,
+          status: { not: BookingStatus.CANCELLED as any },
+        },
+        data: {
+          status: BookingStatus.CANCELLED as any,
+          cancelledAt: new Date(),
+        },
+      });
+      // Fetch the updated item to return in payload
+      updated = await prisma.booking.findUnique({ where: { id } });
+    } else {
+      updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          status: BookingStatus.CANCELLED as any,
+          cancelledAt: new Date(),
+        },
+      });
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -248,6 +308,7 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
         action: 'CANCEL_BOOKING',
         entityType: 'Booking',
         entityId: id,
+        metadata: { cancelSeries: cancelSeries === 'true' },
       },
     });
 

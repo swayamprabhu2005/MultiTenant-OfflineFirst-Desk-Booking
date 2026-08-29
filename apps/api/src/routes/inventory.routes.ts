@@ -9,7 +9,7 @@ const router = Router();
 // 1. Manual Numeric Counter Fallback Space Generator
 router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { buildingId, floorNumber, floorName, resourceType, count, prefix, features } = req.body;
+    const { buildingId, floorNumber, floorName, resourceType, count, prefix, features, sectionId: requestedSectionId } = req.body;
 
     if (!buildingId || count === undefined || count <= 0) {
       return res.status(400).json({ error: 'buildingId and positive count are required' });
@@ -43,6 +43,25 @@ router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMI
       });
     }
 
+    // Resolve target section
+    let sectionId = requestedSectionId;
+    if (!sectionId) {
+      let section = await prisma.section.findFirst({
+        where: { floorId: floor.id, code: 'MAIN' }
+      });
+      if (!section) {
+        section = await prisma.section.create({
+          data: {
+            floorId: floor.id,
+            code: 'MAIN',
+            name: 'Main Section',
+            columns: 4
+          }
+        });
+      }
+      sectionId = section.id;
+    }
+
     const type: ResourceType = resourceType || ResourceType.CUBICLE;
     const itemPrefix = prefix || (type === ResourceType.CUBICLE ? 'CUB' : type === ResourceType.DESK ? 'DSK' : 'RM');
     const createdResources = [];
@@ -53,8 +72,8 @@ router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMI
 
       const resItem = await prisma.resource.upsert({
         where: {
-          floorId_code: {
-            floorId: floor.id,
+          sectionId_code: {
+            sectionId,
             code,
           },
         },
@@ -64,7 +83,7 @@ router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMI
           features: Array.isArray(features) ? features : ['Power Outlet', 'Ethernet'],
         },
         create: {
-          floorId: floor.id,
+          sectionId,
           code,
           name,
           type: type as any,
@@ -136,13 +155,26 @@ router.post('/import-csv', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Rol
       else if (rawType.includes('BOARD')) rType = ResourceType.BOARD_ROOM;
       else if (rawType.includes('MEETING')) rType = ResourceType.MEETING_ROOM;
 
+      let branch = await prisma.branch.findFirst({
+        where: { organizationId: orgId, code: 'MAIN' }
+      });
+      if (!branch) {
+        branch = await prisma.branch.create({
+          data: {
+            organizationId: orgId,
+            code: 'MAIN',
+            name: 'Main Branch',
+          }
+        });
+      }
+
       let building = await prisma.building.findUnique({
         where: { organizationId_code: { organizationId: orgId, code: bCode } },
       });
 
       if (!building) {
         building = await prisma.building.create({
-          data: { organizationId: orgId, code: bCode, name: bName },
+          data: { organizationId: orgId, branchId: branch.id, code: bCode, name: bName },
         });
       }
 
@@ -156,16 +188,31 @@ router.post('/import-csv', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Rol
         });
       }
 
+      // Find or create default section for this floor
+      let section = await prisma.section.findFirst({
+        where: { floorId: floor.id, code: 'MAIN' }
+      });
+      if (!section) {
+        section = await prisma.section.create({
+          data: {
+            floorId: floor.id,
+            code: 'MAIN',
+            name: 'Main Section',
+            columns: 4
+          }
+        });
+      }
+
       const featuresRaw = record.features || record.Features || '';
       const featuresArr = typeof featuresRaw === 'string' && featuresRaw.length > 0
         ? featuresRaw.split(';').map((s: string) => s.trim())
         : ['Power Outlet', 'Wi-Fi'];
 
       await prisma.resource.upsert({
-        where: { floorId_code: { floorId: floor.id, code: rCode } },
+        where: { sectionId_code: { sectionId: section.id, code: rCode } },
         update: { name: rName, type: rType as any, features: featuresArr },
         create: {
-          floorId: floor.id,
+          sectionId: section.id,
           code: rCode,
           name: rName,
           type: rType as any,

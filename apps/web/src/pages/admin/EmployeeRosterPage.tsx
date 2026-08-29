@@ -1,13 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Upload, Plus, Download, CheckCircle2, UserCheck, Shield } from 'lucide-react';
+import { 
+  Users, Upload, Plus, Download, CheckCircle2, UserCheck, 
+  Shield, Search, ChevronLeft, ChevronRight, UserPlus
+} from 'lucide-react';
 import { fetchApi } from '../../services/api';
 
 export const EmployeeRosterPage: React.FC = () => {
   const [employees, setEmployees] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [techLeads, setTechLeads] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Search & Pagination states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [paginationInfo, setPaginationInfo] = useState<any>({
+    total: 0,
+    page: 1,
+    limit: 25,
+    totalPages: 1,
+  });
 
   // CSV content state
   const [csvContent, setCsvContent] = useState('');
@@ -18,12 +34,16 @@ export const EmployeeRosterPage: React.FC = () => {
   const [password, setPassword] = useState('Welcome123!');
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState('EMPLOYEE');
+  const [baseBranchId, setBaseBranchId] = useState('');
+  const [teamLeadId, setTeamLeadId] = useState('');
 
   const loadRoster = async () => {
     try {
       setLoading(true);
-      const data = await fetchApi<any[]>('/roster');
-      setEmployees(data);
+      const query = `page=${currentPage}&limit=25${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`;
+      const res = await fetchApi<any>(`/roster?${query}`);
+      setEmployees(res.users || []);
+      setPaginationInfo(res.pagination || { total: 0, page: 1, limit: 25, totalPages: 1 });
     } catch (err: any) {
       console.error('Failed to load roster:', err);
     } finally {
@@ -31,8 +51,30 @@ export const EmployeeRosterPage: React.FC = () => {
     }
   };
 
+  const loadReferenceData = async () => {
+    try {
+      // Load branches
+      const branchList = await fetchApi<any[]>('/branches');
+      setBranches(branchList);
+      if (branchList.length > 0) {
+        setBaseBranchId(branchList[0].id);
+      }
+
+      // Load all organization users to filter as potential team leads
+      const allUsersRes = await fetchApi<any>('/roster?limit=100');
+      const leads = (allUsersRes.users || []).filter((u: any) => u.role === 'TECH_LEAD' || u.role === 'ORGANIZATION_ADMIN');
+      setTechLeads(leads);
+    } catch (err) {
+      console.error('Failed to load reference data:', err);
+    }
+  };
+
   useEffect(() => {
     loadRoster();
+  }, [currentPage, searchQuery]);
+
+  useEffect(() => {
+    loadReferenceData();
   }, []);
 
   const handleCsvImport = async (e: React.FormEvent) => {
@@ -44,9 +86,10 @@ export const EmployeeRosterPage: React.FC = () => {
         body: JSON.stringify({ csvContent, defaultPassword: 'Password123!' }),
       });
 
-      setStatusMsg(`${res.message} Default password assigned: Password123!`);
+      setStatusMsg(`${res.message} default credentials configured: Password123!`);
       setShowCsvModal(false);
       setCsvContent('');
+      setCurrentPage(1);
       loadRoster();
     } catch (err: any) {
       alert(err.message || 'Failed to import employee roster CSV');
@@ -58,11 +101,24 @@ export const EmployeeRosterPage: React.FC = () => {
     try {
       await fetchApi('/roster', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, department, role }),
+        body: JSON.stringify({ 
+          name, 
+          email, 
+          password, 
+          department, 
+          role,
+          baseBranchId: baseBranchId || null,
+          teamLeadId: teamLeadId || null
+        }),
       });
       setShowUserModal(false);
       setName('');
       setEmail('');
+      setPassword('Welcome123!');
+      setDepartment('');
+      setRole('EMPLOYEE');
+      setTeamLeadId('');
+      setStatusMsg(`User "${name}" registered successfully.`);
       loadRoster();
     } catch (err: any) {
       alert(err.message || 'Failed to add employee');
@@ -70,10 +126,10 @@ export const EmployeeRosterPage: React.FC = () => {
   };
 
   const downloadSampleRosterCsv = () => {
-    const sample = `Name,Email,Department,BaseOfficeBuildingCode,Role
-Alice Smith,alice@acme.com,Software Engineering,HQ,EMPLOYEE
-Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE
-Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN`;
+    const sample = `Name,Email,Department,BaseOfficeBuildingCode,Role,BaseBranchCode,TeamLeadEmail
+Alice Smith,alice@acme.com,Software Engineering,HQ,TECH_LEAD,MAIN,
+Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE,MAIN,alice@acme.com
+Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN,MAIN,`;
 
     const blob = new Blob([sample], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -84,8 +140,9 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN`;
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto px-4 sm:px-0">
 
+      {/* Top Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
@@ -93,22 +150,25 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN`;
             <span>Employee Roster & Onboarding</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage organization users, roles, base office assignments, and bulk CSV roster imports.
+            Manage employee access roles, organizational hierarchy base settings, and bulk CSV integrations.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowCsvModal(true)}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all"
           >
-            <Upload className="w-4 h-4" />
-            <span>Bulk CSV Roster Import</span>
+            <Upload className="w-4 h-4 text-slate-500" />
+            <span>CSV Roster Import</span>
           </button>
 
           <button
-            onClick={() => setShowUserModal(true)}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
+            onClick={() => {
+              loadReferenceData();
+              setShowUserModal(true);
+            }}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Add Employee</span>
@@ -117,53 +177,116 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN`;
       </div>
 
       {statusMsg && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-sm">
           <span className="flex items-center space-x-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>{statusMsg}</span>
           </span>
-          <button onClick={() => setStatusMsg(null)} className="text-xs text-emerald-700 font-bold underline">
+          <button onClick={() => setStatusMsg(null)} className="text-xs text-emerald-700 font-bold underline hover:text-emerald-900">
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Roster Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-800">Organization Employees ({employees.length})</h2>
+      {/* search and Table block */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4">
+        {/* Search bar header */}
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h2 className="text-sm font-bold text-slate-800">Organization Employees ({paginationInfo.total})</h2>
+          
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by name, email, dept..."
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+            />
+          </div>
         </div>
 
-        <div className="divide-y divide-slate-100 overflow-x-auto">
+        {/* Employees Table */}
+        <div className="divide-y divide-slate-100 overflow-x-auto min-h-60">
           {employees.map(emp => (
-            <div key={emp.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50">
+            <div key={emp.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-all">
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 font-bold text-slate-700 flex items-center justify-center text-sm border">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 font-bold text-slate-700 flex items-center justify-center text-sm border shadow-sm">
                   {emp.name.charAt(0)}
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                  <div className="font-extrabold text-sm text-slate-900 flex items-center flex-wrap gap-1.5">
                     <span>{emp.name}</span>
                     {emp.role !== 'EMPLOYEE' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-250/50">
                         {emp.role.replace('_', ' ')}
                       </span>
                     )}
+                    {emp.mustChangePassword && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-250/50">
+                        Temp Password
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs text-slate-400">
-                    {emp.email} • {emp.department || 'General Staff'}
+                  <div className="text-[11px] text-slate-400 font-medium space-y-0.5 mt-0.5">
+                    <div>{emp.email} • {emp.department || 'General'}</div>
+                    <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                      {emp.baseBranch?.name && (
+                        <span>Branch: <strong className="text-slate-600">{emp.baseBranch.name}</strong></span>
+                      )}
+                      {emp.teamLead?.name && (
+                        <span>Lead: <strong className="text-slate-600">{emp.teamLead.name}</strong></span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <div className="flex items-center space-x-3 self-end sm:self-center">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-250/50">
                   {emp.status}
                 </span>
               </div>
             </div>
           ))}
+
+          {employees.length === 0 && !loading && (
+            <div className="text-center py-20 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
+              <Users className="w-8 h-8 text-slate-300" />
+              <span>No employees match the criteria.</span>
+            </div>
+          )}
         </div>
+
+        {/* Pagination controls */}
+        {paginationInfo.totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs text-slate-500">
+              Page <strong>{paginationInfo.page}</strong> of <strong>{paginationInfo.totalPages}</strong> ({paginationInfo.total} total)
+            </span>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              <button
+                disabled={currentPage === paginationInfo.totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationInfo.totalPages))}
+                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL 1: CSV Roster Import */}
@@ -187,15 +310,14 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN`;
             <form onSubmit={handleCsvImport} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Paste CSV Roster Data (Header: Name,Email,Department,BaseOfficeBuildingCode,Role)
+                  Paste CSV Roster Data (Header: Name,Email,Department,BaseOfficeBuildingCode,Role,BaseBranchCode,TeamLeadEmail)
                 </label>
                 <textarea
                   rows={8}
                   required
                   value={csvContent}
                   onChange={e => setCsvContent(e.target.value)}
-                  placeholder={`Alice Smith,alice@acme.com,Software Engineering,HQ,EMPLOYEE
-Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE`}
+                  placeholder={`Alice Smith,alice@acme.com,Software Engineering,HQ,TECH_LEAD,MAIN,\nBob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE,MAIN,alice@acme.com`}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
@@ -224,7 +346,11 @@ Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE`}
       {showUserModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Add Employee</h3>
+            <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+              <UserPlus className="w-5 h-5 text-emerald-600" />
+              <span>Add Employee Account</span>
+            </h3>
+            
             <form onSubmit={handleCreateUser} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
@@ -239,7 +365,7 @@ Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE`}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
                 <input
                   type="email"
                   required
@@ -247,6 +373,17 @@ Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE`}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="john@acme.com"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                <input
+                  type="text"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800"
                 />
               </div>
 
@@ -262,16 +399,47 @@ Bob Johnson,bob@acme.com,Product Design,HQ,EMPLOYEE`}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Base Branch</label>
+                <select
+                  value={baseBranchId}
+                  onChange={e => setBaseBranchId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
+                >
+                  <option value="">No branch office assigned</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Role / Permissions</label>
                 <select
                   value={role}
                   onChange={e => setRole(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
                 >
-                  <option value="EMPLOYEE">Employee</option>
+                  <option value="EMPLOYEE">Regular Employee</option>
+                  <option value="TECH_LEAD">Tech Lead (Manager)</option>
                   <option value="ORGANIZATION_ADMIN">Organization Admin</option>
                 </select>
               </div>
+
+              {role === 'EMPLOYEE' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Team Lead (Optional)</label>
+                  <select
+                    value={teamLeadId}
+                    onChange={e => setTeamLeadId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-850"
+                  >
+                    <option value="">No manager assigned</option>
+                    {techLeads.map(l => (
+                      <option key={l.id} value={l.id}>{l.name} ({l.email})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-2 pt-3">
                 <button
