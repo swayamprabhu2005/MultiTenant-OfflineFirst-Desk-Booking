@@ -7,10 +7,13 @@ const router = Router();
 
 router.get('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const isPlatformAdmin = req.user?.role === Role.PLATFORM_ADMIN;
+    const where = isPlatformAdmin
+      ? { action: 'CREATE_ORGANIZATION' }
+      : { organizationId: req.organizationId! };
+
     const logs = await prisma.auditLog.findMany({
-      where: {
-        organizationId: req.organizationId!,
-      },
+      where,
       include: {
         actorUser: {
           select: { name: true, email: true, role: true },

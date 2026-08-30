@@ -16,7 +16,9 @@ import { db } from '../../db/indexedDB';
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'PLATFORM_ADMIN' || user?.role === 'ORGANIZATION_ADMIN';
+  const isGlobalOrgAdmin = user?.role === 'ORGANIZATION_ADMIN' && !user.scopedBranchId;
+  const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
+  const isAdmin = isPlatformAdmin || user?.role === 'ORGANIZATION_ADMIN';
 
   const pendingOutboxCount = useLiveQuery(
     () => db.outbox.where('status').equals('PENDING').count(),
@@ -35,52 +37,59 @@ export const Sidebar: React.FC = () => {
     },
   ];
 
-  const adminNav = [
-    { name: 'Organizations', to: '/admin/organizations', icon: Globe },
-    { name: 'Buildings & Spaces', to: '/admin/buildings', icon: Building },
-    { name: 'Employee Roster', to: '/admin/roster', icon: Users },
-    { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
-  ];
+  const adminNav = isPlatformAdmin
+    ? [
+        { name: 'Organizations', to: '/admin/organizations', icon: Globe },
+        { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
+      ]
+    : [
+        ...(isGlobalOrgAdmin ? [{ name: 'Dashboard', to: '/', icon: LayoutDashboard }] : []),
+        { name: 'Buildings & Spaces', to: '/admin/buildings', icon: Building },
+        { name: 'Employee Roster', to: '/admin/roster', icon: Users },
+        { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
+      ];
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4">
       <div className="space-y-6">
 
         {/* Employee Section */}
-        <div>
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
-            Employee Workspace
+        {!isGlobalOrgAdmin && !isPlatformAdmin && (
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
+              Employee Workspace
+            </div>
+            <nav className="space-y-1">
+              {employeeNav.map(item => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) =>
+                      `flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                        isActive
+                          ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className="w-4 h-4" />
+                      <span>{item.name}</span>
+                    </div>
+                    {item.badge ? (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white animate-pulse">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </NavLink>
+                );
+              })}
+            </nav>
           </div>
-          <nav className="space-y-1">
-            {employeeNav.map(item => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) =>
-                    `flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                      isActive
-                        ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`
-                  }
-                >
-                  <div className="flex items-center space-x-3">
-                    <Icon className="w-4 h-4" />
-                    <span>{item.name}</span>
-                  </div>
-                  {item.badge ? (
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white animate-pulse">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </NavLink>
-              );
-            })}
-          </nav>
-        </div>
+        )}
 
         {/* Admin Portal Section */}
         {isAdmin && (

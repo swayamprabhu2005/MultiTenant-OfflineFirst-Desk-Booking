@@ -98,6 +98,93 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
   }
 });
 
+// Sign Up (Organization + Org Admin user in a single transaction)
+router.post('/signup', async (req: TenantRequest, res: Response) => {
+  try {
+    const { name, email, password, orgName, orgCode, subdomain } = req.body;
+
+    if (!name || !email || !password || !orgName || !orgCode || !subdomain) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    // Check if organization subdomain or code already exists
+    const existingOrg = await prisma.organization.findFirst({
+      where: {
+        OR: [
+          { subdomain: subdomain.toLowerCase() },
+          { code: orgCode.toUpperCase() },
+        ],
+      },
+    });
+    if (existingOrg) {
+      return res.status(400).json({ error: 'Organization subdomain or code already in use' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Atomically create Organization and Org Admin User in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const org = await tx.organization.create({
+        data: {
+          name: orgName,
+          code: orgCode.toUpperCase(),
+          subdomain: subdomain.toLowerCase(),
+          themeColor: '#16a34a', // Default emerald green
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          organizationId: org.id,
+          name,
+          email: email.toLowerCase(),
+          passwordHash,
+          role: 'ORGANIZATION_ADMIN', // New sign-ups are global Organization Admins
+          mustChangePassword: false, // Since they set their own password during sign-up
+        },
+      });
+
+      return { org, user };
+    });
+
+    const token = jwt.sign(
+      {
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+        organizationId: result.user.organizationId,
+        mustChangePassword: result.user.mustChangePassword,
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.status(201).json({
+      token,
+      user: {
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
+        mustChangePassword: result.user.mustChangePassword,
+        organizationId: result.user.organizationId,
+      },
+      organization: result.org,
+    });
+  } catch (error: any) {
+    console.error('Sign-up error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error during sign-up' });
+  }
+});
+
 // Current User Profile
 router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {

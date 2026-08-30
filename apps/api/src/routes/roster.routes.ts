@@ -93,9 +93,13 @@ router.post('/import-csv', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Rol
       return res.status(400).json({ error: 'CSV file is empty or formatted invalidly' });
     }
 
-    const initialPassword = defaultPassword || 'Welcome123!';
-    const passwordHash = await bcrypt.hash(initialPassword, 10);
     const orgId = req.organizationId!;
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { subdomain: true },
+    });
+    const initialPassword = org?.subdomain || defaultPassword || 'Welcome123!';
+    const passwordHash = await bcrypt.hash(initialPassword, 10);
 
     let importedCount = 0;
 
@@ -200,8 +204,14 @@ router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZA
   try {
     const { name, email, password, role, department, baseBranchId, baseBuildingId, scopedBranchId, teamLeadId } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    const org = await prisma.organization.findUnique({
+      where: { id: req.organizationId! },
+      select: { subdomain: true },
+    });
+    const targetPassword = password && password !== 'Welcome123!' ? password : (org?.subdomain || 'Welcome123!');
+
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required' });
     }
 
     const existing = await prisma.user.findUnique({
@@ -220,7 +230,7 @@ router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZA
       }
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(targetPassword, 10);
     const user = await prisma.user.create({
       data: {
         organizationId: req.organizationId!,

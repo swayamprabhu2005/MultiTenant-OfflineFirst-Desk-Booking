@@ -94,12 +94,11 @@ This script will:
 
 Default Password for all accounts: **`Password123!`**
 
-| User Role | Email | Organization / Subdomain |
-|---|---|---|
-| **Employee** | `employee@acme.com` | Acme Corp (`acme`) |
-| **Supervisor** | `supervisor@acme.com` | Acme Corp (`acme`) |
-| **Org Admin** | `admin@acme.com` | Acme Corp (`acme`) |
-| **Platform Admin** | `admin@deskbooking.com` | Global SaaS Admin |
+| User Role | Email | Organization / Subdomain | Description |
+|---|---|---|---|
+| **Platform Admin** | `admin@deskbooking.com` | Platform Administration (`system`) | Global Platform & Audit Logs Administrator |
+
+*Note: There are no default organizations or employees seeded. To test organization workflows, log in as Platform Admin, or use the **Sign Up** link on the login screen to register your own custom Organization Admin account.*
 
 ---
 

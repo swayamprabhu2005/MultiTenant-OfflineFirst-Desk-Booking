@@ -5,6 +5,7 @@ import { TenantProvider } from './context/TenantContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
+import { SignupPage } from './pages/auth/SignupPage';
 import { DashboardPage } from './pages/employee/DashboardPage';
 import { BookingWizardPage } from './pages/employee/BookingWizardPage';
 import { MyBookingsPage } from './pages/employee/MyBookingsPage';
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
 
               <Route
                 path="/"

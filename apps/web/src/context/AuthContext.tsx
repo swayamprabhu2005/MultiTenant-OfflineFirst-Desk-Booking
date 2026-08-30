@@ -9,6 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string, organizationCode?: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, orgName: string, orgCode: string, subdomain: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -69,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string, organizationCode?: string) => {
-    const activeSubdomain = localStorage.getItem('activeTenantSubdomain') || 'acme';
+    const activeSubdomain = localStorage.getItem('activeTenantSubdomain') || 'system';
 
     const res = await fetchApi<{ token: string; user: UserDTO; organization: any }>('/auth/login', {
       method: 'POST',
@@ -82,6 +83,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     localStorage.setItem('token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+
+    // Save to offline storage
+    await db.cachedUser.clear();
+    await db.cachedUser.put({ ...res.user, token: res.token });
+
+    if (res.organization) {
+      await db.organizations.put(res.organization);
+    }
+  };
+
+  const signup = async (
+    name: string,
+    email: string,
+    password: string,
+    orgName: string,
+    orgCode: string,
+    subdomain: string
+  ) => {
+    const res = await fetchApi<{ token: string; user: UserDTO; organization: any }>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        orgName,
+        orgCode,
+        subdomain,
+      }),
+    });
+
+    localStorage.setItem('token', res.token);
+    localStorage.setItem('activeTenantSubdomain', res.organization.subdomain);
     setToken(res.token);
     setUser(res.user);
 
@@ -113,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isLoading,
         login,
+        signup,
         logout,
         refreshUser: initAuth,
       }}

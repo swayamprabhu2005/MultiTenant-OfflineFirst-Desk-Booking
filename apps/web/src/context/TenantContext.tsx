@@ -88,7 +88,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       if (!sub) {
-        sub = 'acme'; // Default demo tenant
+        sub = 'system'; // Default demo tenant
       }
 
       localStorage.setItem('activeTenantSubdomain', sub);
@@ -106,12 +106,16 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             applyThemeColor(current.themeColor || '#16a34a');
           }
         } catch (e) {
+          console.warn('[TenantContext] Failed to fetch organizations, retrying in 2.5 seconds...', e);
           const cachedOrgs = await db.organizations.toArray();
           setAvailableTenants(cachedOrgs);
           const current = cachedOrgs.find((o: any) => o.subdomain === sub) || cachedOrgs[0];
           if (current) {
             setTenant(current);
             applyThemeColor(current.themeColor || '#16a34a');
+          }
+          if (cachedOrgs.length === 0) {
+            setTimeout(loadTenants, 2500);
           }
         }
       } else {

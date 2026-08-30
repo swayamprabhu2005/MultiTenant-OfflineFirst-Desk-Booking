@@ -820,107 +820,129 @@ export const BookingWizardPage: React.FC = () => {
                 gridTemplateColumns: `repeat(${activeSection.columns || 4}, minmax(0, 1fr))`
               }}
             >
-              {resources.map(res => {
-                const isBoardroom = res.type === 'BOARD_ROOM';
-                const isMeetingRoom = res.type === 'MEETING_ROOM';
-                
-                // Fetch conflicts details across selected occurrences (Task 3.2)
-                const conflictsMap = getResourceBookingsMap(res.id);
-                const conflictsCount = Object.keys(conflictsMap).length;
-                const isBooked = conflictsCount > 0;
+              {(() => {
+                const maxSortOrder = resources.reduce((max: number, r: any) => {
+                  return r.sortOrder !== null && r.sortOrder !== undefined && r.sortOrder > max ? r.sortOrder : max;
+                }, 0);
+                const columnsCount = activeSection.columns || 4;
+                const numRows = Math.ceil((maxSortOrder + 1) / columnsCount);
+                const totalCells = numRows * columnsCount;
+                const cellIndices = Array.from({ length: totalCells }, (_, index) => index);
 
-                const hasPCWorkstation = !!res.hasPC;
-
-                // Color mappings (Task 3.2: Gray if fully free, Red if conflict exists)
-                const borderStyles = isBooked 
-                  ? 'border-rose-450 bg-rose-100 text-rose-900'
-                  : 'border-slate-200 bg-white hover:border-emerald-500';
-
-                return (
-                  <div
-                    key={res.id}
-                    className={`relative p-4 rounded-xl border flex flex-col justify-between shadow-sm min-h-36 ${borderStyles}`}
-                    style={{
-                      gridColumn: isBoardroom && res.columnSpan ? `span ${res.columnSpan} / span ${res.columnSpan}` : undefined
-                    }}
-                  >
+                return cellIndices.map((i) => {
+                  const res = resources.find((r: any) => r.sortOrder === i);
+                  if (res) {
+                    const isBoardroom = res.type === 'BOARD_ROOM';
+                    const isMeetingRoom = res.type === 'MEETING_ROOM';
                     
-                    {/* Occurrences overlay trigger */}
-                    {isBooked && (
-                      <button
-                        onClick={() => {
-                          setOverlayResourceId(overlayResourceId === res.id ? null : res.id);
+                    // Fetch conflicts details across selected occurrences (Task 3.2)
+                    const conflictsMap = getResourceBookingsMap(res.id);
+                    const conflictsCount = Object.keys(conflictsMap).length;
+                    const isBooked = conflictsCount > 0;
+
+                    const hasPCWorkstation = !!res.hasPC;
+
+                    // Color mappings (Task 3.2: Gray if fully free, Red if conflict exists)
+                    const borderStyles = isBooked 
+                      ? 'border-rose-450 bg-rose-100 text-rose-900'
+                      : 'border-slate-200 bg-white hover:border-emerald-500';
+
+                    return (
+                      <div
+                        key={res.id}
+                        className={`relative p-4 rounded-xl border flex flex-col justify-between shadow-sm min-h-36 ${borderStyles}`}
+                        style={{
+                          gridColumn: isBoardroom && res.columnSpan ? `span ${res.columnSpan} / span ${res.columnSpan}` : undefined
                         }}
-                        className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-rose-500 text-white font-extrabold text-[9px] uppercase tracking-wide hover:bg-rose-600 transition-all cursor-pointer shadow-sm"
                       >
-                        Booked Info
-                      </button>
-                    )}
-
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-1.5">
-                        {isBoardroom ? (
-                          <Presentation className="w-4.5 h-4.5 text-purple-700" />
-                        ) : isMeetingRoom ? (
-                          <Users className="w-4.5 h-4.5 text-blue-700" />
-                        ) : (
-                          <Monitor className="w-4.5 h-4.5 text-emerald-700" />
+                        
+                        {/* Occurrences overlay trigger */}
+                        {isBooked && (
+                          <button
+                            onClick={() => {
+                              setOverlayResourceId(overlayResourceId === res.id ? null : res.id);
+                            }}
+                            className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-rose-500 text-white font-extrabold text-[9px] uppercase tracking-wide hover:bg-rose-600 transition-all cursor-pointer shadow-sm z-10"
+                          >
+                            Booked Info
+                          </button>
                         )}
-                        <span className="font-mono font-extrabold text-sm text-slate-800">{res.code}</span>
-                      </div>
-                      
-                      <div className="text-xs font-bold text-slate-900">{res.name}</div>
-                      
-                      {hasPCWorkstation && (
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Workstation PC</div>
-                      )}
-                    </div>
 
-                    {/* Weekday status occurrence visual display (Task 3.2: mon-sun list overlay) */}
-                    {overlayResourceId === res.id && isBooked && (
-                      <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-xl p-3 flex flex-col justify-between z-10 border border-rose-350 shadow-lg">
-                        <div className="space-y-1.5">
-                          <h4 className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Booked Occurrences:</h4>
-                          <div className="max-h-20 overflow-y-auto space-y-1 pr-1 text-[10px] font-semibold text-slate-700">
-                            {Object.entries(conflictsMap).map(([dateStr, booking]: any) => (
-                              <div key={dateStr} className="flex justify-between items-center bg-slate-50 px-2 py-0.5 rounded">
-                                <span>{dateStr}</span>
-                                <span className="text-rose-600">{booking.sessionType || 'Full Day'}</span>
-                              </div>
-                            ))}
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-1.5">
+                            {isBoardroom ? (
+                              <Presentation className="w-4.5 h-4.5 text-purple-700" />
+                            ) : isMeetingRoom ? (
+                              <Users className="w-4.5 h-4.5 text-blue-700" />
+                            ) : (
+                              <Monitor className="w-4.5 h-4.5 text-emerald-700" />
+                            )}
+                            <span className="font-mono font-extrabold text-sm text-slate-800">{res.code}</span>
                           </div>
+                          
+                          <div className="text-xs font-bold text-slate-900">{res.name}</div>
+                          
+                          {hasPCWorkstation && (
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Workstation PC</div>
+                          )}
                         </div>
-                        <button
-                          onClick={() => setOverlayResourceId(null)}
-                          className="w-full py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded-lg mt-1"
-                        >
-                          Close Detail
-                        </button>
+
+                        {/* Weekday status occurrence visual display (Task 3.2: mon-sun list overlay) */}
+                        {overlayResourceId === res.id && isBooked && (
+                          <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-xl p-3 flex flex-col justify-between z-10 border border-rose-350 shadow-lg">
+                            <div className="space-y-1.5">
+                              <h4 className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Booked Occurrences:</h4>
+                              <div className="max-h-20 overflow-y-auto space-y-1 pr-1 text-[10px] font-semibold text-slate-700">
+                                {Object.entries(conflictsMap).map(([dateStr, booking]: any) => (
+                                  <div key={dateStr} className="flex justify-between items-center bg-slate-50 px-2 py-0.5 rounded">
+                                    <span>{dateStr}</span>
+                                    <span className="text-rose-600">{booking.sessionType || 'Full Day'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setOverlayResourceId(null)}
+                              className="w-full py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded-lg mt-1"
+                            >
+                              Close Detail
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-3">
+                          <span className="text-[9px] font-extrabold text-slate-400 uppercase">
+                            Cap: {res.capacity}
+                          </span>
+
+                          <button
+                            disabled={submitting}
+                            onClick={() => handleSubmitBooking(res)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center space-x-1 transition-all ${
+                              isBooked
+                                ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-sm shadow-rose-950/20'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-950/20'
+                            }`}
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>{submitting ? 'Booking...' : isBooked ? 'Book Anyway' : 'Book Grid'}</span>
+                          </button>
+                        </div>
+
                       </div>
-                    )}
+                    );
+                  }
 
-                    <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-3">
-                      <span className="text-[9px] font-extrabold text-slate-400 uppercase">
-                        Cap: {res.capacity}
-                      </span>
-
-                      <button
-                        disabled={submitting}
-                        onClick={() => handleSubmitBooking(res)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center space-x-1 transition-all ${
-                          isBooked
-                            ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-sm shadow-rose-950/20'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-950/20'
-                        }`}
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>{submitting ? 'Booking...' : isBooked ? 'Book Anyway' : 'Book Grid'}</span>
-                      </button>
+                  return (
+                    <div
+                      key={`empty-${i}`}
+                      className="border border-dashed border-slate-200 bg-slate-50/20 rounded-xl flex items-center justify-center text-[10px] text-slate-350 font-semibold py-8 min-h-36 opacity-30 select-none pointer-events-none"
+                    >
+                      Slot {i}
                     </div>
-
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
 
           </div>

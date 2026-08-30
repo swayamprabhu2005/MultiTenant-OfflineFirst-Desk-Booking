@@ -66,9 +66,23 @@ router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMI
     const itemPrefix = prefix || (type === ResourceType.CUBICLE ? 'CUB' : type === ResourceType.DESK ? 'DSK' : 'RM');
     const createdResources = [];
 
+    // Find current occupied indices in the section to prevent overlapping
+    const currentResources = await prisma.resource.findMany({
+      where: { sectionId },
+      select: { sortOrder: true }
+    });
+    const occupied = currentResources.map(r => r.sortOrder).filter(idx => idx !== null && idx !== undefined) as number[];
+    let nextIdx = 0;
+
     for (let i = 1; i <= parseInt(count, 10); i++) {
       const code = `${itemPrefix}-${targetFloorNum}${i.toString().padStart(2, '0')}`;
       const name = `${type === ResourceType.CUBICLE ? 'Cubicle' : 'Desk'} ${targetFloorNum}${i.toString().padStart(2, '0')}`;
+
+      // Find next unoccupied index
+      while (occupied.includes(nextIdx)) {
+        nextIdx++;
+      }
+      occupied.push(nextIdx);
 
       const resItem = await prisma.resource.upsert({
         where: {
@@ -89,6 +103,7 @@ router.post('/generate-numeric', authMiddleware, requireRole([Role.PLATFORM_ADMI
           type: type as any,
           capacity: type === ResourceType.BOARD_ROOM ? 10 : type === ResourceType.MEETING_ROOM ? 4 : 1,
           features: Array.isArray(features) ? features : ['Power Outlet', 'Ethernet'],
+          sortOrder: nextIdx,
         },
       });
       createdResources.push(resItem);
@@ -241,6 +256,96 @@ router.post('/import-csv', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Rol
     });
   } catch (error: any) {
     console.error('CSV import error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Delete Resource
+router.delete('/resources/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Verify resource belongs to active tenant
+    const resource = await prisma.resource.findUnique({
+      where: { id },
+      include: {
+        section: {
+          include: {
+            floor: {
+              include: { building: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!resource || resource.section.floor.building.organizationId !== req.organizationId!) {
+      return res.status(404).json({ error: 'Resource not found or access denied' });
+    }
+
+    // Delete associated bookings first
+    await prisma.booking.deleteMany({
+      where: { resourceId: id },
+    });
+
+    await prisma.resource.delete({
+      where: { id },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: req.organizationId!,
+        actorUserId: req.user!.id,
+        action: 'DELETE_RESOURCE',
+        entityType: 'Resource',
+        entityId: id,
+        metadata: { code: resource.code, name: resource.name },
+      },
+    });
+
+    return res.json({ success: true, message: 'Resource deleted successfully' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Patch Resource (e.g. for sortOrder/drag-and-drop movement)
+router.patch('/resources/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sortOrder, name, type, capacity, hasPC, features } = req.body;
+
+    const resource = await prisma.resource.findUnique({
+      where: { id },
+      include: {
+        section: {
+          include: {
+            floor: {
+              include: { building: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!resource || resource.section.floor.building.organizationId !== req.organizationId!) {
+      return res.status(404).json({ error: 'Resource not found or access denied' });
+    }
+
+    const updated = await prisma.resource.update({
+      where: { id },
+      data: {
+        ...(sortOrder !== undefined ? { sortOrder: sortOrder !== null ? parseInt(sortOrder, 10) : null } : {}),
+        ...(name !== undefined ? { name } : {}),
+        ...(type !== undefined ? { type: type as any } : {}),
+        ...(capacity !== undefined ? { capacity: parseInt(capacity, 10) } : {}),
+        ...(hasPC !== undefined ? { hasPC: !!hasPC } : {}),
+        ...(features !== undefined ? { features: Array.isArray(features) ? features : [] } : {}),
+      },
+    });
+
+    return res.json(updated);
+  } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
 });

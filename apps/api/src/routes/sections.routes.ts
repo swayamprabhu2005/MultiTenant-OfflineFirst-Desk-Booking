@@ -39,6 +39,9 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
         floor: {
           include: { building: true },
         },
+        resources: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
       orderBy: { name: 'asc' },
     });

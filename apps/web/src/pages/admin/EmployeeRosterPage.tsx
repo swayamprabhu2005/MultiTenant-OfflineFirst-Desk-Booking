@@ -4,8 +4,13 @@ import {
   Shield, Search, ChevronLeft, ChevronRight, UserPlus
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 export const EmployeeRosterPage: React.FC = () => {
+  const { user } = useAuth();
+  const isGlobalOrgAdmin = user?.role === 'ORGANIZATION_ADMIN' && !user.scopedBranchId;
+  const isBranchAdmin = user?.role === 'ORGANIZATION_ADMIN' && !!user.scopedBranchId;
+
   const [employees, setEmployees] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [techLeads, setTechLeads] = useState<any[]>([]);
@@ -35,6 +40,7 @@ export const EmployeeRosterPage: React.FC = () => {
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState('EMPLOYEE');
   const [baseBranchId, setBaseBranchId] = useState('');
+  const [scopedBranchId, setScopedBranchId] = useState('');
   const [teamLeadId, setTeamLeadId] = useState('');
 
   const loadRoster = async () => {
@@ -77,6 +83,14 @@ export const EmployeeRosterPage: React.FC = () => {
     loadReferenceData();
   }, []);
 
+  useEffect(() => {
+    if (isGlobalOrgAdmin) {
+      setRole('ORGANIZATION_ADMIN');
+    } else {
+      setRole('EMPLOYEE');
+    }
+  }, [user, isGlobalOrgAdmin]);
+
   const handleCsvImport = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
@@ -99,24 +113,34 @@ export const EmployeeRosterPage: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const body: any = {
+        name,
+        email,
+        password,
+        department,
+      };
+
+      if (isGlobalOrgAdmin) {
+        body.role = 'ORGANIZATION_ADMIN';
+        body.scopedBranchId = scopedBranchId || null;
+      } else {
+        body.role = role;
+        body.baseBranchId = user?.scopedBranchId || baseBranchId || null;
+        body.teamLeadId = role === 'EMPLOYEE' ? (teamLeadId || null) : null;
+      }
+
       await fetchApi('/roster', {
         method: 'POST',
-        body: JSON.stringify({ 
-          name, 
-          email, 
-          password, 
-          department, 
-          role,
-          baseBranchId: baseBranchId || null,
-          teamLeadId: teamLeadId || null
-        }),
+        body: JSON.stringify(body),
       });
       setShowUserModal(false);
       setName('');
       setEmail('');
       setPassword('Welcome123!');
       setDepartment('');
-      setRole('EMPLOYEE');
+      setRole(isGlobalOrgAdmin ? 'ORGANIZATION_ADMIN' : 'EMPLOYEE');
+      setBaseBranchId('');
+      setScopedBranchId('');
       setTeamLeadId('');
       setStatusMsg(`User "${name}" registered successfully.`);
       loadRoster();
@@ -379,7 +403,7 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN,MAIN,
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
                 <input
-                  type="text"
+                  type="password"
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -396,49 +420,51 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN,MAIN,
                   placeholder="Engineering"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Base Branch</label>
-                <select
-                  value={baseBranchId}
-                  onChange={e => setBaseBranchId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
-                >
-                  <option value="">No branch office assigned</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Role / Permissions</label>
-                <select
-                  value={role}
-                  onChange={e => setRole(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
-                >
-                  <option value="EMPLOYEE">Regular Employee</option>
-                  <option value="TECH_LEAD">Tech Lead (Manager)</option>
-                  <option value="ORGANIZATION_ADMIN">Organization Admin</option>
-                </select>
-              </div>
-
-              {role === 'EMPLOYEE' && (
+              </div>              {isGlobalOrgAdmin ? (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Team Lead (Optional)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Managed Scoped Branch (Required)</label>
                   <select
-                    value={teamLeadId}
-                    onChange={e => setTeamLeadId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-850"
+                    required
+                    value={scopedBranchId}
+                    onChange={e => setScopedBranchId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
                   >
-                    <option value="">No manager assigned</option>
-                    {techLeads.map(l => (
-                      <option key={l.id} value={l.id}>{l.name} ({l.email})</option>
+                    <option value="">-- Select Managed Branch --</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
                     ))}
                   </select>
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Role / Permissions</label>
+                    <select
+                      value={role}
+                      onChange={e => setRole(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800"
+                    >
+                      <option value="EMPLOYEE">Regular Employee</option>
+                      <option value="TECH_LEAD">Tech Lead (Manager)</option>
+                    </select>
+                  </div>
+
+                  {role === 'EMPLOYEE' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Team Lead (Optional)</label>
+                      <select
+                        value={teamLeadId}
+                        onChange={e => setTeamLeadId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-850"
+                      >
+                        <option value="">No manager assigned</option>
+                        {techLeads.map(l => (
+                          <option key={l.id} value={l.id}>{l.name} ({l.email})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="flex justify-end space-x-2 pt-3">

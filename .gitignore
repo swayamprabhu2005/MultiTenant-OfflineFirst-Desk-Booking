@@ -1,32 +1,51 @@
-# Dependencies
-node_modules
-.pnpm-store
+# Dependency directories
+node_modules/
+jspm_packages/
+.pnpm-store/
 
 # Build outputs
-dist
-build
-.vite
-*.tsbuildinfo
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
 
-# Environment variables
-.env
-.env.local
-.env.production
-
-# Database
-prisma/*.db
-prisma/*.db-journal
-
-# Logs
+# Debug and log files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.log
+*.log.*
 
-# IDE & OS
-.vscode
-.idea
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 .DS_Store
 Thumbs.db
-.gemini
-.agents
+
+# Antigravity agent files
+.gemini/
+brain/
+scratch/
+transcript*.jsonl
+walkthrough.md
+gap_analysis.md
+task.md
+implementation_plan.md
+task-*.log
+*.log.tmp

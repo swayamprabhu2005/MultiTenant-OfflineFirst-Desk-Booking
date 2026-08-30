@@ -33,7 +33,7 @@ call pnpm db:seed
 echo.
 echo [5/5] Starting API Server ^& Web PWA Client in Parallel...
 echo Press Ctrl+C in this terminal to terminate all processes.
-start "" "http://localhost:3000"
+start "" cmd /c "timeout /t 5 >nul && start http://localhost:3000"
 call pnpm dev
 
 pause
