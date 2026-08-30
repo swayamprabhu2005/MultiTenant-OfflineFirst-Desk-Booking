@@ -22,7 +22,11 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login(email, password, orgCode);
-      navigate('/');
+      const selected = availableTenants.find(t => t.code === orgCode);
+      if (selected) {
+        setTenantSubdomain(selected.subdomain);
+      }
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check credentials or tenant code.');
     } finally {

@@ -83,6 +83,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     localStorage.setItem('token', res.token);
+    if (res.organization?.subdomain) {
+      localStorage.setItem('activeTenantSubdomain', res.organization.subdomain);
+    }
     setToken(res.token);
     setUser(res.user);
 

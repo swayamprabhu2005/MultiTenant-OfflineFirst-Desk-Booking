@@ -22,6 +22,7 @@ export const BuildingsManagementPage: React.FC = () => {
   
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const [users, setUsers] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -78,8 +79,18 @@ export const BuildingsManagementPage: React.FC = () => {
     }
   };
 
+  const loadUsers = async () => {
+    try {
+      const res = await fetchApi<any>('/roster?limit=100');
+      setUsers(res.users || []);
+    } catch (e) {
+      console.warn('Failed to load roster references:', e);
+    }
+  };
+
   useEffect(() => {
     loadBranches();
+    loadUsers();
   }, []);
 
   // Load buildings when branch changes
@@ -407,23 +418,25 @@ HQ,HQ Tower,2,Floor 2 - Sales,RM-202,Meeting Room Alpha,MEETING_ROOM,TV Screen;V
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setShowCsvModal(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all"
-          >
-            <Upload className="w-4 h-4 text-slate-500" />
-            <span>CSV Import</span>
-          </button>
-          
-          <button
-            onClick={() => setShowBranchModal(true)}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Branch</span>
-          </button>
-        </div>
+        {!isGlobalOrgAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowCsvModal(true)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all"
+            >
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>CSV Import</span>
+            </button>
+            
+            <button
+              onClick={() => setShowBranchModal(true)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Branch</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {statusMsg && (
@@ -472,13 +485,15 @@ HQ,HQ Tower,2,Floor 2 - Sales,RM-202,Meeting Room Alpha,MEETING_ROOM,TV Screen;V
                     <div className="pl-4 border-l border-slate-100 space-y-2 mt-1">
                       <div className="flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-wider px-1">
                         <span>Buildings</span>
-                        <button
-                          onClick={() => setShowBuildingModal(true)}
-                          className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                          <span>Add</span>
-                        </button>
+                        {!isGlobalOrgAdmin && (
+                          <button
+                            onClick={() => setShowBuildingModal(true)}
+                            className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Add</span>
+                          </button>
+                        )}
                       </div>
 
                       {buildings.map(bl => {
@@ -503,13 +518,15 @@ HQ,HQ Tower,2,Floor 2 - Sales,RM-202,Meeting Room Alpha,MEETING_ROOM,TV Screen;V
                               <div className="pl-3 border-l border-slate-100 space-y-2 mt-1">
                                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-wider px-1">
                                   <span>Floors</span>
-                                  <button
-                                    onClick={() => setShowFloorModal(true)}
-                                    className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
-                                  >
-                                    <Plus className="w-2.5 h-2.5" />
-                                    <span>Add</span>
-                                  </button>
+                                  {!isGlobalOrgAdmin && (
+                                    <button
+                                      onClick={() => setShowFloorModal(true)}
+                                      className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                      <span>Add</span>
+                                    </button>
+                                  )}
                                 </div>
 
                                 {floors.map(fl => {
@@ -531,13 +548,15 @@ HQ,HQ Tower,2,Floor 2 - Sales,RM-202,Meeting Room Alpha,MEETING_ROOM,TV Screen;V
                                         <div className="pl-3 border-l border-slate-100 space-y-2 mt-1">
                                           <div className="flex items-center justify-between text-[10px] text-slate-400 font-extrabold uppercase tracking-wider px-1">
                                             <span>Sections</span>
-                                            <button
-                                              onClick={() => setShowSectionModal(true)}
-                                              className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
-                                            >
-                                              <Plus className="w-2.5 h-2.5" />
-                                              <span>Add</span>
-                                            </button>
+                                            {!isGlobalOrgAdmin && (
+                                              <button
+                                                onClick={() => setShowSectionModal(true)}
+                                                className="text-emerald-600 hover:text-emerald-700 flex items-center space-x-0.5"
+                                              >
+                                                <Plus className="w-2.5 h-2.5" />
+                                                <span>Add</span>
+                                              </button>
+                                            )}
                                           </div>
 
                                           {sections.map(sec => {
@@ -583,201 +602,293 @@ HQ,HQ Tower,2,Floor 2 - Sales,RM-202,Meeting Room Alpha,MEETING_ROOM,TV Screen;V
             )}
           </div>
         </div>
-
-        {/* Right Column: Visual Canvas Area */}
-        <div className="md:col-span-3">
-          {selectedFloorId ? (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              {/* Section Selector Tab Bar */}
-              <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {sections.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedSectionId(s.id)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all border ${
-                        selectedSectionId === s.id
-                          ? 'bg-white border-slate-200 text-emerald-600 shadow-sm'
-                          : 'text-slate-500 border-transparent hover:text-slate-800'
-                      }`}
-                    >
-                      {s.name} ({s.code})
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setShowSectionModal(true)}
-                    className="px-2.5 py-1.5 border border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-emerald-600 hover:border-emerald-600 transition-all text-xs font-bold flex items-center space-x-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>New Section</span>
-                  </button>
+        {/* Right Column: Visual Canvas Area or Summary Overview */}
+        {isGlobalOrgAdmin ? (
+          <div className="md:col-span-3 space-y-6">
+            {activeBranch ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+                <div>
+                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10px] uppercase border border-emerald-100 rounded-full">
+                    Branch Overview
+                  </span>
+                  <h2 className="text-xl font-extrabold text-slate-850 mt-2">
+                    {activeBranch.name} ({activeBranch.code})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">{activeBranch.address || 'No address specified'}</p>
                 </div>
 
-                {selectedSectionId && !isGlobalOrgAdmin && (
-                  <div className="flex items-center gap-2">
+                <div className="border-t border-slate-100 pt-4">
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5">
+                    Assigned Branch Administrator
+                  </h3>
+                  {(() => {
+                    const admin = users.find(u => u.role === 'ORGANIZATION_ADMIN' && u.scopedBranchId === activeBranch.id);
+                    if (admin) {
+                      return (
+                        <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 p-3 rounded-xl max-w-md">
+                          <div className="w-8 h-8 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center font-bold text-xs">
+                            {admin.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800">{admin.name}</div>
+                            <div className="text-[10px] text-slate-400 font-medium">{admin.email}</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="text-xs text-amber-600 bg-amber-50/50 border border-amber-100 p-3 rounded-xl max-w-md italic font-semibold">
+                        No Branch Administrator allocated yet. Assign one in the Employee Roster screen.
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="border-t border-slate-100 pt-4">
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">
+                    Branch Infrastructure Summary
+                  </h3>
+
+                  {buildings.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No buildings registered under this branch yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {buildings.map(b => (
+                        <div key={b.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between border-b pb-2">
+                            <span className="text-xs font-extrabold text-slate-800">{b.name} ({b.code})</span>
+                            <span className="text-[10px] font-bold text-slate-450 uppercase bg-slate-100 px-2 py-0.5 rounded">
+                              Building
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {(b.floors || []).map((fl: any) => (
+                              <div key={fl.id} className="text-xs pl-2 border-l-2 border-emerald-500">
+                                <span className="font-bold text-slate-700">{fl.name}</span>
+                                <div className="text-[10px] text-slate-450 mt-0.5 space-x-1">
+                                  {fl.sections && fl.sections.length > 0 ? (
+                                    fl.sections.map((s: any) => (
+                                      <span key={s.id} className="bg-white border px-1.5 py-0.5 rounded text-slate-500 font-medium">
+                                        {s.name} ({s.resources?.length || 0} spaces)
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="italic text-slate-400">No sections</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {(b.floors || []).length === 0 && (
+                              <p className="text-[10px] text-slate-405 italic">No floors created yet.</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-400 italic text-xs">
+                Select a branch from the workspace tree to view its hierarchy details.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="md:col-span-3">
+            {selectedFloorId ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {/* Section Selector Tab Bar */}
+                <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {sections.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => setSelectedSectionId(s.id)}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all border ${
+                          selectedSectionId === s.id
+                            ? 'bg-white border-slate-200 text-emerald-600 shadow-sm'
+                            : 'bg-transparent border-transparent text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {s.name} ({s.code})
+                      </button>
+                    ))}
                     <button
-                      onClick={() => setShowAutoGenerateModal(true)}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1"
-                    >
-                      <Grid className="w-3.5 h-3.5" />
-                      <span>Generate Desks</span>
-                    </button>
-                    <button
-                      onClick={() => setShowResourceModal(true)}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1"
+                      onClick={() => setShowSectionModal(true)}
+                      className="px-2.5 py-1.5 border border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-emerald-600 hover:border-emerald-600 transition-all text-xs font-bold flex items-center space-x-1"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Desk</span>
+                      <span>New Section</span>
                     </button>
                   </div>
-                )}
-              </div>
 
-              {/* live Visual Grid Editor */}
-              <div className="p-6">
-                {activeSection ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-800">{activeSection.name} Grid Layout</h3>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Renders in a {activeSection.columns}-column matrix layout. Double-span items occupy multiple blocks.
-                        </p>
-                      </div>
-                      <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                        Columns: {activeSection.columns}
-                      </div>
+                  {selectedSectionId && !isGlobalOrgAdmin && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowAutoGenerateModal(true)}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1"
+                      >
+                        <Grid className="w-3.5 h-3.5" />
+                        <span>Generate Desks</span>
+                      </button>
+                      <button
+                        onClick={() => setShowResourceModal(true)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Desk</span>
+                      </button>
                     </div>
+                  )}
+                </div>
 
-                    {/* Grid Matrix Renders dynamically */}
-                    {(() => {
-                      const maxSortOrder = (activeSection.resources || []).reduce((max: number, r: any) => {
-                        return r.sortOrder !== null && r.sortOrder !== undefined && r.sortOrder > max ? r.sortOrder : max;
-                      }, 0);
-                      const columnsCount = activeSection.columns || 4;
-                      const numRows = Math.max(4, Math.ceil((maxSortOrder + 1) / columnsCount) + 1);
-                      const totalCells = numRows * columnsCount;
-                      const cellIndices = Array.from({ length: totalCells }, (_, index) => index);
+                {/* live Visual Grid Editor */}
+                <div className="p-6">
+                  {activeSection ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800">{activeSection.name} Grid Layout</h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Renders in a {activeSection.columns}-column matrix layout. Double-span items occupy multiple blocks.
+                          </p>
+                        </div>
+                        <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          Columns: {activeSection.columns}
+                        </div>
+                      </div>
 
-                      return (
-                        <div 
-                          className="grid gap-3.5 bg-slate-50 p-5 rounded-2xl border border-slate-200/80 min-h-60"
-                          style={{
-                            gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`
-                          }}
-                        >
-                          {cellIndices.map((i) => {
-                            const res = (activeSection.resources || []).find((r: any) => r.sortOrder === i);
-                            if (res) {
-                               const isBoardroom = res.type === 'BOARD_ROOM';
-                               const isMeetingRoom = res.type === 'MEETING_ROOM';
+                      {/* Grid Matrix Renders dynamically */}
+                      {(() => {
+                        const maxSortOrder = (activeSection.resources || []).reduce((max: number, r: any) => {
+                          return r.sortOrder !== null && r.sortOrder !== undefined && r.sortOrder > max ? r.sortOrder : max;
+                        }, 0);
+                        const columnsCount = activeSection.columns || 4;
+                        const numRows = Math.max(4, Math.ceil((maxSortOrder + 1) / columnsCount) + 1);
+                        const totalCells = numRows * columnsCount;
+                        const cellIndices = Array.from({ length: totalCells }, (_, index) => index);
 
-                               return (
-                                 <div
-                                   key={res.id}
-                                   draggable={!isGlobalOrgAdmin}
-                                   onDragStart={isGlobalOrgAdmin ? undefined : (e) => handleDragStart(e, res.id)}
-                                   onDragOver={isGlobalOrgAdmin ? undefined : handleDragOver}
-                                   onDrop={isGlobalOrgAdmin ? undefined : (e) => handleDrop(e, i)}
-                                   className={`group relative p-3 rounded-xl border border-slate-200 bg-white transition-all flex flex-col justify-between min-h-[120px] ${
-                                     isGlobalOrgAdmin 
-                                       ? 'select-none' 
-                                       : 'hover:border-emerald-500 hover:shadow-md hover:scale-[1.02] cursor-grab active:cursor-grabbing'
-                                   }`}
-                                   style={{
-                                     gridColumn: isBoardroom && res.columnSpan ? `span ${res.columnSpan} / span ${res.columnSpan}` : undefined
-                                   }}
-                                 >
-                                   {/* Remove Resource trigger button */}
-                                   {!isGlobalOrgAdmin && (
-                                     <button
-                                       onClick={() => handleDeleteResource(res.id)}
-                                       className="absolute top-2 right-2 p-1 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm z-10"
-                                     >
-                                       <Trash2 className="w-3.5 h-3.5" />
-                                     </button>
-                                   )}
+                        return (
+                          <div 
+                            className="grid gap-3.5 bg-slate-50 p-5 rounded-2xl border border-slate-200/80 min-h-60"
+                            style={{
+                              gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))`
+                            }}
+                          >
+                            {cellIndices.map((i) => {
+                              const res = (activeSection.resources || []).find((r: any) => r.sortOrder === i);
+                              if (res) {
+                                 const isBoardroom = res.type === 'BOARD_ROOM';
+                                 const isMeetingRoom = res.type === 'MEETING_ROOM';
 
-                                   <div className="space-y-1">
-                                     <div className="flex items-center space-x-1.5">
-                                       {isBoardroom ? (
-                                         <Presentation className="w-4 h-4 text-purple-600" />
-                                       ) : isMeetingRoom ? (
-                                         <Users className="w-4 h-4 text-blue-600" />
-                                       ) : (
-                                         <Monitor className="w-4 h-4 text-emerald-600" />
-                                       )}
-                                       <span className="font-mono font-extrabold text-xs text-slate-800">{res.code}</span>
-                                     </div>
-                                     
-                                     <div className="text-[11px] font-semibold text-slate-500 truncate">{res.name}</div>
-                                   </div>
-
-                                   <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
-                                     <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                       {res.type}
-                                     </span>
-                                     {res.hasPC && (
-                                       <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center space-x-0.5">
-                                         <span>HDMI</span>
-                                       </span>
+                                 return (
+                                   <div
+                                     key={res.id}
+                                     draggable={!isGlobalOrgAdmin}
+                                     onDragStart={isGlobalOrgAdmin ? undefined : (e) => handleDragStart(e, res.id)}
+                                     onDragOver={isGlobalOrgAdmin ? undefined : handleDragOver}
+                                     onDrop={isGlobalOrgAdmin ? undefined : (e) => handleDrop(e, i)}
+                                     className={`group relative p-3 rounded-xl border border-slate-200 bg-white transition-all flex flex-col justify-between min-h-[120px] ${
+                                       isGlobalOrgAdmin 
+                                         ? 'select-none' 
+                                         : 'hover:border-emerald-500 hover:shadow-md hover:scale-[1.02] cursor-grab active:cursor-grabbing'
+                                     }`}
+                                     style={{
+                                       gridColumn: isBoardroom && res.columnSpan ? `span ${res.columnSpan} / span ${res.columnSpan}` : undefined
+                                     }}
+                                   >
+                                     {/* Remove Resource trigger button */}
+                                     {!isGlobalOrgAdmin && (
+                                       <button
+                                         onClick={() => handleDeleteResource(res.id)}
+                                         className="absolute top-2 right-2 p-1 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm z-10"
+                                       >
+                                         <Trash2 className="w-3.5 h-3.5" />
+                                       </button>
                                      )}
-                                   </div>
-                                 </div>
-                               );
-                            }
 
-                            if (isGlobalOrgAdmin) {
+                                     <div className="space-y-1">
+                                       <div className="flex items-center space-x-1.5">
+                                         {isBoardroom ? (
+                                           <Presentation className="w-4 h-4 text-purple-600" />
+                                         ) : isMeetingRoom ? (
+                                           <Users className="w-4 h-4 text-blue-600" />
+                                         ) : (
+                                           <Monitor className="w-4 h-4 text-emerald-600" />
+                                         )}
+                                         <span className="font-mono font-extrabold text-xs text-slate-800">{res.code}</span>
+                                       </div>
+                                       
+                                       <div className="text-[11px] font-semibold text-slate-500 truncate">{res.name}</div>
+                                     </div>
+
+                                     <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                                       <span className="text-[9px] font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                         {res.type}
+                                       </span>
+                                       {res.hasPC && (
+                                         <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center space-x-0.5">
+                                           <span>HDMI</span>
+                                         </span>
+                                       )}
+                                     </div>
+                                   </div>
+                                 );
+                              }
+
+                              if (isGlobalOrgAdmin) {
+                                return (
+                                  <div
+                                    key={`empty-${i}`}
+                                    className="border border-dashed border-slate-200/60 bg-slate-50/20 rounded-xl flex flex-col items-center justify-center text-[10px] text-slate-350 font-semibold py-8 min-h-[120px] select-none opacity-40"
+                                  >
+                                    Slot {i}
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={`empty-${i}`}
-                                  className="border border-dashed border-slate-200/60 bg-slate-50/20 rounded-xl flex flex-col items-center justify-center text-[10px] text-slate-350 font-semibold py-8 min-h-[120px] select-none opacity-40"
+                                  onDragOver={handleDragOver}
+                                  onDrop={(e) => handleDrop(e, i)}
+                                  onClick={() => {
+                                    setShowResourceModal(true);
+                                  }}
+                                  className="border border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/20 rounded-xl bg-slate-50/50 flex flex-col items-center justify-center text-[10px] text-slate-400 font-semibold cursor-pointer py-8 transition-all hover:scale-[1.01] min-h-[120px]"
                                 >
-                                  Slot {i}
+                                  <Plus className="w-4 h-4 text-slate-300 mb-1" />
+                                  <span>Slot {i}</span>
                                 </div>
                               );
-                            }
-
-                            return (
-                              <div
-                                key={`empty-${i}`}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, i)}
-                                onClick={() => {
-                                  setShowResourceModal(true);
-                                }}
-                                className="border border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/20 rounded-xl bg-slate-50/50 flex flex-col items-center justify-center text-[10px] text-slate-400 font-semibold cursor-pointer py-8 transition-all hover:scale-[1.01] min-h-[120px]"
-                              >
-                                <Plus className="w-4 h-4 text-slate-300 mb-1" />
-                                <span>Slot {i}</span>
+                            })}
+                            {(activeSection.resources || []).length === 0 && (
+                              <div className="col-span-full py-16 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
+                                <Layers className="w-8 h-8 text-slate-300" />
+                                <span>This section is empty. Generate desks or add spaces above.</span>
                               </div>
-                            );
-                          })}
-                          {(activeSection.resources || []).length === 0 && (
-                            <div className="col-span-full py-16 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
-                              <Layers className="w-8 h-8 text-slate-300" />
-                              <span>This section is empty. Generate desks or add spaces above.</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
-                    <Layers className="w-8 h-8 text-slate-300" />
-                    <span>Select or create a Section above to view the layout grid.</span>
-                  </div>
-                )}
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
+                      <Layers className="w-8 h-8 text-slate-300" />
+                      <span>Select or create a Section above to view the layout grid.</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 p-16 shadow-sm text-center text-slate-400 italic text-xs flex flex-col items-center justify-center space-y-2">
-              <Building className="w-10 h-10 text-slate-300" />
-              <span>Select a branch, building, and floor from the tree sidebar to view its layout grid.</span>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-16 shadow-sm text-center text-slate-400 italic text-xs flex flex-col items-center justify-center space-y-2">
+                <Building className="w-10 h-10 text-slate-300" />
+                <span>Select a branch, building, and floor from the tree sidebar to view its layout grid.</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* MODAL: Add Branch */}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Users, Upload, Plus, Download, CheckCircle2, UserCheck, 
-  Shield, Search, ChevronLeft, ChevronRight, UserPlus
+  Shield, Search, ChevronLeft, ChevronRight, UserPlus, Building
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -179,24 +180,28 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN,MAIN,
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setShowCsvModal(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all"
-          >
-            <Upload className="w-4 h-4 text-slate-500" />
-            <span>CSV Roster Import</span>
-          </button>
+          {!isGlobalOrgAdmin && (
+            <button
+              onClick={() => setShowCsvModal(true)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all"
+            >
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>CSV Roster Import</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => {
-              loadReferenceData();
-              setShowUserModal(true);
-            }}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Employee</span>
-          </button>
+          {(!isGlobalOrgAdmin || branches.length > 0) && (
+            <button
+              onClick={() => {
+                loadReferenceData();
+                setShowUserModal(true);
+              }}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -212,106 +217,109 @@ Charlie Davis,charlie@acme.com,Facilities Management,HQ,ORGANIZATION_ADMIN,MAIN,
         </div>
       )}
 
-      {/* search and Table block */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4">
-        {/* Search bar header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h2 className="text-sm font-bold text-slate-800">Organization Employees ({paginationInfo.total})</h2>
-          
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name, email, dept..."
-              value={searchQuery}
-              onChange={e => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-            />
+      {isGlobalOrgAdmin && branches.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-xl mx-auto space-y-4">
+          <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto text-amber-500">
+            <Building className="w-6 h-6" />
           </div>
+          <h2 className="text-base font-black text-slate-900">No Branches Registered Yet</h2>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+            Please register at least one branch location on your dashboard before setting up branch administrators.
+          </p>
+          <Link
+            to="/"
+            className="inline-block px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all"
+          >
+            Go to Dashboard
+          </Link>
         </div>
-
-        {/* Employees Table */}
-        <div className="divide-y divide-slate-100 overflow-x-auto min-h-60">
-          {employees.map(emp => (
-            <div key={emp.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-all">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 font-bold text-slate-700 flex items-center justify-center text-sm border shadow-sm">
-                  {emp.name.charAt(0)}
-                </div>
-                <div>
-                  <div className="font-extrabold text-sm text-slate-900 flex items-center flex-wrap gap-1.5">
-                    <span>{emp.name}</span>
-                    {emp.role !== 'EMPLOYEE' && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-250/50">
-                        {emp.role.replace('_', ' ')}
-                      </span>
-                    )}
-                    {emp.mustChangePassword && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-250/50">
-                        Temp Password
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-slate-400 font-medium space-y-0.5 mt-0.5">
-                    <div>{emp.email} • {emp.department || 'General'}</div>
-                    <div className="flex items-center space-x-2 text-[10px] text-slate-400">
-                      {emp.baseBranch?.name && (
-                        <span>Branch: <strong className="text-slate-600">{emp.baseBranch.name}</strong></span>
-                      )}
-                      {emp.teamLead?.name && (
-                        <span>Lead: <strong className="text-slate-600">{emp.teamLead.name}</strong></span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 self-end sm:self-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-250/50">
-                  {emp.status}
-                </span>
-              </div>
+      ) : (
+        /* search and Table block */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4">
+          {/* Search bar header */}
+          <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 className="text-sm font-bold text-slate-800">Organization Employees ({paginationInfo.total})</h2>
+            
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, email, dept..."
+                value={searchQuery}
+                onChange={e => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-slate-50 border border-slate-250 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
             </div>
-          ))}
+          </div>
 
-          {employees.length === 0 && !loading && (
-            <div className="text-center py-20 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
-              <Users className="w-8 h-8 text-slate-300" />
-              <span>No employees match the criteria.</span>
+          <div className="divide-y divide-slate-100">
+            {employees.map(emp => (
+              <div key={emp.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/55 transition-colors">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-extrabold text-sm border border-slate-200">
+                    {emp.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                      <span>{emp.name}</span>
+                      {emp.role === 'ORGANIZATION_ADMIN' && (
+                        <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-extrabold text-[9px] border border-purple-150 uppercase flex items-center space-x-0.5">
+                          <Shield className="w-2.5 h-2.5" />
+                          <span>Admin</span>
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium">{emp.email} &bull; {emp.department || 'General'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3 self-end sm:self-center">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-250/50">
+                    {emp.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {employees.length === 0 && !loading && (
+              <div className="text-center py-20 flex flex-col items-center justify-center space-y-2 text-slate-400 italic text-xs">
+                <Users className="w-8 h-8 text-slate-300" />
+                <span>No employees match the criteria.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Pagination controls */}
+          {paginationInfo.totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Page <strong>{paginationInfo.page}</strong> of <strong>{paginationInfo.totalPages}</strong> ({paginationInfo.total} total)
+              </span>
+              
+              <div className="flex items-center space-x-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                <button
+                  disabled={currentPage === paginationInfo.totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationInfo.totalPages))}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
-
-        {/* Pagination controls */}
-        {paginationInfo.totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-slate-500">
-              Page <strong>{paginationInfo.page}</strong> of <strong>{paginationInfo.totalPages}</strong> ({paginationInfo.total} total)
-            </span>
-            
-            <div className="flex items-center space-x-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              
-              <button
-                disabled={currentPage === paginationInfo.totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationInfo.totalPages))}
-                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* MODAL 1: CSV Roster Import */}
       {showCsvModal && (
