@@ -38,7 +38,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Antigravity agent files
+# Antigravity agent & generated documentation files
 .gemini/
 brain/
 scratch/
@@ -49,3 +49,8 @@ task.md
 implementation_plan.md
 task-*.log
 *.log.tmp
+schema_er_diagram*
+Database_Schema_Documentation.docx
+PRD.docx
+PRD.md
+schema_er_diagram.svg

@@ -149,35 +149,46 @@ export const Header: React.FC = () => {
     }
   };
 
+  const activeOrg = user?.organization || tenant;
+  const orgColor = activeOrg?.themeColor || '#16a34a';
+
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <header 
+      className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm transition-colors duration-300"
+      style={{
+        borderTop: `4px solid ${orgColor}`
+      }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
         {/* Left: Tenant Branding */}
         <div className="flex items-center space-x-3">
-          {tenant?.logoUrl ? (
+          {activeOrg?.logoUrl ? (
             <img
-              src={tenant.logoUrl}
-              alt={tenant.name}
-              className="w-9 h-9 object-contain rounded-lg border border-slate-200 p-0.5 bg-slate-50"
+              src={activeOrg.logoUrl}
+              alt={activeOrg.name}
+              className="w-9 h-9 object-contain rounded-lg border border-slate-200 p-0.5 bg-slate-50 shadow-sm"
             />
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-              {tenant?.name?.charAt(0) || 'D'}
+            <div 
+              className="w-9 h-9 rounded-lg text-white flex items-center justify-center font-bold text-lg shadow-sm transition-colors"
+              style={{ backgroundColor: orgColor }}
+            >
+              {activeOrg?.name?.charAt(0) || 'D'}
             </div>
           )}
 
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-bold text-slate-800 text-base tracking-tight">
-                {tenant?.name || 'Desk Booking SaaS'}
+                {activeOrg?.name || 'Desk Booking SaaS'}
               </span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {tenant?.code || 'TENANT'}
+                {activeOrg?.code || 'TENANT'}
               </span>
             </div>
             <p className="text-xs text-slate-400 font-mono">
-              {tenant?.subdomain ? `${tenant.subdomain}.deskbooking.com` : 'subdomain'}
+              {activeOrg?.subdomain ? `${activeOrg.subdomain}.deskbooking.com` : 'subdomain'}
             </p>
           </div>
         </div>
@@ -185,35 +196,37 @@ export const Header: React.FC = () => {
         {/* Right Actions */}
         <div className="flex items-center space-x-4">
 
-          {/* Tenant Switcher */}
-          <div className="relative group hidden sm:block">
-            <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer border border-slate-200 transition-all">
-              <Building2 className="w-3.5 h-3.5 text-slate-500" />
-              <span>Switch Tenant</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
-            </div>
-
-            <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 hidden group-hover:block z-50">
-              <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Simulated Subdomains
+          {/* Tenant Switcher (Hidden for Platform Admin & Organization Admins) */}
+          {user?.role !== 'ORGANIZATION_ADMIN' && user?.role !== 'PLATFORM_ADMIN' && (
+            <div className="relative group hidden sm:block">
+              <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer border border-slate-200 transition-all">
+                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Switch Tenant</span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
               </div>
-              {availableTenants.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTenantSubdomain(t.subdomain)}
-                  className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-700 ${
-                    t.subdomain === tenant?.subdomain ? 'font-bold text-emerald-600 bg-emerald-50/50' : 'text-slate-700'
-                  }`}
-                >
-                  <div>
-                    <div>{t.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{t.subdomain}.deskbooking.com</div>
-                  </div>
-                  {t.subdomain === tenant?.subdomain && <CheckIcon className="w-3.5 h-3.5 text-emerald-600" />}
-                </button>
-              ))}
+
+              <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 hidden group-hover:block z-50">
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Simulated Subdomains
+                </div>
+                {availableTenants.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTenantSubdomain(t.subdomain)}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-700 ${
+                      t.subdomain === tenant?.subdomain ? 'font-bold text-emerald-600 bg-emerald-50/50' : 'text-slate-700'
+                    }`}
+                  >
+                    <div>
+                      <div>{t.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{t.subdomain}.deskbooking.com</div>
+                    </div>
+                    {t.subdomain === tenant?.subdomain && <CheckIcon className="w-3.5 h-3.5 text-emerald-600" />}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Online/Offline Badge */}
           <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${

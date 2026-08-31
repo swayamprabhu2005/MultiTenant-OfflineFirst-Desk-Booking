@@ -259,6 +259,17 @@ router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZA
       },
     });
 
+    await prisma.auditLog.create({
+      data: {
+        organizationId: req.organizationId!,
+        actorUserId: req.user!.id,
+        action: 'EMPLOYEE_CREATED',
+        entityType: 'User',
+        entityId: user.id,
+        metadata: { name: user.name, email: user.email, role: user.role },
+      },
+    });
+
     return res.status(201).json(user);
   } catch (error: any) {
     return res.status(400).json({ error: error.message });

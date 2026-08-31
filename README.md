@@ -92,13 +92,11 @@ This script will:
 
 ## 🔑 Demo Account Credentials
 
-Default Password for all accounts: **`Password123!`**
+| User Role | Email | Password | Organization / Subdomain | Description |
+|---|---|---|---|---|
+| **Platform Admin** | `admin@deskbooking.com` | `DeskBook#2026!AdminSec` | Platform Administration (`system`) | Global Platform & Audit Logs Administrator |
 
-| User Role | Email | Organization / Subdomain | Description |
-|---|---|---|---|
-| **Platform Admin** | `admin@deskbooking.com` | Platform Administration (`system`) | Global Platform & Audit Logs Administrator |
-
-*Note: There are no default organizations or employees seeded. To test organization workflows, log in as Platform Admin, or use the **Sign Up** link on the login screen to register your own custom Organization Admin account.*
+*Note: Database seeding is non-destructive and uses idempotent upserts. Existing organizations, branches, and user accounts created via Sign Up or the Platform Console are preserved across server restarts.*
 
 ---
 

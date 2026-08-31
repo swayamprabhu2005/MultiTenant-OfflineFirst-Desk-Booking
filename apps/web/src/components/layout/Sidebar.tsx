@@ -7,9 +7,11 @@ import {
   CalendarCheck,
   RefreshCw,
   Building,
+  Building2,
   Users,
   ShieldCheck,
   Globe,
+  Palette,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/indexedDB';
@@ -42,15 +44,22 @@ export const Sidebar: React.FC = () => {
         { name: 'Organizations', to: '/admin/organizations', icon: Globe },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
       ]
+    : isGlobalOrgAdmin
+    ? [
+        { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+        { name: 'Create Branch', to: '/admin/branches', icon: Building2 },
+        { name: 'Employee Roster', to: '/admin/roster', icon: Users },
+        { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
+        { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
+      ]
     : [
-        ...(isGlobalOrgAdmin ? [{ name: 'Dashboard', to: '/', icon: LayoutDashboard }] : []),
         { name: 'Buildings & Spaces', to: '/admin/buildings', icon: Building },
         { name: 'Employee Roster', to: '/admin/roster', icon: Users },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
       ];
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4">
+    <aside className="w-64 bg-white border-r border-slate-200 h-[calc(100vh-4rem)] sticky top-16 flex-shrink-0 flex flex-col justify-between p-4 overflow-y-auto">
       <div className="space-y-6">
 
         {/* Employee Section */}

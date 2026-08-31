@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   PLATFORM_ADMIN
   ORGANIZATION_ADMIN
+  BRANCH_ADMIN
   TECH_LEAD
   EMPLOYEE
 }

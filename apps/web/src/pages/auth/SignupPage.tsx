@@ -11,7 +11,6 @@ export const SignupPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [orgName, setOrgName] = useState('');
-  const [orgCode, setOrgCode] = useState('');
   const [subdomain, setSubdomain] = useState('');
   
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +21,10 @@ export const SignupPage: React.FC = () => {
     setError(null);
     setLoading(true);
 
+    const generatedOrgCode = (subdomain || orgName || 'ORG').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
     try {
-      await signup(name, email, password, orgName, orgCode, subdomain);
+      await signup(name, email, password, orgName, generatedOrgCode, subdomain);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please verify all details.');
@@ -39,21 +40,21 @@ export const SignupPage: React.FC = () => {
       <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl"></div>
 
       <div className="max-w-lg w-full relative z-10">
-        {/* Brand Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-600 text-white font-black text-xl shadow-lg shadow-emerald-600/20 mb-3 border border-emerald-500/20">
-            S
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Create Organization Account
-          </h1>
-          <p className="text-slate-500 text-xs mt-1">
-            Register your company tenant and set up your workspace admin account
-          </p>
-        </div>
-
-        {/* Signup Card */}
+        {/* Signup Card Container */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xl">
+          {/* Brand Header inside white box container */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-600 text-white font-black text-xl shadow-lg shadow-emerald-600/20 mb-3 border border-emerald-500/20">
+              S
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Create Organization Account
+            </h1>
+            <p className="text-slate-500 text-xs mt-1">
+              Register your company tenant and set up your workspace admin account
+            </p>
+          </div>
+
           {error && (
             <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
               <Shield className="w-4 h-4 flex-shrink-0" />
@@ -112,6 +113,11 @@ export const SignupPage: React.FC = () => {
                       <input
                         type="password"
                         required
+                        autoComplete="new-password"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-bwignore="true"
+                        data-form-type="other"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         placeholder="••••••••"
@@ -146,39 +152,21 @@ export const SignupPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Subdomain & Code Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      Tenant Subdomain
-                    </label>
-                    <div className="relative">
-                      <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        required
-                        value={subdomain}
-                        onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                        placeholder="acme"
-                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      Organization Code
-                    </label>
-                    <div className="relative">
-                      <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        required
-                        value={orgCode}
-                        onChange={e => setOrgCode(e.target.value.toUpperCase())}
-                        placeholder="ACME"
-                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
+                {/* Subdomain (stacked on separate line) */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                    Tenant Subdomain
+                  </label>
+                  <div className="relative">
+                    <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      required
+                      value={subdomain}
+                      onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      placeholder="acme"
+                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>

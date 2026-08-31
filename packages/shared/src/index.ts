@@ -1,6 +1,7 @@
 export enum Role {
   PLATFORM_ADMIN = 'PLATFORM_ADMIN',
   ORGANIZATION_ADMIN = 'ORGANIZATION_ADMIN',
+  BRANCH_ADMIN = 'BRANCH_ADMIN',
   TECH_LEAD = 'TECH_LEAD',
   EMPLOYEE = 'EMPLOYEE',
 }
@@ -65,6 +66,7 @@ export interface UserDTO {
   mustChangePassword?: boolean;
   status: string;
   createdAt: string;
+  organization?: OrganizationDTO | null;
 }
 
 export interface BuildingDTO {

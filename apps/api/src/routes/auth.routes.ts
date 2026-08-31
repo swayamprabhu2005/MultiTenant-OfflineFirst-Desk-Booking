@@ -11,33 +11,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key-for-multi-ten
 // Sign In
 router.post('/login', async (req: TenantRequest, res: Response) => {
   try {
-    const { email, password, organizationCode, subdomain } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Resolve tenant
-    let targetOrgId = req.organizationId;
-
-    if (!targetOrgId && (subdomain || organizationCode)) {
-      const org = await prisma.organization.findFirst({
-        where: {
-          OR: [
-            subdomain ? { subdomain: subdomain.toLowerCase() } : {},
-            organizationCode ? { code: organizationCode.toUpperCase() } : {},
-          ],
-        },
-      });
-      if (org) {
-        targetOrgId = org.id;
-      }
-    }
-
     const user = await prisma.user.findFirst({
       where: {
         email: email.toLowerCase(),
-        ...(targetOrgId ? { organizationId: targetOrgId } : {}),
       },
       include: {
         organization: true,
@@ -45,7 +27,7 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials or tenant mismatch' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
@@ -82,6 +64,14 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
         teamLeadId: user.teamLeadId,
         mustChangePassword: user.mustChangePassword,
         organizationId: user.organizationId,
+        organization: {
+          id: user.organization.id,
+          name: user.organization.name,
+          code: user.organization.code,
+          subdomain: user.organization.subdomain,
+          logoUrl: user.organization.logoUrl,
+          themeColor: user.organization.themeColor,
+        },
       },
       organization: {
         id: user.organization.id,
@@ -130,7 +120,7 @@ router.post('/signup', async (req: TenantRequest, res: Response) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Atomically create Organization and Org Admin User in a transaction
+    // Atomically create Organization, Org Admin User, and AuditLog in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
         data: {
@@ -149,6 +139,22 @@ router.post('/signup', async (req: TenantRequest, res: Response) => {
           passwordHash,
           role: 'ORGANIZATION_ADMIN', // New sign-ups are global Organization Admins
           mustChangePassword: false, // Since they set their own password during sign-up
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          organizationId: org.id,
+          actorUserId: user.id,
+          action: 'CREATE_ORGANIZATION',
+          entityType: 'Organization',
+          entityId: org.id,
+          metadata: {
+            orgName: org.name,
+            subdomain: org.subdomain,
+            adminName: user.name,
+            adminEmail: user.email,
+          },
         },
       });
 
@@ -176,6 +182,7 @@ router.post('/signup', async (req: TenantRequest, res: Response) => {
         role: result.user.role,
         mustChangePassword: result.user.mustChangePassword,
         organizationId: result.user.organizationId,
+        organization: result.org,
       },
       organization: result.org,
     });
@@ -212,6 +219,7 @@ router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respons
         teamLeadId: user.teamLeadId,
         mustChangePassword: user.mustChangePassword,
         organizationId: user.organizationId,
+        organization: user.organization,
       },
       organization: user.organization,
     });

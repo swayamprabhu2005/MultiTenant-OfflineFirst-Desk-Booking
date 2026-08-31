@@ -14,6 +14,8 @@ import { OrganizationsPage } from './pages/admin/OrganizationsPage';
 import { BuildingsManagementPage } from './pages/admin/BuildingsManagementPage';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+import { CreateBranchPage } from './pages/admin/CreateBranchPage';
+import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 
 const queryClient = new QueryClient({
@@ -40,7 +42,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" replace />;
   }
 
-  if (user?.mustChangePassword) {
+  if (user?.mustChangePassword && user?.role !== 'ORGANIZATION_ADMIN' && user?.role !== 'PLATFORM_ADMIN') {
     return <Navigate to="/change-password" replace />;
   }
 
@@ -91,8 +93,10 @@ export const App: React.FC = () => {
                 {/* Admin Portal */}
                 <Route path="admin/organizations" element={<OrganizationsPage />} />
                 <Route path="admin/buildings" element={<BuildingsManagementPage />} />
+                <Route path="admin/branches" element={<CreateBranchPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
+                <Route path="admin/branding" element={<BrandSettingsPage />} />
               </Route>
 
               <Route

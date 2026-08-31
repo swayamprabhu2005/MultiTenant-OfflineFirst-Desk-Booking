@@ -8,7 +8,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string, organizationCode?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, orgName: string, orgCode: string, subdomain: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -40,10 +40,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (navigator.onLine) {
         try {
-          const res = await fetchApi<{ user: UserDTO }>('/auth/me');
-          setUser(res.user);
+          const res = await fetchApi<{ user: UserDTO; organization: any }>('/auth/me');
+          const fullUser = {
+            ...res.user,
+            organization: res.organization || res.user.organization,
+          };
+          setUser(fullUser);
+          if (fullUser.organization?.subdomain) {
+            localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
+          }
           await db.cachedUser.clear();
-          await db.cachedUser.put({ ...res.user, token: savedToken });
+          await db.cachedUser.put({ ...fullUser, token: savedToken });
         } catch (e) {
           // Token expired or invalid
           console.warn('Auth token verification failed:', e);
@@ -69,32 +76,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (email: string, password: string, organizationCode?: string) => {
-    const activeSubdomain = localStorage.getItem('activeTenantSubdomain') || 'system';
-
+  const login = async (email: string, password: string) => {
     const res = await fetchApi<{ token: string; user: UserDTO; organization: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({
         email,
         password,
-        organizationCode,
-        subdomain: activeSubdomain,
       }),
     });
 
+    const fullUser = {
+      ...res.user,
+      organization: res.organization || res.user.organization,
+    };
+
     localStorage.setItem('token', res.token);
-    if (res.organization?.subdomain) {
-      localStorage.setItem('activeTenantSubdomain', res.organization.subdomain);
+    if (fullUser.organization?.subdomain) {
+      localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
     }
     setToken(res.token);
-    setUser(res.user);
+    setUser(fullUser);
 
     // Save to offline storage
     await db.cachedUser.clear();
-    await db.cachedUser.put({ ...res.user, token: res.token });
+    await db.cachedUser.put({ ...fullUser, token: res.token });
 
-    if (res.organization) {
-      await db.organizations.put(res.organization);
+    if (fullUser.organization) {
+      await db.organizations.put(fullUser.organization);
     }
   };
 
@@ -118,17 +126,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }),
     });
 
+    const fullUser = {
+      ...res.user,
+      organization: res.organization || res.user.organization,
+    };
+
     localStorage.setItem('token', res.token);
-    localStorage.setItem('activeTenantSubdomain', res.organization.subdomain);
+    if (fullUser.organization?.subdomain) {
+      localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
+    }
     setToken(res.token);
-    setUser(res.user);
+    setUser(fullUser);
 
     // Save to offline storage
     await db.cachedUser.clear();
-    await db.cachedUser.put({ ...res.user, token: res.token });
+    await db.cachedUser.put({ ...fullUser, token: res.token });
 
-    if (res.organization) {
-      await db.organizations.put(res.organization);
+    if (fullUser.organization) {
+      await db.organizations.put(fullUser.organization);
     }
   };
 

@@ -1,29 +1,21 @@
-import { PrismaClient, Role, ResourceType, ResourceStatus } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Database Seeding...');
+  console.log('🌱 Starting Non-Destructive Database Seeding...');
 
-  const defaultPasswordHash = await bcrypt.hash('Password123!', 10);
+  const defaultPasswordHash = await bcrypt.hash('DeskBook#2026!AdminSec', 10);
 
-  // 1. Purge existing data
-  console.log('🧹 Purging existing data...');
-  await prisma.auditLog.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.booking.deleteMany();
-  await prisma.resource.deleteMany();
-  await prisma.section.deleteMany();
-  await prisma.floor.deleteMany();
-  await prisma.building.deleteMany();
-  await prisma.branch.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.organization.deleteMany();
-
-  // 2. Create Platform Administration Organization
-  const systemOrg = await prisma.organization.create({
-    data: {
+  // 1. Idempotent Upsert of Platform Administration Organization
+  const systemOrg = await prisma.organization.upsert({
+    where: { subdomain: 'system' },
+    update: {
+      name: 'Platform Administration',
+      code: 'SYSTEM',
+    },
+    create: {
       name: 'Platform Administration',
       code: 'SYSTEM',
       subdomain: 'system',
@@ -31,9 +23,13 @@ async function main() {
     },
   });
 
-  // 3. Create Platform Administrator User
-  const platformAdmin = await prisma.user.create({
-    data: {
+  // 2. Idempotent Upsert of Platform Administrator User
+  await prisma.user.upsert({
+    where: { email: 'admin@deskbooking.com' },
+    update: {
+      role: Role.PLATFORM_ADMIN,
+    },
+    create: {
       organizationId: systemOrg.id,
       name: 'Platform Administrator',
       email: 'admin@deskbooking.com',
@@ -44,11 +40,11 @@ async function main() {
     },
   });
 
-  console.log('✅ Database Seeding Completed Successfully!');
-  console.log(`🔑 Demo User Login:`);
+  console.log('✅ Database Seeding Completed Successfully (Preserved all user data)!');
+  console.log(`🔑 Platform Administrator Login:`);
   console.log(`   - Subdomain:      system`);
   console.log(`   - Platform Admin: admin@deskbooking.com`);
-  console.log(`   - Password:       Password123!`);
+  console.log(`   - Password:       DeskBook#2026!AdminSec`);
 }
 
 main()
