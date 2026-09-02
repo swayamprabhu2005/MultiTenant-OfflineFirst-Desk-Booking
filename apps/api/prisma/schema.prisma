@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLATFORM_ADMIN
+  ORGANIZATION_ADMIN
+  BRANCH_ADMIN
+  TECH_LEAD
+  EMPLOYEE
+}
+
+model Organization {
+  id         String       @id @default(uuid())
+  name       String
+  code       String       @unique
+  subdomain  String       @unique
+  logoUrl    String?
+  themeColor String?      @default("#16a34a")
+  timezone   String       @default("UTC")
+  status     String       @default("ACTIVE")
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  branches   Branch[]
+  buildings  Building[]
+  users      User[]
+  auditLogs  AuditLog[]
+}
+
+model Branch {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  address        String?
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  buildings      Building[]
+  users          User[]       @relation("UserBaseBranch")
+  scopedUsers    User[]       @relation("UserScopedBranch")
+
+  @@unique([organizationId, code])
+}
+
+model Building {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  address        String?
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, code])
+}
+
+model User {
+  id                 String       @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String
+  email              String       @unique
+  passwordHash       String
+  role               Role         @default(EMPLOYEE)
+  department         String?
+  baseBranchId       String?
+  baseBranch         Branch?      @relation("UserBaseBranch", fields: [baseBranchId], references: [id], onDelete: SetNull)
+  baseBuildingId     String?
+  scopedBranchId     String?
+  scopedBranch       Branch?      @relation("UserScopedBranch", fields: [scopedBranchId], references: [id], onDelete: SetNull)
+  teamLeadId         String?
+  teamLead           User?        @relation("TeamLead", fields: [teamLeadId], references: [id], onDelete: SetNull)
+  teamMembers        User[]       @relation("TeamLead")
+  mustChangePassword Boolean      @default(false)
+  status             String       @default("ACTIVE")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  auditLogs          AuditLog[]
+}
+
+model AuditLog {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorUserId    String?
+  actorUser      User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+}
