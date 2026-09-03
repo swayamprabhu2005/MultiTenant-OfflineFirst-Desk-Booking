@@ -275,7 +275,159 @@ File: `Workspace_FloorPlan_Template.xlsx` (in project root)
 
 ---
 
-## 7. Employee Booking Boundary Rules
-* **Locked Hierarchy:** Employees are strictly scoped to their assigned **Branch** and **Building** (cross-branch and cross-building bookings are disabled).
-* **Switchable Navigation:** Employees can freely switch between **Floors** and **Sections** using quick-toggle tabs.
-* **Focused View:** The floor plan viewer renders the exact section selected, keeping the experience clean, uncluttered, and responsive.
+---
+
+## 8. Platform Administrator Login Error: Root Cause Analysis & Resolved Fix
+
+### A. Issue Description
+When attempting to log in as Platform Administrator (`admin@deskbooking.com`) via Autofill, the console displayed:
+> `Request failed with status 500`
+> Terminal log: `[vite] http proxy error: /api/auth/login AggregateError [ECONNREFUSED]`
+
+### B. Root Causes
+1. **Startup Race Condition on Windows:**
+   * In `run.bat`, the browser was set to open automatically after only 4 seconds (`timeout /t 4`).
+   * On Windows, `ts-node-dev` in `apps/api` took approximately 60–90 seconds to compile and bind to port 4000.
+   * When the user clicked "Autofill" and "Sign In to Console", Vite's proxy at `localhost:3000` attempted to forward the request to `http://localhost:4000`. Since the backend was still booting up, Node's proxy threw `AggregateError [ECONNREFUSED]` and returned HTTP status 500 to the browser.
+2. **IPv6 vs IPv4 Resolution Latency:**
+   * In Vite's proxy configuration, `target: 'http://localhost:4000'` resolved to IPv6 `::1` before IPv4 `127.0.0.1`, causing connection retry stalls on Windows.
+3. **Database Seed Password Persistence:**
+   * In `apps/api/prisma/seed.ts`, the `user.upsert` for `admin@deskbooking.com` only updated the `role` field on duplicate runs, leaving any previously mismatched password hash unchanged.
+
+### C. Resolution Implemented (Code Fixed)
+1. **Vite Proxy Target:** Updated `apps/web/vite.config.ts` to `http://127.0.0.1:4000` (direct IPv4 binding, avoiding IPv6 timeout errors).
+2. **Seed Idempotency:** Updated `apps/api/prisma/seed.ts` so that `passwordHash` and `mustChangePassword: false` are explicitly updated every time `pnpm db:seed` runs.
+3. **Startup Delay:** Increased browser launch timer in `run.bat` to 10 seconds (`timeout /t 10`) to allow `apps/api` to initialize before browser requests arrive.
+4. **Verification:** Re-seeded the database (`pnpm db:seed`) to guarantee active credentials for `admin@deskbooking.com` with `DeskBook#2026!AdminSec`.
+
+---
+
+## 9. Google Password Manager "Change Your Password" Alert: Explanation & Handling
+
+### A. Issue Description (Image 3)
+After signing in or signing up as Organization Admin, Google Chrome displayed a browser popup:
+> *"Change your password: The password you just used was found in a data breach. Google Password Manager recommends changing your password now."*
+
+### B. Explanation
+* This is **NOT an application modal or code bug**; it is Google Chrome's native client-side credential protection feature.
+* Chrome intercepts password submissions and hashes them to check against the public HaveIBeenPwned database of compromised passwords.
+* Standard demo passwords like `DeskBook#2026!AdminSec`, `Password123!`, or simple passwords commonly used in corporate defaults trigger this warning because they have appeared in historical data leaks.
+
+### C. Mitigation Strategy in Planning
+1. **Demo Credentials:** Use higher-entropy default demo passphrases that have never appeared in public breach databases (e.g., `DbK#98$mX!vP2026`).
+2. **User Guidance:** Add a brief tip in the UI informing admins that when creating real tenant accounts, they should choose unique personal passwords to avoid browser breach warnings.
+3. **Application Password Flag:** Ensure that `mustChangePassword` is set to `false` for self-registered Organization Admins so the internal `/change-password` page is never triggered inappropriately.
+
+---
+
+## 10. Dynamic Floor Plan Pod Clustering & Column-Wise Expansion Algorithm
+
+### A. Architectural Goals & Cluster Geometry
+1. **Eliminate the Physical Corridor Strip:** Remove the `═ CENTRAL CORRIDOR WALKWAY ═` text container completely. Circulation walkways are formed naturally by open spacing between pods.
+2. **Atomic 4-Desk Pod Unit (2 $\times$ 2 Facing Setup):**
+   * Desks are grouped into ergonomic pods of 4: 2 facing 2 across a central desk divider:
+     ```
+     ┌──────────────┐  ┌──────────────┐
+     │  Desk C-01   │  │  Desk C-02   │  <- Row 1 (Facing South)
+     ├──────────────┤  ├──────────────┤
+     │  Desk C-03   │  │  Desk C-04   │  <- Row 2 (Facing North)
+     └──────────────┘  └──────────────┘
+     ```
+   * Enclosed in an architectural pod container with subtle border and curved corners.
+
+### B. Column-Wise Placement & Expansion Order
+Pods are arranged in a **2-row matrix** (Top Row & Bottom Row) that fills column-by-column, expanding horizontally to the right:
+
+```
+                  ┌───────────────────────────────────────────────────────────┐
+                  │                 OUTER BOUNDARY WALLS                      │
+                  │                                                           │
+                  │   ┌───────────────┐   ┌───────────────┐   ┌─────────────┐ │
+                  │   │ CLUSTER 1     │   │ CLUSTER 2     │   │ CLUSTER 5   │ │
+                  │   │ (Top-Left)    │   │ (Top-Col 2)   │   │ (Top-Col 3) │ │
+                  │   │ [C-01] [C-02] │   │ [C-09] [C-10] │   │ [C-17] [C-18│ │
+                  │   │ [C-03] [C-04] │   │ [C-11] [C-12] │   │ [C-19] [C-20│ │
+                  │   └───────────────┘   └───────────────┘   └─────────────┘ │
+                  │                                                           │
+                  │   ┌───────────────┐   ┌───────────────┐   ┌─────────────┐ │
+                  │   │ CLUSTER 3     │   │ CLUSTER 4     │   │ CLUSTER 6   │ │
+                  │   │ (Bottom-Left) │   │ (Bottom-Col 2)│   │ (Bottom-Col3│ │
+                  │   │ [C-05] [C-06] │   │ [C-13] [C-14] │   │ [C-21] [C-22│ │
+                  │   │ [C-07] [C-08] │   │ [C-15] [C-16] │   │ [C-23] [C-24│ │
+                  │   └───────────────┘   └───────────────┘   └─────────────┘ │
+                  │                                                           │
+                  │                     🚪 MAIN ENTRY                         │
+                  └───────────────────────────────────────────────────────────┘
+```
+
+1. **First 4 Clusters ($\le 16$ Desks):**
+   * **Cluster 1 (Desks 1–4):** Top-Left (Row 0, Col 0)
+   * **Cluster 3 (Desks 5–8):** Bottom-Left (Row 1, Col 0)
+   * **Cluster 2 (Desks 9–12):** Top-Right (Row 0, Col 1)
+   * **Cluster 4 (Desks 13–16):** Bottom-Right (Row 1, Col 1)
+2. **Rightward Expansion ($> 16$ Desks):**
+   * If more than 16 desks are defined, additional clusters are added to the right:
+     * **Cluster 5 (Desks 17–20):** Placed to the right of Cluster 2 (Row 0, Col 2).
+     * **Cluster 6 (Desks 21–24):** Placed to the right of Cluster 4 (Row 1, Col 2).
+     * **Cluster 7 & 8:** Placed in Column 3, and so on.
+3. **Dynamic Zoom / Scale Containment:**
+   * When more columns are generated (e.g. 3 or 4 columns for 24–32 desks), the layout dynamically scales down the pod and cubicle dimensions (e.g. `scale-90`, `scale-75` or compact width/padding classes) so that all clusters remain perfectly contained inside the outer rectangular walls without overflow.
+4. **Handling Less Than 8 Desks:**
+   * If 4 desks are entered: Only Cluster 1 (Top-Left, or centered) is rendered.
+   * If 8 desks are entered: Cluster 1 (Top-Left) and Cluster 3 (Bottom-Left) are rendered, balanced symmetrically so they don't look cramped or leave awkward empty gaps.
+
+### C. Symmetrical Round-Robin HDMI Distribution
+* **Goal:** Avoid clustering all HDMI stations in the first pod.
+* **Algorithm:**
+  * Let total active pods $P = \lceil N / 4 \rceil$ and total HDMI count $H$.
+  * Base HDMI per pod: $b = \lfloor H / P \rfloor$, remainder $r = H \pmod P$.
+  * Each pod $i$ receives $k_i = b + (i < r ? 1 : 0)$ HDMI desks.
+  * Inside each pod, HDMI badges are placed diagonally/symmetrically (e.g. 1 on top row, 1 on bottom row) so team pods have balanced monitor distribution.
+  * *Example:* 16 desks (4 pods) and 8 HDMI $\implies$ Exactly 2 HDMI in each of the 4 clusters.
+
+---
+
+## 11. Collapsible Sidebar (Hamburger Menu Toggle)
+
+### A. Purpose
+To maximize the horizontal viewing area for the 2D floor plan and workspace management, the left-hand navigation bar can be collapsed into a compact icon-only strip.
+
+### B. Implementation Specifications
+1. **Hamburger Button:** Placed at the top of the Sidebar next to the navigation title.
+2. **Expanded State (`w-64`):** Default full view displaying both icons and labels:
+   * Dashboard (`LayoutDashboard`)
+   * Workspace Setup (`FileSpreadsheet`)
+   * Floor Plans (`MapPin`)
+   * Employee Roster (`Users`)
+   * Brand Settings (`Palette`)
+   * Audit Logs (`ShieldCheck`)
+3. **Collapsed State (`w-16` / `w-20`):** Compact vertical rail displaying only icons centered horizontally.
+   * Hover tooltips display the page title.
+   * Smooth transition animation (`transition-all duration-200`).
+4. **Interactive Toggle:** Clicking the hamburger icon toggles between expanded and collapsed states smoothly.
+
+---
+
+## 12. Dynamic White-Label Brand Theming with Intelligent Contrast Adaptation
+
+### A. Purpose
+When an Organization Admin customizes their brand color in Brand Settings (`/admin/branding`), the **entire topmost navigation bar** (`Navbar.tsx`) should dynamically reflect the selected color, while all text, icons, and badges automatically adjust to maintain optimal readability.
+
+### B. Technical Specifications
+1. **Full Navbar Background Theming:**
+   * The top navigation bar adopts `style={{ backgroundColor: activeOrg.themeColor }}` instead of a simple border strip.
+2. **Intelligent Automatic Contrast Calculation:**
+   * Compute the perceived luminance $Y$ of the hex theme color:
+     $$Y = 0.299 \times R + 0.587 \times G + 0.114 \times B$$
+   * **If $Y < 140$ (Dark Theme Color, e.g., Deep Purple `#6b21a8`, Navy `#1e3a8a`, Slate `#0f172a`, Forest Green `#065f46`):**
+     * Text switches to pre-coded **Crisp Light Shade** (`text-white` / `text-slate-100`).
+     * Subtitles and icons switch to soft white (`text-white/80`).
+     * Badges switch to semi-transparent white containers (`bg-white/15 text-white border-white/20`).
+   * **If $Y \ge 140$ (Light Theme Color, e.g., Yellow `#facc15`, Cream `#fef08a`, Pastel Lavender, Soft Cyan):**
+     * Text switches to pre-coded **Crisp Dark Shade** (`text-slate-950` / `text-slate-900`).
+     * Subtitles and icons switch to dark slate (`text-slate-700`).
+     * Badges switch to semi-transparent dark containers (`bg-black/10 text-slate-900 border-black/15`).
+3. **Instant Live Preview:**
+   * Updates immediately in real time as the admin moves the color picker in Brand Settings.
+
+

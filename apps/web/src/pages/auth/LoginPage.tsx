@@ -30,7 +30,7 @@ export const LoginPage: React.FC = () => {
 
   const handleDemoLogin = (demoEmail: string) => {
     setEmail(demoEmail);
-    setPassword('DeskBook#2026!AdminSec');
+    setPassword('DeskBook$2026#SecureOps!X9');
   };
 
   return (

@@ -175,15 +175,109 @@ export const FloorPlansPage: React.FC = () => {
   const desks = currentSection?.desks || [];
   const meetingRoom = currentSection?.meetingRoom;
 
-  // Split desks into ergonomic pod clusters (pods of 8: 2 rows of 4 facing each other)
-  const podChunks: DeskItem[][] = [];
-  const chunkSize = 8;
-  for (let i = 0; i < desks.length; i += chunkSize) {
-    podChunks.push(desks.slice(i, i + chunkSize));
+  // Split desks into 4-desk ergonomic clusters (2 facing 2 setup)
+  const podSize = 4;
+  const podClusters: DeskItem[][] = [];
+  for (let i = 0; i < desks.length; i += podSize) {
+    podClusters.push(desks.slice(i, i + podSize));
   }
+  const totalPods = podClusters.length;
+
+  // Compute number of columns (each column holds 2 pods: Top & Bottom)
+  const numColumns = Math.max(1, Math.ceil(totalPods / 2));
+
+  // Compute Symmetrical HDMI Allocation across active clusters
+  const totalHdmiCount = desks.filter(d => d.hasHdmi).length;
+  const baseHdmiPerPod = totalPods > 0 ? Math.floor(totalHdmiCount / totalPods) : 0;
+  const remainderHdmi = totalPods > 0 ? totalHdmiCount % totalPods : 0;
+
+  // Determine if a desk inside pod pIdx at slot slotIdx gets HDMI
+  const isDeskHdmi = (pIdx: number, slotIdx: number): boolean => {
+    const alloc = baseHdmiPerPod + (pIdx < remainderHdmi ? 1 : 0);
+    if (alloc === 1) return slotIdx === 0;
+    if (alloc === 2) return slotIdx === 0 || slotIdx === 3; // Symmetrical diagonal facing
+    if (alloc === 3) return slotIdx !== 2;
+    if (alloc >= 4) return true;
+    return false;
+  };
+
+  const colGridClass =
+    numColumns === 2
+      ? 'grid grid-cols-2 gap-5'
+      : numColumns === 3
+      ? 'grid grid-cols-3 gap-3.5'
+      : numColumns >= 4
+      ? 'grid grid-cols-4 gap-2.5'
+      : 'grid grid-cols-1 gap-4';
+
+  const renderPod = (podIdx: number, title: string) => {
+    const podDesks = podClusters[podIdx] || [];
+    if (podDesks.length === 0) return null;
+
+    return (
+      <div
+        key={podIdx}
+        className={`bg-slate-50/85 p-3 rounded-2xl border-2 border-slate-300 shadow-xs flex flex-col justify-between transition-all ${
+          numColumns >= 3 ? 'text-[10px]' : 'text-xs'
+        }`}
+      >
+        <div className="flex items-center justify-between text-[10px] font-mono font-bold text-slate-500 mb-2">
+          <span>{title}</span>
+          <span className="text-slate-400">{podDesks.length}/4 STATIONS</span>
+        </div>
+
+        {/* 2x2 facing desk grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {podDesks.map((desk, slotIdx) => {
+            const hasHdmi = isDeskHdmi(podIdx, slotIdx);
+            const isAvailable = desk.status === 'AVAILABLE';
+            const isSelected = activeDesk?.id === desk.id;
+            return (
+              <button
+                key={desk.id}
+                onClick={() => setActiveDesk({ ...desk, hasHdmi })}
+                className={`${
+                  numColumns >= 3 ? 'h-13 sm:h-14' : 'h-15 sm:h-16'
+                } rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
+                  isSelected
+                    ? 'ring-3 ring-blue-500 scale-105 z-10'
+                    : 'hover:scale-102 hover:shadow-sm'
+                } ${
+                  isAvailable
+                    ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
+                    : 'bg-red-100/90 border-red-300 text-red-800'
+                }`}
+              >
+                <span className="text-[11px] font-black">{desk.deskCode}</span>
+                {hasHdmi ? (
+                  <span className="text-[8.5px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
+                    HDMI
+                  </span>
+                ) : (
+                  <span className="text-[8.5px] text-slate-400 font-mono">STD</span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Placeholders for partial pods to keep rectangular balance */}
+          {Array.from({ length: Math.max(0, 4 - podDesks.length) }).map((_, phIdx) => (
+            <div
+              key={`ph-${phIdx}`}
+              className={`${
+                numColumns >= 3 ? 'h-13 sm:h-14' : 'h-15 sm:h-16'
+              } rounded-xl border-2 border-dashed border-slate-200 bg-slate-100/50 flex items-center justify-center text-[9px] text-slate-300 font-mono`}
+            >
+              EMPTY
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-0 py-4">
+    <div className="space-y-6 max-w-[1600px] w-full mx-auto px-4 sm:px-0 py-4">
       {/* Top Header & Cascade Selector Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -338,106 +432,73 @@ export const FloorPlansPage: React.FC = () => {
             LEVEL: {currentFloor?.code} • {currentSection?.name} • COMPASS: {currentSection?.direction}
           </div>
           <div className="text-[10px] font-mono text-slate-500 font-bold">
-            TOTAL STATIONS: {desks.length} | MEETING ROOMS: {meetingRoom ? 1 : 0}
+            TOTAL STATIONS: {desks.length} | PODS: {totalPods} | MEETING ROOMS: {meetingRoom ? 1 : 0}
           </div>
         </div>
 
         {/* Main Floor Geometry Container */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
           
-          {/* Main Open-Plan Desk Clusters Area (3 Columns) */}
-          <div className="lg:col-span-3 space-y-6">
-            
-            {/* Upper Quadrant Pods */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {podChunks.slice(0, 2).map((pod, pIdx) => (
-                <div key={pIdx} className="bg-slate-50/70 p-4 rounded-2xl border-2 border-slate-300">
-                  <div className="text-[10px] font-mono font-bold text-slate-400 mb-2">
-                    POD CLUSTER #{pIdx + 1}
-                  </div>
-                  {/* Pod Grid: 2 rows of 4 desks facing each other */}
-                  <div className="grid grid-cols-4 gap-2.5">
-                    {pod.map(desk => {
-                      const isAvailable = desk.status === 'AVAILABLE';
-                      const isSelected = activeDesk?.id === desk.id;
-                      return (
-                        <button
-                          key={desk.id}
-                          onClick={() => setActiveDesk(desk)}
-                          className={`h-16 rounded-xl border-2 font-bold p-1.5 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
-                            isSelected
-                              ? 'ring-3 ring-blue-500 scale-105 z-10'
-                              : 'hover:scale-102 hover:shadow-sm'
-                          } ${
-                            isAvailable
-                              ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
-                              : 'bg-red-100/90 border-red-300 text-red-800'
-                          }`}
-                        >
-                          <span className="text-[11px] font-black">{desk.deskCode}</span>
-                          {desk.hasHdmi ? (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
-                              HDMI
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-slate-400 font-mono">STD</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+          {/* Main Open-Plan Desk Clusters Area (Column-Wise Expansion) */}
+          <div className="lg:col-span-3">
+            {numColumns === 1 ? (
+              /* Centered layout when <= 8 desks (1 or 2 pods) */
+              <div className="max-w-sm mx-auto space-y-6 py-4">
+                {renderPod(0, 'CLUSTER #1 (Top-Left)')}
+                {totalPods > 1 && (
+                  <>
+                    <div className="py-1 text-center text-[10px] font-mono text-slate-400 font-bold uppercase tracking-widest select-none">
+                      • • • CIRCULATION AISLE • • •
+                    </div>
+                    {renderPod(1, 'CLUSTER #3 (Bottom-Left)')}
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Multi-Column Quadrant Matrix (> 8 desks) */
+              <div className="space-y-6">
+                {/* Top Row of Pods: Cluster 1, Cluster 2, Cluster 5, Cluster 7... */}
+                <div className={colGridClass}>
+                  {Array.from({ length: numColumns }).map((_, c) => {
+                    const topPodIdx = 2 * c;
+                    if (topPodIdx >= totalPods) {
+                      return <div key={`empty-top-${c}`} />;
+                    }
+                    const title =
+                      c === 0
+                        ? 'CLUSTER #1 (Top-Left)'
+                        : c === 1
+                        ? 'CLUSTER #2 (Top-Right)'
+                        : `CLUSTER #${topPodIdx + 1} (Top)`;
+                    return renderPod(topPodIdx, title);
+                  })}
                 </div>
-              ))}
-            </div>
 
-            {/* Central Corridor Divider */}
-            <div className="w-full py-2.5 bg-slate-100 border-y-2 border-dashed border-slate-400 flex items-center justify-center">
-              <span className="font-mono text-xs font-black tracking-widest text-slate-500 uppercase">
-                ═ ═ ═ ═ ═ ═   CENTRAL CORRIDOR WALKWAY   ═ ═ ═ ═ ═ ═
-              </span>
-            </div>
-
-            {/* Lower Quadrant Pods */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {podChunks.slice(2, 4).map((pod, pIdx) => (
-                <div key={pIdx} className="bg-slate-50/70 p-4 rounded-2xl border-2 border-slate-300">
-                  <div className="text-[10px] font-mono font-bold text-slate-400 mb-2">
-                    POD CLUSTER #{pIdx + 3}
-                  </div>
-                  <div className="grid grid-cols-4 gap-2.5">
-                    {pod.map(desk => {
-                      const isAvailable = desk.status === 'AVAILABLE';
-                      const isSelected = activeDesk?.id === desk.id;
-                      return (
-                        <button
-                          key={desk.id}
-                          onClick={() => setActiveDesk(desk)}
-                          className={`h-16 rounded-xl border-2 font-bold p-1.5 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
-                            isSelected
-                              ? 'ring-3 ring-blue-500 scale-105 z-10'
-                              : 'hover:scale-102 hover:shadow-sm'
-                          } ${
-                            isAvailable
-                              ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
-                              : 'bg-red-100/90 border-red-300 text-red-800'
-                          }`}
-                        >
-                          <span className="text-[11px] font-black">{desk.deskCode}</span>
-                          {desk.hasHdmi ? (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
-                              HDMI
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-slate-400 font-mono">STD</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Natural Central Circulation Aisle */}
+                <div className="py-1 flex items-center justify-center">
+                  <span className="text-[10px] font-mono tracking-widest text-slate-400 font-bold uppercase select-none">
+                    • • • CENTRAL CIRCULATION AISLE • • •
+                  </span>
                 </div>
-              ))}
-            </div>
 
+                {/* Bottom Row of Pods: Cluster 3, Cluster 4, Cluster 6, Cluster 8... */}
+                <div className={colGridClass}>
+                  {Array.from({ length: numColumns }).map((_, c) => {
+                    const btmPodIdx = 2 * c + 1;
+                    if (btmPodIdx >= totalPods) {
+                      return <div key={`empty-btm-${c}`} />;
+                    }
+                    const title =
+                      c === 0
+                        ? 'CLUSTER #3 (Bottom-Left)'
+                        : c === 1
+                        ? 'CLUSTER #4 (Bottom-Right)'
+                        : `CLUSTER #${btmPodIdx + 1} (Bottom)`;
+                    return renderPod(btmPodIdx, title);
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Walled Meeting Room Pod / Dedicated Rooms */}
