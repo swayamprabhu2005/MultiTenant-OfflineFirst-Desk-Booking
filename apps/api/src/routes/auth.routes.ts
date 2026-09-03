@@ -114,7 +114,7 @@ router.post('/signup', async (req: TenantRequest, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Atomically create Organization, Org Admin User, and AuditLog in a transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const org = await tx.organization.create({
         data: {
           name: orgName,

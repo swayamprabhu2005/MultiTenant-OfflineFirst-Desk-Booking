@@ -9,10 +9,11 @@ import { SignupPage } from './pages/auth/SignupPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 import { PlatformAdminDashboard } from './components/dashboard/PlatformAdminDashboard';
 import { OrganizationAdminDashboard } from './components/dashboard/OrganizationAdminDashboard';
-import { CreateBranchPage } from './pages/admin/CreateBranchPage';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
 import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
+import { FloorPlansPage } from './pages/admin/FloorPlansPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,7 +76,8 @@ export const App: React.FC = () => {
                 }
               >
                 <Route index element={<DashboardRoute />} />
-                <Route path="admin/branches" element={<CreateBranchPage />} />
+                <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
+                <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />

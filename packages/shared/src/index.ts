@@ -72,3 +72,47 @@ export interface AuditLogDTO {
   createdAt: string;
   actorUser?: { name: string; email: string; role?: Role };
 }
+
+export interface FloorDTO {
+  id: string;
+  organizationId: string;
+  buildingId: string;
+  code: string;
+  floorNumber: number;
+  name: string;
+  sections?: SectionDTO[];
+}
+
+export interface SectionDTO {
+  id: string;
+  organizationId: string;
+  floorId: string;
+  name: string;
+  direction: string;
+  standardDeskCount: number;
+  hdmiDeskCount: number;
+  desks?: DeskDTO[];
+  meetingRoom?: MeetingRoomDTO | null;
+}
+
+export interface DeskDTO {
+  id: string;
+  organizationId: string;
+  sectionId: string;
+  deskCode: string;
+  deskNumber: number;
+  hasHdmi: boolean;
+  isMeetingRoom: boolean;
+  status: 'AVAILABLE' | 'BOOKED';
+}
+
+export interface MeetingRoomDTO {
+  id: string;
+  organizationId: string;
+  sectionId: string;
+  name: string;
+  capacity: number;
+  hasHdmi: boolean;
+  hdmiCount: number;
+}
+
