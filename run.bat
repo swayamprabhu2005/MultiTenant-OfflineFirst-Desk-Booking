@@ -10,7 +10,7 @@ echo.
 :: 1. Check if PostgreSQL is already active on port 5432
 netstat -ano | findstr :5432 | findstr LISTENING >nul 2>nul
 if !errorlevel! equ 0 (
-    echo [1/5] PostgreSQL is already active and listening on port 5432.
+    echo [1/5] PostgreSQL is active and listening on port 5432.
     goto clean_ports
 )
 
@@ -59,8 +59,7 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 
-echo.
-echo [2/5] Waiting for PostgreSQL database to be healthy and listening on port 5432...
+echo Waiting for PostgreSQL database to be healthy and listening on port 5432...
 set DB_READY=0
 for /L %%i in (1,1,15) do (
     if !DB_READY! equ 0 (
@@ -81,6 +80,8 @@ if !DB_READY! equ 0 (
 echo PostgreSQL is ready and listening on port 5432.
 
 :clean_ports
+echo.
+echo [2/5] Verifying and cleaning port allocations (Ports 3000 and 4000)...
 :: Clean any lingering background processes on ports 4000 and 3000 to prevent EADDRINUSE / EPERM
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":4000 " ^| findstr "LISTENING"') do (
     taskkill /f /pid %%a >nul 2>nul
@@ -88,6 +89,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":4000 " ^| findstr "LISTENIN
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     taskkill /f /pid %%a >nul 2>nul
 )
+echo Port allocations verified.
 
 :check_deps
 echo.
@@ -130,10 +132,10 @@ echo   Multi-Tenant SaaS Control Plane
 echo   - Backend API: http://localhost:4000
 echo   - Web Console: http://localhost:3000
 echo   - Default Platform Admin: admin@deskbooking.com
-echo   - Default Password:       DeskBook#2026!AdminSec
+echo   - Default Password:       DeskBook$2026#SecureOps!X9
 echo ========================================================
 echo Press Ctrl+C in this terminal to terminate all processes.
-start "" cmd /c "timeout /t 4 >nul && start http://localhost:3000"
+start "" cmd /c "timeout /t 10 >nul && start http://localhost:3000"
 call pnpm dev
 
 pause

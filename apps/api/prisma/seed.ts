@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting Non-Destructive Database Seeding...');
 
-  const defaultPasswordHash = await bcrypt.hash('DeskBook#2026!AdminSec', 10);
+  const defaultPasswordHash = await bcrypt.hash('DeskBook$2026#SecureOps!X9', 10);
 
   // 1. Idempotent Upsert of Platform Administration Organization
   const systemOrg = await prisma.organization.upsert({
@@ -28,6 +28,8 @@ async function main() {
     where: { email: 'admin@deskbooking.com' },
     update: {
       role: Role.PLATFORM_ADMIN,
+      passwordHash: defaultPasswordHash,
+      mustChangePassword: false,
     },
     create: {
       organizationId: systemOrg.id,
@@ -44,7 +46,7 @@ async function main() {
   console.log(`🔑 Platform Administrator Login:`);
   console.log(`   - Subdomain:      system`);
   console.log(`   - Platform Admin: admin@deskbooking.com`);
-  console.log(`   - Password:       DeskBook#2026!AdminSec`);
+  console.log(`   - Password:       DeskBook$2026#SecureOps!X9`);
 }
 
 main()
