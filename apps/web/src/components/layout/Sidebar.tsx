@@ -3,7 +3,8 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
-  Building2,
+  FileSpreadsheet,
+  MapPin,
   Users,
   Palette,
   ShieldCheck,
@@ -19,7 +20,8 @@ export const Sidebar: React.FC = () => {
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Create Branch', to: '/admin/branches', icon: Building2 },
+        { name: 'Workspace Setup', to: '/admin/workspace-setup', icon: FileSpreadsheet },
+        { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
         { name: 'Employee Roster', to: '/admin/roster', icon: Users },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },

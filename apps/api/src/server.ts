@@ -10,6 +10,7 @@ import auditRoutes from './routes/audit.routes';
 import branchRoutes from './routes/branches.routes';
 import rosterRoutes from './routes/roster.routes';
 import buildingRoutes from './routes/buildings.routes';
+import workspaceRoutes from './routes/workspace.routes';
 
 dotenv.config();
 
@@ -59,10 +60,17 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/roster', rosterRoutes);
 app.use('/api/buildings', buildingRoutes);
+app.use('/api/workspace', workspaceRoutes);
 
 // Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled API Error:', err);
+  if (err?.message && err.message.includes("Can't reach database server")) {
+    res.status(503).json({
+      error: 'Database connection failed. Please ensure PostgreSQL is running at localhost:5432.',
+    });
+    return;
+  }
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 

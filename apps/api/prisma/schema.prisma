@@ -61,6 +61,7 @@ model Building {
   status         String       @default("ACTIVE")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  floors         Floor[]
 
   @@unique([organizationId, code])
 }
@@ -87,6 +88,7 @@ model User {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   auditLogs          AuditLog[]
+  bookings           Booking[]
 }
 
 model AuditLog {
@@ -101,3 +103,80 @@ model AuditLog {
   metadata       Json?
   createdAt      DateTime      @default(now())
 }
+
+model Floor {
+  id             String       @id @default(uuid())
+  organizationId String
+  buildingId     String
+  building       Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  code           String       // e.g. "1-FL01", "2-FL01"
+  floorNumber    Int
+  name           String       // e.g. "First Floor"
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  sections       Section[]
+
+  @@unique([buildingId, code])
+}
+
+model Section {
+  id                String       @id @default(uuid())
+  organizationId    String
+  floorId           String
+  floor             Floor        @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  name              String       // e.g. "First North", "First South"
+  direction         String       // "NORTH", "SOUTH", "EAST", "WEST"
+  standardDeskCount Int          @default(0)
+  hdmiDeskCount     Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  desks             Desk[]
+  meetingRoom       MeetingRoom?
+
+  @@unique([floorId, name])
+}
+
+model Desk {
+  id             String       @id @default(uuid())
+  organizationId String
+  sectionId      String
+  section        Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  deskCode       String       // e.g. "C-01", "C-02"
+  deskNumber     Int
+  hasHdmi        Boolean      @default(false)
+  isMeetingRoom  Boolean      @default(false)
+  status         String       @default("AVAILABLE") // AVAILABLE, BOOKED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  bookings       Booking[]
+
+  @@unique([sectionId, deskCode])
+}
+
+model MeetingRoom {
+  id             String       @id @default(uuid())
+  organizationId String
+  sectionId      String       @unique
+  section        Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name           String       // e.g. "Meeting Room (8 Seats)"
+  capacity       Int          @default(0)
+  hasHdmi        Boolean      @default(false)
+  hdmiCount      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Booking {
+  id             String       @id @default(uuid())
+  organizationId String
+  deskId         String
+  desk           Desk         @relation(fields: [deskId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime      DateTime
+  endTime        DateTime
+  status         String       @default("CONFIRMED") // CONFIRMED, CANCELLED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+

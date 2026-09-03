@@ -29,43 +29,11 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
-// POST Create Branch (Org Admin / Platform Admin)
-router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { name, code, address } = req.body;
-    if (!name || !code) {
-      return res.status(400).json({ error: 'Branch name and code are required' });
-    }
-
-    // Branch Admin with scopedBranchId cannot create other branches
-    if (req.user!.role === Role.BRANCH_ADMIN && req.user!.scopedBranchId) {
-      return res.status(403).json({ error: 'Forbidden: Branch admins cannot create other branches' });
-    }
-
-    const branch = await prisma.branch.create({
-      data: {
-        organizationId: req.organizationId!,
-        name,
-        code: code.toUpperCase(),
-        address: address || null,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        organizationId: req.organizationId!,
-        actorUserId: req.user!.id,
-        action: 'CREATE_BRANCH',
-        entityType: 'Branch',
-        entityId: branch.id,
-        metadata: { name: branch.name, code: branch.code },
-      },
-    });
-
-    return res.status(201).json(branch);
-  } catch (error: any) {
-    return res.status(400).json({ error: error.message });
-  }
+// POST Create Branch (Retired - Replaced by Excel Workspace Ingestion Pipeline)
+router.post('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (_req: AuthenticatedRequest, res: Response) => {
+  return res.status(400).json({
+    error: 'Manual branch creation has been retired. Please use the Excel Workspace Ingestion pipeline to configure branches, buildings, floors, and desks.',
+  });
 });
 
 // PUT Update Branch
