@@ -6,15 +6,21 @@ An enterprise-grade, multi-tenant desk booking and facility management platform 
 
 ## 🚀 Key Highlights & Architecture
 
-### 1. Multi-Tenant SaaS Isolation
-* **Platform Administrator Console (`system` subdomain):** Global superadmin dashboard to provision enterprise tenant organizations, manage subdomain routing, and audit platform security events.
+### 1. Multi-Tenant SaaS Isolation & Platform Administration
+* **Platform Administrator Console (`system` subdomain):** Global superadmin dashboard (`/` and `/admin/organizations`) to provision enterprise tenant organizations, manage subdomain routing, inspect registration audit trails, and manage the full tenant lifecycle.
+* **Tenant Organization Deletion & Cascade Purge (`DELETE /api/organizations/:id`):**
+  * Platform Administrators have one-click deletion access to decommission tenant organizations created by Organization Administrators.
+  * **Atomic Database Purge:** Executes an atomic `prisma.$transaction` that cascades deletion across all child resources: bookings, meeting rooms, cubicle desks, floor sections, building floors, corporate buildings, physical office branches, employee users, and tenant-scoped audit logs.
+  * **System Tenant Safeguard:** The primary `system` platform administration organization is permanently locked against deletion to prevent accidental console lockout.
+  * **Destruction Warning Modal:** High-visibility confirmation dialog detailing the irreversible destruction of all facility layouts and user rosters before execution.
 * **Global Organization Administrator:** Tenant-level control plane to ingest corporate physical infrastructure, manage employee rosters, configure dynamic brand themes, and review tenant-specific audit trails.
 
 ### 2. Cascading 5-Sheet Excel Workspace Ingestion Engine
-* **Template:** Pre-filled with active tenant credentials via `GET /api/workspace/template`.
-* **Dynamic Conditional Formatting & Auto-Lockout:**
-  * In Sheet 5 (`Sections & Cubicles`), Columns H & I (*Meeting Room Capacity* & *Meeting Room HDMI*) turn muted gray (`#E2E8F0`) and trigger native Excel data validation lockouts if Meeting Room is set to `"No"` or left blank. When switched to `"Yes"`, the cells automatically illuminate in bright yellow (`#FFF2CC`).
-  * In-sheet HDMI validation guarantees HDMI workstations never exceed total cubicles.
+* **Template Generation:** Pre-filled with active tenant credentials via `GET /api/workspace/template`.
+* **Case-Insensitive Conditional Formatting & Auto-Lockout:**
+  * In Sheet 5 (`Sections & Cubicles`), Columns H & I (*Meeting Room Capacity* & *Meeting Room HDMI*) utilize case-insensitive and whitespace-resilient formulas: `=UPPER(TRIM($G2))="YES"`.
+  * Cells turn muted gray (`#E2E8F0`) with native Excel data validation lockouts if Meeting Room is `"No"`, lowercase `"no"`, or blank. When set to `"Yes"` (or `"YES"` / `"yes"`), cells unlock and illuminate in bright yellow (`#FFF2CC`).
+  * In-sheet HDMI validation guarantees HDMI workstations never exceed total cubicles: `=AND(UPPER(TRIM($G2))="YES", I2<=H2)`.
 * **Stateful Grouped Parser:** Resolves "Show Once per Group" branches and buildings, validating counts, types, and constraints.
 * **Sheet-Specific Red Error Feedback:** If an invalid spreadsheet is uploaded, the parser injects a bright red **`ERRORS & FIXES`** column **ONLY** into the sheets containing errors, detailing exact row-by-row descriptions for instant re-download and rectification.
 * **Atomic Transaction:** Saves Branches, Buildings, Floors, Sections, Desks (`C-01`, `C-02`...), and Meeting Rooms in a single PostgreSQL `prisma.$transaction`.
@@ -34,14 +40,28 @@ An enterprise-grade, multi-tenant desk booking and facility management platform 
 * **Small Section Centering:** Sections with $\le 8$ desks are centered symmetrically to prevent empty void spaces.
 * **Interactive Slide-Over Drawer:** Click any cubicle to view real-time specifications and reserve/release desks.
 
-### 4. Dynamic White-Label Brand Theming with Intelligent Contrast
-* When an admin selects a corporate theme color in Brand Settings (`/admin/branding`), the **entire topmost navigation bar** dynamically updates.
-* **Automated Luminance Calculation:**
-  $$Y = 0.299 \times R + 0.587 \times G + 0.114 \times B$$
-  * **Dark Theme Colors ($Y < 145$):** Text, badges, and icons automatically switch to **crisp white** and translucent white containers.
-  * **Light Theme Colors ($Y \ge 145$):** Text, badges, and icons automatically switch to **crisp dark slate** and translucent black containers.
+### 4. Employee Roster & Branch Administrator Management
+* **Prerequisite Gatekeeper:** If zero branches exist in the database, the roster page displays an educational locked card pointing the administrator to the workspace setup ingestion pipeline.
+* **Dual Management Pipeline:**
+  * **Excel Bulk Roster Ingestion:** Generates pre-filled `Branch_Admin_Roster_[ORG].xlsx` with locked Branch columns and yellow editable admin fields, supporting bulk upload.
+  * **In-Page Manual Assignment & Editing:** Interactive modal allowing administrators to assign or update branch administrators directly.
+* **Universal RFC 5322 Email Validation:** Validated client-side and server-side using `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/`.
+* **Strict Branch ID UI Concealment:** In tables, forms, cards, and dropdown options, **Branch IDs are strictly hidden**; only user-friendly Branch Names are displayed.
 
-### 5. Collapsible Navigation Sidebar
+### 5. Facility Capacity KPI Summary Cards & Dashboard Theming
+* **Real-Time Facility Metrics:** 4 summary tiles at the top of the Organization Admin Dashboard computed from `/api/workspace/hierarchy`:
+  1. *Branches & Campuses*
+  2. *Workstations*
+  3. *HDMI Desks*
+  4. *Meeting Rooms & Capacity*
+* **Dynamic White-Label Brand Theming with Intelligent Contrast:**
+  * The topmost navigation bar and dashboard welcome banner dynamically adapt to the organization's selected theme color.
+  * **Automated Luminance Calculation:**
+    $$Y = 0.299 \times R + 0.587 \times G + 0.114 \times B$$
+    * **Dark Themes ($Y < 145$):** Switches text, badges, and icons to crisp white and translucent white containers.
+    * **Light Themes ($Y \ge 145$):** Switches text, badges, and icons to crisp dark slate and translucent black containers.
+
+### 6. Collapsible Navigation Sidebar
 * Hamburger toggle button at the top of the Sidebar collapses the navigation rail from `w-64` to a sleek `w-20` icon strip with tooltips on hover.
 * Expands horizontal viewing real estate up to `1600px` for optimal floor plan inspection.
 
@@ -70,11 +90,13 @@ MultiTenant OfflineFirst DeskBooking/
 │   │   │   └── seed.ts          # Idempotent seeding script
 │   │   └── src/
 │   │       ├── routes/
-│   │       │   ├── auth.routes.ts        # Authentication & Registration
-│   │       │   ├── workspace.routes.ts   # Template generation, Excel import, hierarchy & booking
+│   │       │   ├── auth.routes.ts          # Authentication & Registration
+│   │       │   ├── organizations.routes.ts # Org CRUD, Delete Cascade, Branding
+│   │       │   ├── roster.routes.ts        # Employee & Branch Admin management
+│   │       │   ├── workspace.routes.ts     # Template generation, Excel import, hierarchy & booking
 │   │       │   └── ...
 │   │       ├── services/
-│   │       │   └── excel.service.ts      # Template generator & multi-sheet validator
+│   │       │   └── excel.service.ts        # Template generator & multi-sheet validator
 │   │       └── server.ts
 │   └── web/                     # React + Vite Frontend Application
 │       └── src/
@@ -83,8 +105,10 @@ MultiTenant OfflineFirst DeskBooking/
 │           │   └── layout/      # Navbar (Dynamic Contrast), Collapsible Sidebar, Layout
 │           └── pages/
 │               ├── admin/
-│               │   ├── WorkspaceSetupPage.tsx   # 4-step guided simulation, template download & upload
+│               │   ├── OrganizationsPage.tsx    # Platform Admin tenant list & delete management
+│               │   ├── WorkspaceSetupPage.tsx   # Action Hub & 4-step guided simulation
 │               │   ├── FloorPlansPage.tsx       # Strict NO-SVG interactive 2D floor plan explorer
+│               │   ├── EmployeeRosterPage.tsx   # Branch Admin & employee directory
 │               │   └── ...
 │               └── auth/
 ├── packages/

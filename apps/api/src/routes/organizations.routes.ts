@@ -109,4 +109,71 @@ router.patch('/:id/branding', authMiddleware, requireRole([Role.PLATFORM_ADMIN, 
   }
 });
 
+// Platform Admin Delete Organization (with full cascade purge)
+router.delete('/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const org = await prisma.organization.findUnique({
+      where: { id },
+    });
+
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    if (org.subdomain.toLowerCase() === 'system' || org.code.toUpperCase() === 'SYSTEM') {
+      return res.status(400).json({ error: 'Cannot delete the core platform administration organization' });
+    }
+
+    // Atomic cascade deletion of all tenant data
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete all bookings for this tenant
+      await tx.booking.deleteMany({ where: { organizationId: id } });
+      // 2. Delete all meeting rooms
+      await tx.meetingRoom.deleteMany({ where: { organizationId: id } });
+      // 3. Delete all desks
+      await tx.desk.deleteMany({ where: { organizationId: id } });
+      // 4. Delete all floor sections
+      await tx.section.deleteMany({ where: { organizationId: id } });
+      // 5. Delete all building floors
+      await tx.floor.deleteMany({ where: { organizationId: id } });
+      // 6. Delete all buildings
+      await tx.building.deleteMany({ where: { organizationId: id } });
+      // 7. Delete all branches
+      await tx.branch.deleteMany({ where: { organizationId: id } });
+      // 8. Delete all users belonging to this organization
+      await tx.user.deleteMany({ where: { organizationId: id } });
+      // 9. Delete tenant-scoped audit logs
+      await tx.auditLog.deleteMany({ where: { organizationId: id } });
+      // 10. Delete the organization itself
+      await tx.organization.delete({ where: { id } });
+    });
+
+    // Record audit log under platform admin
+    await prisma.auditLog.create({
+      data: {
+        organizationId: req.user!.organizationId,
+        actorUserId: req.user!.id,
+        action: 'DELETE_ORGANIZATION',
+        entityType: 'Organization',
+        entityId: id,
+        metadata: {
+          name: org.name,
+          code: org.code,
+          subdomain: org.subdomain,
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Organization "${org.name}" and all associated resources have been permanently deleted.`,
+    });
+  } catch (error: any) {
+    console.error('Failed to delete organization:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

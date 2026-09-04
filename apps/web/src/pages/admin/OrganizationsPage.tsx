@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
-import { Globe, Plus, Palette, ShieldCheck, Clock } from 'lucide-react';
+import { Globe, Plus, Palette, ShieldCheck, Clock, Trash2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 
 export const OrganizationsPage: React.FC = () => {
@@ -12,6 +12,12 @@ export const OrganizationsPage: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Deletion modal state
+  const [orgToDelete, setOrgToDelete] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // New Org Form
   const [name, setName] = useState('');
@@ -83,6 +89,26 @@ export const OrganizationsPage: React.FC = () => {
     }
   };
 
+  const handleDeleteOrg = async () => {
+    if (!orgToDelete) return;
+    try {
+      setIsDeleting(true);
+      setStatusMsg(null);
+      setErrorMsg(null);
+      const res = await fetchApi<{ success: boolean; message: string }>(`/organizations/${orgToDelete.id}`, {
+        method: 'DELETE',
+      });
+      setStatusMsg(res.message || `Organization "${orgToDelete.name}" was permanently deleted.`);
+      setOrgToDelete(null);
+      loadData();
+    } catch (err: any) {
+      console.error('Failed to delete organization:', err);
+      setErrorMsg(err.message || 'Failed to delete organization');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const registrationLogs = auditLogs.filter(log => log.action === 'CREATE_ORGANIZATION');
 
   return (
@@ -110,6 +136,31 @@ export const OrganizationsPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Status & Error Banners */}
+      {statusMsg && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-sm">
+          <span className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{statusMsg}</span>
+          </span>
+          <button onClick={() => setStatusMsg(null)} className="text-slate-400 hover:text-slate-600 ml-3">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between shadow-sm">
+          <span className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            <span>{errorMsg}</span>
+          </span>
+          <button onClick={() => setErrorMsg(null)} className="text-slate-400 hover:text-slate-600 ml-3">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Two Column Console Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -170,16 +221,29 @@ export const OrganizationsPage: React.FC = () => {
                     <span className="font-mono text-[11px] text-slate-700 font-bold">{org.themeColor || '#16a34a'}</span>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      const color = prompt('Enter new Hex Theme Color:', org.themeColor || '#16a34a');
-                      if (color) handleUpdateBranding(org.id, color, org.logoUrl || '');
-                    }}
-                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center space-x-1"
-                  >
-                    <Palette className="w-3.5 h-3.5" />
-                    <span>Edit Brand Token</span>
-                  </button>
+                  <div className="flex items-center space-x-2.5">
+                    <button
+                      onClick={() => {
+                        const color = prompt('Enter new Hex Theme Color:', org.themeColor || '#16a34a');
+                        if (color) handleUpdateBranding(org.id, color, org.logoUrl || '');
+                      }}
+                      className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center space-x-1"
+                    >
+                      <Palette className="w-3.5 h-3.5" />
+                      <span>Edit Brand Token</span>
+                    </button>
+
+                    {isPlatformAdmin && org.subdomain !== 'system' && org.code !== 'SYSTEM' && (
+                      <button
+                        onClick={() => setOrgToDelete(org)}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center space-x-1 border border-rose-200 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg transition-colors"
+                        title={`Delete ${org.name}`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -331,6 +395,55 @@ export const OrganizationsPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: DELETE ORGANIZATION */}
+      {orgToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Delete Organization</h3>
+                <p className="text-xs text-rose-600 font-medium">Permanent Destruction Warning</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <p>
+                Are you sure you want to permanently delete <strong className="text-slate-900 font-bold">{orgToDelete.name}</strong> (Code: <code className="bg-slate-200 px-1 py-0.5 rounded">{orgToDelete.code}</code>, Subdomain: <code className="bg-slate-200 px-1 py-0.5 rounded">{orgToDelete.subdomain}</code>)?
+              </p>
+              <p className="text-rose-700 font-semibold leading-relaxed">
+                This will permanently destroy all physical office branches, building floors, sections, cubicle desks, meeting rooms, employee rosters, and booking histories associated with this tenant organization.
+              </p>
+              <p className="text-slate-400 text-[11px] italic">
+                This action is irreversible.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setOrgToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteOrg}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Deleting...' : 'Yes, Delete Organization'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
