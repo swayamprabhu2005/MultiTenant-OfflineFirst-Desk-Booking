@@ -430,4 +430,319 @@ When an Organization Admin customizes their brand color in Brand Settings (`/adm
 3. **Instant Live Preview:**
    * Updates immediately in real time as the admin moves the color picker in Brand Settings.
 
+---
+
+## 13. Resolution: Vite Proxy ECONNREFUSED Terminal Error Fix
+
+### A. Root Cause Analysis
+* When launching the platform via `run.bat`, `apps/web dev` (Vite) initialized in ~8.7 seconds on port 3000.
+* The previous batch script opened the browser via `timeout /t 10`.
+* However, on Windows, `apps/api dev` (`ts-node-dev`) took approximately 60–75 seconds to compile all TypeScript files and bind to port 4000.
+* Consequently, when the browser loaded `http://localhost:3000`, the React application mounted and `TenantContext` immediately requested `/api/auth/organizations`.
+* Because port 4000 was not yet listening, Vite's reverse proxy emitted:
+  `[vite] http proxy error: /api/auth/organizations`
+  `Error: connect ECONNREFUSED 127.0.0.1:4000`
+* Once the backend finished booting, subsequent requests succeeded completely, leaving the app functioning normally.
+
+### B. Implementation Fix
+1. **Intelligent Port Polling in `run.bat`:**
+   * Replaced the static `timeout /t 10` with a lightweight, native PowerShell TCP socket loop:
+     ```cmd
+     powershell -NoProfile -Command "$c = New-Object System.Net.Sockets.TcpClient; while (-not $c.Connected) { try { $c.Connect('127.0.0.1', 4000) } catch { Start-Sleep -Milliseconds 800 } }; $c.Close(); Start-Process 'http://localhost:3000'"
+     ```
+   * The browser is now launched **only after** the backend server has bound to port 4000 and is ready to accept incoming HTTP requests.
+2. **Vite Proxy Error Handler in `vite.config.ts`:**
+   * Added a graceful error event listener to Vite's proxy configuration:
+     ```ts
+     configure: (proxy) => {
+       proxy.on('error', (err, _req, res) => {
+         if ((err as any).code === 'ECONNREFUSED') {
+           if (res && typeof (res as any).writeHead === 'function' && !(res as any).headersSent) {
+             (res as any).writeHead(503, { 'Content-Type': 'application/json' });
+             res.end(JSON.stringify({ error: 'API Server is initializing, please retry.' }));
+           }
+         }
+       });
+     }
+     ```
+   * Prevents noisy unhandled error stack traces in the terminal during startup.
+
+---
+
+## 14. Investigation & Solution: Excel Meeting Room Lockout Glitch (Image 1)
+
+### A. Problem Observed in Image 1
+* In Sheet 5 (`Sections & Cubicles`), row 21 has Column G set to `yes`.
+* However, cell H21 remained muted gray (disabled styling), and entering `21` into cell H21 triggered the Excel alert modal:
+  *"Meeting Room Disabled: Meeting Room is set to 'No' or blank. Set 'Meeting Room (Yes or No)' to 'Yes' to enter meeting room cubicles."*
+* Other rows (e.g., rows 10, 11, 17, 18) functioned normally and allowed capacity input.
+
+### B. Root Cause
+* In `Workspace_FloorPlan_Template.xlsx`, Data Validation and Conditional Formatting were defined with:
+  * Data Validation: `formula1='=$G2="Yes"'`
+  * Conditional Formatting: `formula=['$G2="Yes"']`
+* In Excel, string comparison `=$G2="Yes"` is vulnerable to subtle user input variations:
+  1. **Trailing Whitespace:** If a user types `yes ` (with a trailing space before hitting Enter or via autocomplete), `"yes "` does not equal `"Yes"`.
+  2. **Leading Whitespace:** If copied from external data with a leading space (`" yes"`), the condition fails.
+  3. **Case Variations in Certain Locale/Excel Engines:** While standard Excel `=A1="Yes"` is generally case-insensitive, custom Data Validation rules in certain localized desktop Excel builds enforce strict matching against the formula literal.
+
+### C. Proposed Solution (For Implementation Phase)
+* Upgrade both the Data Validation rule and the Conditional Formatting rule to be completely case-insensitive and whitespace-tolerant:
+  * **Column H (Capacity) Data Validation:**
+    `=UPPER(TRIM($G2))="YES"`
+  * **Column I (HDMI) Data Validation:**
+    `=AND(UPPER(TRIM($G2))="YES", I2<=H2)`
+  * **Conditional Formatting Rules:**
+    * Unlocked Yellow Rule: `=UPPER(TRIM($G2))="YES"`
+    * Disabled Gray Rule: `=UPPER(TRIM($G2))<>"YES"`
+* This guarantees that whether a user selects from the dropdown or manually types `yes`, `Yes`, `YES`, or `yes ` (with whitespace), Excel will always recognize the field as enabled.
+
+---
+
+## 15. Dynamic Welcome Banner Theming in Organization Admin Dashboard (Image 2)
+
+### A. Requirement
+* In `OrganizationAdminDashboard.tsx`, the top welcome banner currently uses a static green gradient:
+  `bg-gradient-to-r from-emerald-800 to-teal-700 text-white`
+* It must dynamically update to match the organization's selected brand `themeColor` configured in Brand Settings.
+
+### B. Intelligent Luminance Contrast
+* Apply the same relative luminance algorithm ($Y = 0.299R + 0.587G + 0.114B$):
+  * **If Dark Color ($Y < 145$, e.g., Purple `#6b21a8`, Navy `#1e3a8a`, Slate `#0f172a`):**
+    * Background: `style={{ backgroundColor: orgColor }}`
+    * Heading: `text-white`
+    * Subtitle: `text-white/85`
+    * Panel Badge: `bg-white/20 text-white border-white/20`
+  * **If Light Color ($Y \ge 145$, e.g., Yellow `#facc15`, Cream `#fef08a`, Pale Lavender):**
+    * Background: `style={{ backgroundColor: orgColor }}`
+    * Heading: `text-slate-950`
+    * Subtitle: `text-slate-800`
+    * Panel Badge: `bg-black/10 text-slate-900 border-black/15`
+
+---
+
+## 16. Workspace Setup Page Layout Optimization (Image 3)
+
+### A. Requirement
+* In `WorkspaceSetupPage.tsx`, simplify the layout to bring actionable operational controls front-and-center:
+  1. **Remove Decorative Banner:** Remove the large top green container displaying *"Workspace & Floor Plan Ingestion Engine"*.
+  2. **Move Action Hub to the Top:** Place the 2-column Action Hub (Step 1: Download Workspace Template and Step 2: Upload Completed Spreadsheet, along with upload status, error cards, and success statistics) at the **very top** of the page.
+  3. **Reposition Walkthrough Below:** Move the *"INGESTION LIFECYCLE WALKTHROUGH"* (the 4-step instructional cards: Download $\rightarrow$ Fill $\rightarrow$ Upload $\rightarrow$ Explore) directly below the Action Hub.
+* **Benefit:** Admins can immediately download the template and drop files without scrolling.
+
+---
+
+## 17. Employee Roster & Branch Administrator Architecture
+
+### A. Access Guard & Prerequisite Gatekeeping
+* The Employee Roster page (`/admin/roster`) is accessible to Organization Administrators.
+* **Prerequisite State Check:**
+  * If the organization has **not yet completed workspace setup** (0 branches found in database), the page displays a locked educational state:
+    * Icon: 🏢
+    * Title: *"Workspace Configuration Required"*
+    * Description: *"Please complete your workspace setup first. Once your physical branches are defined through the Excel ingestion pipeline, you will be able to assign branch administrators and manage the employee roster."*
+    * Action Button: Linking directly to `/admin/workspace-setup`.
+  * If the workspace setup has been completed, the branch roster and assignment interface unlocks automatically.
+
+### B. Automatic Branch Extraction
+* Query all branches under the organization from PostgreSQL (`GET /api/workspace/branches`).
+* Displays each branch with its associated administrator information.
+
+### C. Dual Ingestion Mode
+
+#### Mode 1: Excel Bulk Upload (Initial Setup & Batch Provisioning)
+1. **Download Branch Admin Template:**
+   * Action button: *"Download Branch Admin Template"*.
+   * Backend generates an Excel file: `Branch_Admin_Roster_[ORG].xlsx`.
+   * Columns:
+     * `Branch ID` (Pre-filled, read-only grey, e.g., `BR001`)
+     * `Branch Name` (Pre-filled, read-only grey, e.g., `Mumbai HQ`)
+     * `Administrator Name` (Yellow user input)
+     * `Administrator Email` (Yellow user input)
+     * `Default Password` (Yellow user input)
+2. **Upload & Validation:**
+   * Checks that all required rows have Name, Email, and Password.
+   * Validates email format using universal RFC standard.
+   * Atomically upserts user records in PostgreSQL with role `BRANCH_ADMIN`, linked to their respective `branchId` and `organizationId`.
+
+#### Mode 2: In-Page Manual Entry & Table Management
+1. **Interactive Data Table:**
+   * Displays columns:
+     * `Branch Name` (Note: `Branch ID` is hidden from the UI as requested).
+     * `Administrator Name`
+     * `Email Address`
+     * `Status` (Active / Unassigned)
+     * `Actions` (Edit / Reassign / Remove)
+2. **Manual Row Addition:**
+   * Button: *"Assign Administrator"*.
+   * Modal or inline form allowing the admin to select the branch from a dropdown and enter Name, Email, and Password.
+   * Persists directly to the database via API (`POST /api/roster/branch-admins`).
+3. **Inline Editing:**
+   * Admins can edit administrator details (Name, Email) and save updates with real-time feedback.
+
+### D. Email Validation Standards & Research
+* **Enterprise Email Landscape:**
+  Organizations use varied email architectures:
+  * Custom corporate domains: `jane.doe@acmecorp.com`, `admin@subdomain.org.uk`
+  * Microsoft 365 / Entra ID: `user@acme.onmicrosoft.com`
+  * Standard public providers: `@gmail.com`, `@outlook.com`, `@icloud.com`
+* **Validation Strategy:**
+  * Do NOT restrict to Gmail or public domains.
+  * Enforce RFC 5322 standard email validation regex:
+    ```regex
+    ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+    ```
+  * Verification rules:
+    1. Exactly one `@` symbol.
+    2. Non-empty local-part containing valid characters (alphanumeric, dots, hyphens, underscores).
+    3. Valid domain name with at least one dot.
+    4. Top-level domain (TLD) of at least 2 alphabetic characters.
+
+---
+
+## 18. Recommendations for Organization Admin & Brand Settings (Scope Decisions)
+
+### A. Excluded Recommendations (Per Explicit User Directive)
+* ❌ **Brand Settings Live Theme Preview Canvas** — *Excluded from scope.*
+* ❌ **Brand Settings Preset Corporate Palettes** — *Excluded from scope.*
+* ❌ **Brand Settings Favicon & Tab Title Customization** — *Excluded from scope.*
+* ❌ **Global Branch Quick Filter Dropdown** — *Excluded from scope.*
+* ❌ **Audit Log CSV/PDF Export** — *Excluded from scope.*
+
+### B. Approved Recommendation (Accepted for Implementation)
+* ✅ **Facility Capacity KPI Summary Cards (Organization Admin Dashboard):**
+  * Display 4 metric tiles on `OrganizationAdminDashboard.tsx` dynamically calculated from the ingested physical workspace:
+    1. **Regional Branches & Buildings:** Total branch offices and corporate buildings.
+    2. **Total Workstations:** Total number of standard + HDMI workstations across all floors.
+    3. **HDMI Display Stations:** Number of desks equipped with external monitor setups.
+    4. **Meeting Rooms & Capacity:** Total dedicated conference pods and cumulative seating capacity.
+
+---
+
+## 19. Final Architecture & Implementation Scope Confirmation
+
+The following 5 components constitute the complete, approved implementation scope:
+
+### Component 1: Excel Meeting Room Lockout & Formatting Glitch Fix (Image 1)
+* **Target File:** `Workspace_FloorPlan_Template.xlsx` (via generator script / template asset).
+* **Fix Applied:**
+  * Update Data Validation for Column H (Meeting Room Capacity):
+    `=UPPER(TRIM($G2))="YES"`
+  * Update Data Validation for Column I (Meeting Room HDMI):
+    `=AND(UPPER(TRIM($G2))="YES", I2<=H2)`
+  * Update Conditional Formatting rules for range `H2:I401`:
+    * Unlocked Yellow Fill Rule: `=UPPER(TRIM($G2))="YES"`
+    * Disabled Gray Fill Rule: `=UPPER(TRIM($G2))<>"YES"`
+* **Outcome:** Eliminates the case sensitivity and trailing whitespace issue shown in Image 1, guaranteeing that `yes`, `Yes`, `YES`, or `yes ` always keeps cells unlocked and yellow.
+
+### Component 2: Dynamic Welcome Banner Theming in Organization Dashboard (Image 2)
+* **Target File:** [`OrganizationAdminDashboard.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/components/dashboard/OrganizationAdminDashboard.tsx).
+* **Fix Applied:**
+  * Replaces the static green gradient with the active organization's `themeColor`.
+  * Computes relative luminance ($Y = 0.299R + 0.587G + 0.114B$):
+    * If $Y < 145$ (Dark Theme): White text, soft white subtitle, translucent white pill badge.
+    * If $Y \ge 145$ (Light Theme): Dark slate text, soft dark subtitle, translucent dark pill badge.
+
+### Component 3: Facility Capacity KPI Summary Cards (Approved Feature)
+* **Target File:** [`OrganizationAdminDashboard.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/components/dashboard/OrganizationAdminDashboard.tsx).
+* **Fix Applied:**
+  * Fetches workspace physical stats via `/api/workspace/hierarchy`.
+  * Displays 4 responsive KPI cards above the workspace launch section:
+    1. **Branches & Buildings** (e.g. `2 Branches • 5 Buildings`)
+    2. **Active Workstations** (e.g. `120 Desks`)
+    3. **HDMI Workstations** (e.g. `32 Display Desks`)
+    4. **Meeting Rooms & Capacity** (e.g. `4 Rooms • 36 Seats`)
+
+### Component 4: Workspace Setup Page Layout Reordering (Image 3)
+* **Target File:** [`WorkspaceSetupPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/WorkspaceSetupPage.tsx).
+* **Fix Applied:**
+  * Remove the top green decorative banner container (*"Workspace & Floor Plan Ingestion Engine"*).
+  * Move the **Action Hub** (Step 1: Download Template and Step 2: Upload Completed Spreadsheet, including upload status, error cards, and success statistics) to the **very top** of the page.
+  * Reposition the **Ingestion Lifecycle Walkthrough** (cards 1, 2, 3, 4) **below** the Action Hub.
+
+### Component 5: Employee Roster & Branch Administrator Management
+* **Target Files:**
+  * Frontend: [`EmployeeRosterPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/EmployeeRosterPage.tsx)
+  * Backend API: `apps/api/src/routes/workspace.routes.ts` or `roster.routes.ts`
+* **Features:**
+  1. **Prerequisite Gatekeeper:** If 0 branches exist in the database, display a locked educational banner directing the admin to `/admin/workspace-setup`.
+  2. **Auto-Extract Branches:** Query all distinct branches under the organization once workspace setup is complete.
+  3. **Mode A (Excel Bulk Upload):**
+     * Download `Branch_Admin_Roster_[ORG].xlsx` with pre-filled `Branch ID` and `Branch Name` (read-only grey), and yellow inputs for `Administrator Name`, `Administrator Email`, and `Default Password`.
+     * Upload parser validates mandatory fields, verifies email format, and atomically creates users in PostgreSQL with role `BRANCH_ADMIN`.
+  4. **Mode B (In-Page Manual Entry & Table Management):**
+     * Clean table displaying: `Branch Name` (**Branch ID is hidden from view**), `Administrator Name`, `Email Address`, `Status`, and `Actions` (Edit / Reassign).
+     * Modal / form to manually assign a branch admin, saved directly to the database.
+  5. **Universal Email Validation:**
+     * Enforce RFC 5322 regex `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/` allowing all corporate and standard email providers.
+
+---
+
+## 20. Refinements & Fixes: Platform Admin Cleanup, Employee Roster Flattening, Workspace Setup Layout & Excel Validation Fix
+
+### A. Component 1: Platform Administration Cleanup (Image 1)
+* **Rationale:** The Platform Administrator only needs the Dashboard (`PlatformAdminDashboard.tsx`) and Audit Logs. A separate Organizations page is redundant.
+* **Actions:**
+  1. Remove the `Organizations` link from `Sidebar.tsx` for `PLATFORM_ADMIN`.
+  2. Remove the route `/admin/organizations` from `App.tsx` (redirect `/admin/organizations` to `/admin/dashboard`).
+  3. Delete/decommission [`OrganizationsPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/OrganizationsPage.tsx).
+  4. Retain all organization viewing, creation, and cascade deletion actions directly on `PlatformAdminDashboard.tsx`.
+
+---
+
+### B. Component 2: Employee Roster Flattening & Lifecycle Management (Branch Administrators Only) (Image 2)
+* **Rationale:** Corporate user management at this stage exclusively pertains to assigning Branch Administrators for each physical branch. The "All Employees Directory" tab is extraneous and removed.
+* **Actions:**
+  1. **Remove Tab Switcher:** Remove tab toggle buttons `[ Branch Administrators ]` and `[ All Employees Directory ]` from [`EmployeeRosterPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/EmployeeRosterPage.tsx). Remove the "All Employees Directory" table, state, and employee-specific bulk upload actions.
+  2. **Delete / Revoke Branch Administrator Action (Image 2):**
+     * In the Branch Administrators table, alongside the `Edit` button, add a `Delete` button (with a confirmation modal).
+     * Add backend endpoint `DELETE /api/roster/branch-admin/:id` to remove the user and disassociate the branch.
+     * **Instant State Rollback:** Deleting an administrator rolls the branch back to its unassigned state:
+       - `ADMINISTRATOR`: "Pending Assignment" (amber text)
+       - `EMAIL ADDRESS`: "—"
+       - `ASSIGNMENT STATUS`: "Pending" (amber badge)
+       - `ACTIONS`: `+ Assign` button (identical to how Goa is displayed in Image 2).
+  3. **Unassigned-Only Template Generation:**
+     * In `GET /api/roster/branch-admin-template`, check which branches already have an assigned administrator (manually or via bulk import).
+     * Only populate rows for **unassigned** branches in the generated Excel template (e.g. if Pune is already assigned, Pune is omitted from the template, and only Goa appears).
+  4. **Column Parity Between Modal & Template:**
+     * Manual modal fields: Branch Name, Administrator Name, Email Address, Password.
+     * Excel template fields: `Branch ID` (for machine mapping), `Branch Name`, `Administrator Full Name`, `Administrator Email`, `Initial Password`.
+     * Strict Privacy: `Branch ID` is never shown in the web UI table or forms.
+
+### C. Component 3: Workspace Setup Page Result Placement (Image 3 & Image 5)
+* **Clarification:** The Excel parsing, error detection, error count, and annotated workbook download functionality are 100% dynamic and working properly. Only the visual placement of the result container in the JSX is being adjusted. There is no separate page header; the page begins directly with the Action Hub.
+* **Layout Order in [`WorkspaceSetupPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/WorkspaceSetupPage.tsx):**
+  1. **[TOP POSITION] Dynamic Result Container (Conditional):**
+     * **If Error:** Red Ingestion Error Banner showing error count, list of issues, and "Download Annotated File with ERRORS Column" button.
+     * **If Success:** Green Ingestion Success Summary showing counts for Branches, Buildings, Floors, Sections, Desks, and Meeting Rooms, with "Proceed to Floor Plans" button.
+     * *When no upload has occurred yet, this container is completely hidden.*
+  2. **Action Hub (2-Column Grid):**
+     * Left Column: Step 1 Download Workspace Template card.
+     * Right Column: Step 2 Upload Completed Spreadsheet drag-and-drop card.
+  3. **4-Step Simulation Walkthrough:** Educational step-by-step guide (cards 1, 2, 3, 4) at the bottom.
+
+### D. Component 4: Excel Meeting Room Data Validation Bug Fix (Image 4)
+* **Root Cause Diagnosis:**
+  1. **ExcelJS Range Optimization Bug:** In `apps/api/src/services/excel.service.ts`, `generateOrgTemplate` was reading the template with `ExcelJS` and writing it back out. When writing, `ExcelJS`'s `optimiseDataValidations` sorts cell addresses using JavaScript string `strcmp`. In alphabetical sort, `"H10"` precedes `"H2"`. This caused `ExcelJS` to serialize two overlapping DataValidation ranges into OpenXML: `H10:H401` and `H2:H401`.
+  2. **Relative Reference Coordinate Shift:** For `H10:H401`, Excel anchors the relative formula `=UPPER(TRIM($G2))="YES"` to row 10. This creates an 8-row offset ($10 - 2 = 8$). When the user edited row 15 (cell H15), Excel evaluated cell G(15 - 8) = **G7**. In Image 4, cell G7 is `"no"`, so Excel rejected the input on H15 and displayed *"Meeting Room Disabled: Meeting Room is set to 'No' or blank"*, even though cell G15 was explicitly `"yes"`!
+  3. **Conditional Formatting Succeeded:** Conditional formatting worked properly because it was generated directly by `openpyxl` without passing through the corrupted `ExcelJS` serializer.
+* **Two-Pronged Solution:**
+  1. **Dynamic Row-Anchoring in Formulas (`openpyxl`):**
+     * Column H formula: `=UPPER(TRIM(INDIRECT("G" & ROW())))="YES"`
+     * Column I formula: `=AND(UPPER(TRIM(INDIRECT("G" & ROW())))="YES", INDIRECT("I" & ROW())<=INDIRECT("H" & ROW()))`
+     * Column F formula: `=INDIRECT("F" & ROW())<=INDIRECT("E" & ROW())`
+     * Column G dropdown: Contiguous range `dv_yes_no.add("G2:G401")` instead of cell-by-cell loop.
+     * `ROW()` dynamically returns the current row number during evaluation, making `INDIRECT("G" & ROW())` 100% immune to relative offset shifts, active cell coordinates, or range splits.
+  2. **Non-Destructive Template Serving (`excel.service.ts`):**
+     * In `generateOrgTemplate(orgId, orgName)`, use `JSZip` to update ONLY cells A5 and B5 inside `xl/worksheets/sheet1.xml` in the template archive.
+     * Sheets 2, 3, 4, and 5 remain completely untouched, ensuring OpenXML formulas, data validations, and conditional formattings are preserved byte-for-byte as generated by openpyxl without destructive ExcelJS re-serialization.
+
+### E. Component 5: Floor Plan Architectural Entry Text (Image 1)
+* **Target File:** [`FloorPlansPage.tsx`](file:///d:/MyFiles/MultiTenant%20OfflineFirst%20DeskBooking/apps/web/src/pages/admin/FloorPlansPage.tsx) (line 555).
+* **Fix Applied:**
+  * Update the bottom entrance door text from:
+    `🚪 MAIN SECTION ENTRY`
+  * To:
+    `🚪 ENTRY`
 

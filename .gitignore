@@ -40,9 +40,21 @@ coverage/
 
 # Temporary / Lock Excel & Media Files
 ~$*.xlsx
+*.xlsx.bak
+*.xlsx.tmp
 temp/
 scratch/
 tempmediaStorage/
+
+# Database Dumps & Cache
+*.sql
+*.dump
+*.db
+*.db-journal
+
+# Agent & System Generated Files
+.gemini/
+.system_generated/
 
 # Turborepo / Cache
 .turbo/

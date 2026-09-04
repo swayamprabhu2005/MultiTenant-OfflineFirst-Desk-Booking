@@ -137,72 +137,8 @@ export const WorkspaceSetupPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto px-4 sm:px-0 py-4">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="relative z-10">
-          <span className="px-3.5 py-1 bg-white/20 text-emerald-100 rounded-full text-xs font-bold border border-white/10 inline-block mb-3">
-            Facility Engineering • {activeOrg?.name}
-          </span>
-          <h1 className="text-3xl font-black tracking-tight">
-            Workspace &amp; Floor Plan Ingestion Engine
-          </h1>
-          <p className="text-emerald-100 text-xs sm:text-sm mt-2 max-w-2xl leading-relaxed">
-            Configure your entire corporate physical infrastructure in one unified spreadsheet. Download your custom template, define branches, buildings, floors, and curved cubicles, and let our parser generate your interactive floor plan.
-          </p>
-        </div>
-      </div>
-
-      {/* 4-Step Interactive Guided Stepper */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-6">
-          Ingestion Lifecycle Walkthrough
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
-              1
-            </div>
-            <h3 className="text-sm font-extrabold text-slate-900">Download Template</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Get your customized 5-sheet workbook pre-filled with your tenant ID and organization name.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
-              2
-            </div>
-            <h3 className="text-sm font-extrabold text-slate-900">Fill Yellow Fields</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Enter branch names, building names, floor counts, and cubicles with HDMI specifications.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
-              3
-            </div>
-            <h3 className="text-sm font-extrabold text-slate-900">Upload &amp; Validate</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Our parser validates data types and constraints. Errors are annotated in red for easy rectification.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
-              4
-            </div>
-            <h3 className="text-sm font-extrabold text-slate-900">Explore Floor Plan</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Instantly view your generated 2D architectural map with curved cubicles and meeting rooms.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Action Hub: 2 Columns (Download on Left, Upload on Right) */}
+    <div className="space-y-6 max-w-6xl mx-auto px-4 sm:px-0 py-4">
+      {/* Top Action Hub: 2 Columns (Download on Left, Upload on Right) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Step 1: Download Box */}
@@ -286,6 +222,55 @@ export const WorkspaceSetupPage: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* 4-Step Interactive Guided Stepper (Placed Below Action Hub) */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-6">
+          Ingestion Lifecycle Walkthrough
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
+              1
+            </div>
+            <h3 className="text-sm font-extrabold text-slate-900">Download Template</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Get your customized 5-sheet workbook pre-filled with your tenant ID and organization name.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
+              2
+            </div>
+            <h3 className="text-sm font-extrabold text-slate-900">Fill Yellow Fields</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Enter branch names, building names, floor counts, and cubicles with HDMI specifications.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
+              3
+            </div>
+            <h3 className="text-sm font-extrabold text-slate-900">Upload &amp; Validate</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Our parser validates data types and constraints. Errors are annotated in red for easy rectification.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center">
+              4
+            </div>
+            <h3 className="text-sm font-extrabold text-slate-900">Explore Floor Plan</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Instantly view your generated 2D architectural map with curved cubicles and meeting rooms.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ERROR BANNER & DOWNLOAD (If Validation Failed) */}
