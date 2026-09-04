@@ -1,0 +1,20 @@
+schema: spec-driven
+
+context: |
+  Project: Multi-Tenant Desk Booking & SaaS Control Plane
+  Architecture: Monorepo managed via PNPM Workspaces (apps/api, apps/web, packages/shared, templates)
+  Tech Stack:
+    - Backend API: Node.js, Express, TypeScript, Prisma ORM, PostgreSQL 15 (Port 4000)
+    - Frontend Web: React 18, Vite, TypeScript, Tailwind CSS, Lucide React (Port 3000)
+    - Database: PostgreSQL (Port 5432) with 10 relational models (Org, Branch, Building, Floor, Section, Desk, MeetingRoom, User, Booking, AuditLog)
+    - Ingestion: JSZip (in-place XML injection), ExcelJS, Multer (10MB limit)
+    - Security: JWT (7d), Bcrypt (10 rounds), Helmet, Express Rate Limit (500 req / 15 min)
+  Key Architectural Rules & Constraints:
+    - STRICT NO-SVG Mandate: All 2D floor plans, walls, corridors, and cubicle pods must use Pure React, semantic HTML5 <div> elements, CSS Grid, and Tailwind CSS. Zero <svg>, <path>, or vector graphics.
+    - Sanitized Selectors: User interface dropdowns must display exclusively clean human names (Pune, Bhaskar, Floor 1); raw database IDs (BR001, BLD001, 1-FL01) are hidden.
+    - Non-Destructive Template Serving: Use JSZip to update Sheet 1 cells A5/B5 in templates/Workspace_FloorPlan_Template.xlsx; never re-serialize with ExcelJS.
+    - Dynamic Row-Anchored Data Validation: All workbook validations use =UPPER(TRIM(INDIRECT("G" & ROW())))="YES" to prevent case/whitespace coordinate drift.
+    - Atomic Transactions: Organization deletions (DELETE /api/organizations/:id) and workspace imports (POST /api/workspace/import) must execute within atomic prisma.$transaction blocks.
+    - System Tenant Safeguard: Subdomain 'system' and code 'SYSTEM' are permanently protected against deletion.
+    - Automated Luminance Contrast: Y = 0.299*R + 0.587*G + 0.114*B (threshold 145) controls dark vs light theme contrast.
+    - Dedicated Branch Admin Lifecycle: Employee roster page is dedicated exclusively to branch administrators with instant state rollback upon deletion.

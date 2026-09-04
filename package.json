@@ -1,0 +1,29 @@
+{
+  "name": "multitenant-saas-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Multi-Tenant SaaS Control Plane - Platform Admin & Organization Admin",
+  "scripts": {
+    "dev": "pnpm --parallel dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter api run prisma:generate",
+    "db:push": "pnpm --filter api run prisma:push",
+    "db:seed": "pnpm --filter api run prisma:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "bcryptjs"
+    ]
+  }
+}
