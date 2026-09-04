@@ -7,7 +7,7 @@ An enterprise-grade, multi-tenant desk booking and facility management platform 
 ## 🚀 Key Highlights & Architecture
 
 ### 1. Multi-Tenant SaaS Isolation & Platform Administration
-* **Platform Administrator Console (`system` subdomain):** Global superadmin dashboard (`/` and `/admin/organizations`) to provision enterprise tenant organizations, manage subdomain routing, inspect registration audit trails, and manage the full tenant lifecycle.
+* **Unified Platform Administrator Console (`system` subdomain):** Global superadmin dashboard (`/`) to provision enterprise tenant organizations, manage subdomain routing, search active tenants, inspect registration audit trails, and manage the full tenant lifecycle directly from a consolidated interface.
 * **Tenant Organization Deletion & Cascade Purge (`DELETE /api/organizations/:id`):**
   * Platform Administrators have one-click deletion access to decommission tenant organizations created by Organization Administrators.
   * **Atomic Database Purge:** Executes an atomic `prisma.$transaction` that cascades deletion across all child resources: bookings, meeting rooms, cubicle desks, floor sections, building floors, corporate buildings, physical office branches, employee users, and tenant-scoped audit logs.
@@ -16,17 +16,18 @@ An enterprise-grade, multi-tenant desk booking and facility management platform 
 * **Global Organization Administrator:** Tenant-level control plane to ingest corporate physical infrastructure, manage employee rosters, configure dynamic brand themes, and review tenant-specific audit trails.
 
 ### 2. Cascading 5-Sheet Excel Workspace Ingestion Engine
-* **Template Generation:** Pre-filled with active tenant credentials via `GET /api/workspace/template`.
+* **Template Generation:** Pre-filled with active tenant credentials via `GET /api/workspace/template` served directly from `templates/Workspace_FloorPlan_Template.xlsx` using in-place `JSZip` XML injection.
 * **Case-Insensitive Conditional Formatting & Auto-Lockout:**
-  * In Sheet 5 (`Sections & Cubicles`), Columns H & I (*Meeting Room Capacity* & *Meeting Room HDMI*) utilize case-insensitive and whitespace-resilient formulas: `=UPPER(TRIM($G2))="YES"`.
+  * In Sheet 5 (`Sections & Cubicles`), Columns H & I (*Meeting Room Capacity* & *Meeting Room HDMI*) utilize case-insensitive, trimmed, and row-anchored formulas: `=UPPER(TRIM(INDIRECT("G" & ROW())))="YES"`.
   * Cells turn muted gray (`#E2E8F0`) with native Excel data validation lockouts if Meeting Room is `"No"`, lowercase `"no"`, or blank. When set to `"Yes"` (or `"YES"` / `"yes"`), cells unlock and illuminate in bright yellow (`#FFF2CC`).
-  * In-sheet HDMI validation guarantees HDMI workstations never exceed total cubicles: `=AND(UPPER(TRIM($G2))="YES", I2<=H2)`.
+  * In-sheet HDMI validation guarantees HDMI workstations never exceed total cubicles.
 * **Stateful Grouped Parser:** Resolves "Show Once per Group" branches and buildings, validating counts, types, and constraints.
 * **Sheet-Specific Red Error Feedback:** If an invalid spreadsheet is uploaded, the parser injects a bright red **`ERRORS & FIXES`** column **ONLY** into the sheets containing errors, detailing exact row-by-row descriptions for instant re-download and rectification.
 * **Atomic Transaction:** Saves Branches, Buildings, Floors, Sections, Desks (`C-01`, `C-02`...), and Meeting Rooms in a single PostgreSQL `prisma.$transaction`.
 
 ### 3. Interactive 2D Floor Plan Explorer (STRICT NO-SVG Mandate)
 * **Zero-SVG Architecture:** Entirely constructed using standard HTML5 `<div>` elements, CSS Grid, and Flexbox (strictly no `<svg>`, `<path>`, or vector graphics).
+* **Sanitized Selectors (Zero Database IDs):** Branch, Building, and Floor dropdowns display exclusively human-readable names (`Pune`, `Bhaskar`, `Floor 1`, `Floor 2`), stripping away all database IDs (`BR001`, `BLD001`, `1-FL01`) from the user interface.
 * **Atomic 4-Desk Pod Clusters:** Desks are grouped into ergonomic pods of 4 (2 top cubicles facing 2 bottom cubicles with curved corners `rounded-xl`).
 * **Column-Wise Placement Order:**
   * **Cluster 1 (Desks 1–4):** Top-Left (Row 0, Col 0)
@@ -40,13 +41,16 @@ An enterprise-grade, multi-tenant desk booking and facility management platform 
 * **Small Section Centering:** Sections with $\le 8$ desks are centered symmetrically to prevent empty void spaces.
 * **Interactive Slide-Over Drawer:** Click any cubicle to view real-time specifications and reserve/release desks.
 
-### 4. Employee Roster & Branch Administrator Management
+### 4. Dedicated Branch Administrator Lifecycle & Security
 * **Prerequisite Gatekeeper:** If zero branches exist in the database, the roster page displays an educational locked card pointing the administrator to the workspace setup ingestion pipeline.
-* **Dual Management Pipeline:**
-  * **Excel Bulk Roster Ingestion:** Generates pre-filled `Branch_Admin_Roster_[ORG].xlsx` with locked Branch columns and yellow editable admin fields, supporting bulk upload.
-  * **In-Page Manual Assignment & Editing:** Interactive modal allowing administrators to assign or update branch administrators directly.
-* **Universal RFC 5322 Email Validation:** Validated client-side and server-side using `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/`.
-* **Strict Branch ID UI Concealment:** In tables, forms, cards, and dropdown options, **Branch IDs are strictly hidden**; only user-friendly Branch Names are displayed.
+* **Dedicated Branch Administrator Table:** Single-purpose console dedicated exclusively to branch administrators (general employee directory removed).
+* **Deletion & Instant State Rollback (`DELETE /api/roster/branch-admin/:id`):**
+  * Deleting an assigned administrator removes the user account, audit logs the revocation, and immediately rolls back the branch row to its unassigned state (`Pending Assignment`, `—`, `Pending`, `+ Assign` button).
+* **Unassigned-Only Template Filtering:** `GET /api/roster/branch-admin-template` dynamically filters out already-assigned branches, pre-filling only unassigned locations in downloaded Excel templates.
+* **Google Chrome Data Breach Alert Neutralization:**
+  * Assignment modal uses non-form React containers, bypassing browser credential interceptors that trigger false-positive leak warnings.
+  * Masks initial password via CSS `WebkitTextSecurity: disc` with an interactive eye toggle (`Eye` / `EyeOff`) to view or verify credentials before assignment.
+* **Strict Branch ID Concealment:** In tables, modals, cards, and dropdowns, **Branch IDs are strictly hidden**; only clean Branch Names are displayed.
 
 ### 5. Facility Capacity KPI Summary Cards & Dashboard Theming
 * **Real-Time Facility Metrics:** 4 summary tiles at the top of the Organization Admin Dashboard computed from `/api/workspace/hierarchy`:
@@ -92,31 +96,30 @@ MultiTenant OfflineFirst DeskBooking/
 │   │       ├── routes/
 │   │       │   ├── auth.routes.ts          # Authentication & Registration
 │   │       │   ├── organizations.routes.ts # Org CRUD, Delete Cascade, Branding
-│   │       │   ├── roster.routes.ts        # Employee & Branch Admin management
+│   │       │   ├── roster.routes.ts        # Dedicated Branch Admin management & deletion rollback
 │   │       │   ├── workspace.routes.ts     # Template generation, Excel import, hierarchy & booking
 │   │       │   └── ...
 │   │       ├── services/
-│   │       │   └── excel.service.ts        # Template generator & multi-sheet validator
+│   │       │   └── excel.service.ts        # Dynamic JSZip template generator & multi-sheet validator
 │   │       └── server.ts
 │   └── web/                     # React + Vite Frontend Application
 │       └── src/
 │           ├── components/
-│           │   ├── dashboard/   # Platform & Organization Admin Dashboards
+│           │   ├── dashboard/   # Platform Admin (with Delete Cascade) & Org Admin Dashboards
 │           │   └── layout/      # Navbar (Dynamic Contrast), Collapsible Sidebar, Layout
 │           └── pages/
 │               ├── admin/
-│               │   ├── OrganizationsPage.tsx    # Platform Admin tenant list & delete management
-│               │   ├── WorkspaceSetupPage.tsx   # Action Hub & 4-step guided simulation
-│               │   ├── FloorPlansPage.tsx       # Strict NO-SVG interactive 2D floor plan explorer
-│               │   ├── EmployeeRosterPage.tsx   # Branch Admin & employee directory
+│               │   ├── WorkspaceSetupPage.tsx   # Top result banner, Action Hub & 4-step simulation
+│               │   ├── FloorPlansPage.tsx       # Strict NO-SVG floor plans (sanitized names, no IDs)
+│               │   ├── EmployeeRosterPage.tsx   # Branch Admin lifecycle, eye toggle & Chrome breach fix
 │               │   └── ...
 │               └── auth/
 ├── packages/
-│   └── shared/                  # Shared TypeScript types, DTOs, and enums
+│   └── shared/                  # Shared TypeScript types, DTOs, and enums (@deskbooking/shared)
+├── templates/
+│   └── Workspace_FloorPlan_Template.xlsx # Master 5-sheet cascading workbook template
 ├── docker-compose.yml           # PostgreSQL database service definition
-├── Workspace_FloorPlan_Template.xlsx # Authoritative 5-sheet cascading workbook template
-├── run.bat                      # Sequential 1-click startup automation script
-├── plan.md                      # Detailed technical architecture plan
+├── run.bat                      # 1-click startup script (auto-launches in Google Chrome)
 └── README.md
 ```
 
@@ -127,6 +130,7 @@ MultiTenant OfflineFirst DeskBooking/
 ### 1. Prerequisites
 * **Node.js**: v18 or v20+
 * **PNPM**: Installed globally (`npm i -g pnpm`)
+* **Google Chrome**: Recommended browser for automated launch
 * **Docker Desktop** (Optional, or native PostgreSQL running on port 5432)
 
 ### 2. Launch with One-Click Script
@@ -138,9 +142,9 @@ Run the automated batch script:
 The script executes 5 sequential stages:
 1. `[1/5]` Verifying & starting PostgreSQL on port 5432.
 2. `[2/5]` Verifying and cleaning port allocations (Ports 3000 & 4000).
-3. `[3/5]` Installing PNPM workspace dependencies.
+3. `[3/5]` Installing PNPM workspace dependencies across all monorepo packages.
 4. `[4/5]` Generating Prisma client, pushing database schema, and seeding credentials.
-5. `[5/5]` Starting the Backend API (`http://localhost:4000`) and Vite Web Portal (`http://localhost:3000`).
+5. `[5/5]` Starting Backend API (`http://localhost:4000`) and Vite Web Portal (`http://localhost:3000`), automatically opening the web portal in a new **Google Chrome** tab as soon as the servers are ready.
 
 ---
 

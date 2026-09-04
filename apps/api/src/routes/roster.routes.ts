@@ -290,10 +290,31 @@ router.get('/branch-admin-template', authMiddleware, requireRole([Role.PLATFORM_
   try {
     const orgId = req.organizationId!;
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const existingAdmins = await prisma.user.findMany({
+      where: {
+        organizationId: orgId,
+        role: Role.BRANCH_ADMIN,
+        scopedBranchId: { not: null },
+      },
+      select: { scopedBranchId: true },
+    });
+    const assignedBranchIds = existingAdmins
+      .map(a => a.scopedBranchId)
+      .filter((id): id is string => Boolean(id));
+
     const branches = await prisma.branch.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...(assignedBranchIds.length > 0 ? { id: { notIn: assignedBranchIds } } : {}),
+      },
       orderBy: { code: 'asc' },
     });
+
+    if (branches.length === 0) {
+      return res.status(400).json({
+        error: 'All branches already have administrators assigned. Edit or delete existing assignments if changes are needed.',
+      });
+    }
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Branch Administrators');
@@ -580,6 +601,52 @@ router.put('/branch-admin/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN
     return res.json({ success: true, user: updatedUser });
   } catch (error: any) {
     console.error('Failed to update branch admin:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/roster/branch-admin/:id
+ * Removes a branch administrator assignment, reverting the branch to Pending Assignment
+ */
+router.delete('/branch-admin/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const { id } = req.params;
+
+    const user = await prisma.user.findFirst({
+      where: { id, organizationId: orgId, role: Role.BRANCH_ADMIN },
+      include: { scopedBranch: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Branch administrator not found in your organization.' });
+    }
+
+    const branchName = user.scopedBranch?.name || 'Assigned Branch';
+    const adminName = user.name;
+
+    await prisma.user.delete({
+      where: { id },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: orgId,
+        actorUserId: req.user!.id,
+        action: 'REVOKE_BRANCH_ADMIN',
+        entityType: 'User',
+        entityId: id,
+        metadata: { name: adminName, branchName },
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Administrator "${adminName}" removed from branch "${branchName}". Branch has been reverted to Pending Assignment.`,
+    });
+  } catch (error: any) {
+    console.error('Failed to remove branch admin:', error);
     return res.status(500).json({ error: error.message });
   }
 });

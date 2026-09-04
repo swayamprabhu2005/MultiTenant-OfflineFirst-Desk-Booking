@@ -49,6 +49,29 @@ interface BranchItem {
   buildings: BuildingItem[];
 }
 
+function formatFloorDisplayName(fl?: { name?: string; code?: string; floorNumber?: number } | null): string {
+  if (!fl) return 'Floor 1';
+  if (fl.name && fl.name.trim()) {
+    const trimmed = fl.name.trim();
+    const match = trimmed.match(/^FL0*(\d+)$/i);
+    if (match) return `Floor ${match[1]}`;
+    if (trimmed.includes('•')) {
+      const parts = trimmed.split('•');
+      return parts[parts.length - 1].trim();
+    }
+    return trimmed;
+  }
+  if (fl.floorNumber !== undefined && fl.floorNumber !== null) {
+    return `Floor ${fl.floorNumber}`;
+  }
+  if (fl.code) {
+    const match = fl.code.match(/FL0*(\d+)/i);
+    if (match) return `Floor ${match[1]}`;
+    return fl.code;
+  }
+  return 'Floor 1';
+}
+
 export const FloorPlansPage: React.FC = () => {
 
   const [branches, setBranches] = useState<BranchItem[]>([]);
@@ -339,7 +362,7 @@ export const FloorPlansPage: React.FC = () => {
             >
               {branches.map(b => (
                 <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
+                  {b.name}
                 </option>
               ))}
             </select>
@@ -367,7 +390,7 @@ export const FloorPlansPage: React.FC = () => {
             >
               {currentBranch?.buildings.map(bld => (
                 <option key={bld.id} value={bld.id}>
-                  {bld.name} ({bld.code})
+                  {bld.name}
                 </option>
               ))}
             </select>
@@ -392,7 +415,7 @@ export const FloorPlansPage: React.FC = () => {
             >
               {currentBuilding?.floors.map(fl => (
                 <option key={fl.id} value={fl.id}>
-                  {fl.code} • {fl.name}
+                  {formatFloorDisplayName(fl)}
                 </option>
               ))}
             </select>
@@ -429,7 +452,7 @@ export const FloorPlansPage: React.FC = () => {
         {/* Floor Plan Header Tag */}
         <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3 mb-6">
           <div className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
-            LEVEL: {currentFloor?.code} • {currentSection?.name} • COMPASS: {currentSection?.direction}
+            LEVEL: {formatFloorDisplayName(currentFloor).toUpperCase()} • {currentSection?.name} • COMPASS: {currentSection?.direction}
           </div>
           <div className="text-[10px] font-mono text-slate-500 font-bold">
             TOTAL STATIONS: {desks.length} | PODS: {totalPods} | MEETING ROOMS: {meetingRoom ? 1 : 0}
@@ -552,7 +575,7 @@ export const FloorPlansPage: React.FC = () => {
         {/* Architectural Bottom Entry Gap */}
         <div className="mt-8 flex justify-center border-t-2 border-slate-900 relative">
           <div className="absolute -top-3.5 bg-white px-8 py-0.5 border-2 border-slate-900 rounded-md font-mono text-[10px] font-black tracking-widest text-slate-900 uppercase">
-            🚪 MAIN SECTION ENTRY
+            🚪 ENTRY
           </div>
         </div>
 
