@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import path from 'path';
 import fs from 'fs';
 
@@ -49,33 +50,66 @@ export interface ValidationResult {
   errorWorkbookBuffer?: Buffer;
 }
 
-const TEMPLATE_PATH = path.resolve(process.cwd(), '../../Workspace_FloorPlan_Template.xlsx');
+function getTemplateFilePath(): string {
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'templates/Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(process.cwd(), '../../templates/Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(__dirname, '../../../../templates/Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(__dirname, '../../../templates/Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(process.cwd(), 'Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(process.cwd(), '../../Workspace_FloorPlan_Template.xlsx'),
+    path.resolve(__dirname, '../../../../Workspace_FloorPlan_Template.xlsx'),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return path.resolve(process.cwd(), 'templates/Workspace_FloorPlan_Template.xlsx');
+}
 
 /**
  * Generates an Excel template pre-filled with the active organization's ID and Name
+ * Uses JSZip for non-destructive in-place XML updating of Sheet 1, preventing ExcelJS
+ * from corrupting or splitting Sheet 5 DataValidation ranges (H2:H401 vs H10:H401).
  */
 export async function generateOrgTemplate(orgId: string, orgName: string): Promise<Buffer> {
-  let templateFile = TEMPLATE_PATH;
-  if (!fs.existsSync(templateFile)) {
-    // Fallback if running from a different directory
-    templateFile = path.resolve(__dirname, '../../../../Workspace_FloorPlan_Template.xlsx');
+  const templateFile = getTemplateFilePath();
+
+  const fileData = await fs.promises.readFile(templateFile);
+  const zip = await JSZip.loadAsync(fileData);
+
+  const sheet1File = zip.file('xl/worksheets/sheet1.xml');
+  if (sheet1File) {
+    let sheet1Xml = await sheet1File.async('string');
+
+    const escapeXml = (str: string) =>
+      str.replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '\'': return '&apos;';
+          case '"': return '&quot;';
+          default: return c;
+        }
+      });
+
+    // Replace Cell A5 (Organization ID)
+    sheet1Xml = sheet1Xml.replace(
+      /(<c r="A5"[^>]*><is><t>)[^<]*(<\/t><\/is><\/c>)/,
+      `$1${escapeXml(orgId)}$2`
+    );
+
+    // Replace Cell B5 (Organization Name)
+    sheet1Xml = sheet1Xml.replace(
+      /(<c r="B5"[^>]*><is><t>)[^<]*(<\/t><\/is><\/c>)/,
+      `$1${escapeXml(orgName)}$2`
+    );
+
+    zip.file('xl/worksheets/sheet1.xml', sheet1Xml);
   }
 
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(templateFile);
-
-  const orgSheet = workbook.getWorksheet('Organization');
-  if (orgSheet) {
-    // Fill Cell A5 with Org ID and B5 with Org Name
-    const cellA5 = orgSheet.getCell('A5');
-    cellA5.value = orgId;
-
-    const cellB5 = orgSheet.getCell('B5');
-    cellB5.value = orgName;
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+  return buffer;
 }
 
 /**

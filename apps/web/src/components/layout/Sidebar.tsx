@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Menu,
   ChevronLeft,
-  Building2,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -21,7 +20,6 @@ export const Sidebar: React.FC = () => {
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Organizations', to: '/admin/organizations', icon: Building2 },
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },

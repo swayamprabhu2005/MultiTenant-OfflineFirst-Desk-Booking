@@ -138,7 +138,107 @@ export const WorkspaceSetupPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto px-4 sm:px-0 py-4">
-      {/* Top Action Hub: 2 Columns (Download on Left, Upload on Right) */}
+      {/* ERROR BANNER & DOWNLOAD (If Validation Failed - Top Position) */}
+      {errorResult && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 space-y-4 shadow-sm animate-fade-in">
+          <div className="flex items-start space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-extrabold text-red-900">
+                Spreadsheet Validation Failed ({errorResult.errorCount} Error{errorResult.errorCount !== 1 ? 's' : ''} Found)
+              </h3>
+              <p className="text-xs text-red-700 mt-1">
+                Zero database changes were made. Please review the issues below or download the annotated file where errors are highlighted in red.
+              </p>
+
+              {/* Error list */}
+              <div className="mt-3 bg-white border border-red-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-1 text-xs text-red-800 font-medium">
+                {errorResult.errorsSummary.map((err, idx) => (
+                  <div key={idx} className="flex items-start space-x-2">
+                    <span className="text-red-500 font-bold">•</span>
+                    <span>{err}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Download error file button */}
+              {errorResult.errorWorkbookBase64 && (
+                <div className="mt-4">
+                  <button
+                    onClick={handleDownloadErrorFile}
+                    className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center space-x-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Annotated File with "ERRORS" Column</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS BANNER & STATS (If Validation Passed - Top Position) */}
+      {successStats && (
+        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-6 space-y-5 shadow-sm animate-fade-in">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-emerald-950">
+                Workspace Successfully Ingested!
+              </h3>
+              <p className="text-xs text-emerald-800">
+                All 5 sheets passed validation. Physical workspace database and 2D floor plans have been created.
+              </p>
+            </div>
+          </div>
+
+          {/* Stats summary pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-slate-900">{successStats.branches}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Branches</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-slate-900">{successStats.buildings}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Buildings</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-slate-900">{successStats.floors}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Floors</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-slate-900">{successStats.sections}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Sections</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-emerald-600">{successStats.desks}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Desks</div>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-xl font-black text-purple-600">{successStats.meetingRooms}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase">Meeting Rooms</div>
+            </div>
+          </div>
+
+          {/* Call to action button to view floor plans */}
+          <div className="pt-2">
+            <button
+              onClick={() => navigate('/admin/floor-plans')}
+              className="py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center space-x-2 shadow-md transition-all cursor-pointer"
+            >
+              <span>Explore Interactive 2D Floor Plans</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action Hub: 2 Columns (Download on Left, Upload on Right) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Step 1: Download Box */}
@@ -272,106 +372,6 @@ export const WorkspaceSetupPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* ERROR BANNER & DOWNLOAD (If Validation Failed) */}
-      {errorResult && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 space-y-4 shadow-sm">
-          <div className="flex items-start space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-base font-extrabold text-red-900">
-                Spreadsheet Validation Failed ({errorResult.errorCount} Error{errorResult.errorCount !== 1 ? 's' : ''} Found)
-              </h3>
-              <p className="text-xs text-red-700 mt-1">
-                Zero database changes were made. Please review the issues below or download the annotated file where errors are highlighted in red.
-              </p>
-
-              {/* Error list */}
-              <div className="mt-3 bg-white border border-red-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-1 text-xs text-red-800 font-medium">
-                {errorResult.errorsSummary.map((err, idx) => (
-                  <div key={idx} className="flex items-start space-x-2">
-                    <span className="text-red-500 font-bold">•</span>
-                    <span>{err}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Download error file button */}
-              {errorResult.errorWorkbookBase64 && (
-                <div className="mt-4">
-                  <button
-                    onClick={handleDownloadErrorFile}
-                    className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center space-x-2 shadow-sm transition-all cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Annotated File with "ERRORS" Column</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SUCCESS BANNER & STATS (If Validation Passed) */}
-      {successStats && (
-        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-6 space-y-5 shadow-sm">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-emerald-950">
-                Workspace Successfully Ingested!
-              </h3>
-              <p className="text-xs text-emerald-800">
-                All 5 sheets passed validation. Physical workspace database and 2D floor plans have been created.
-              </p>
-            </div>
-          </div>
-
-          {/* Stats summary pills */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-slate-900">{successStats.branches}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Branches</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-slate-900">{successStats.buildings}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Buildings</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-slate-900">{successStats.floors}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Floors</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-slate-900">{successStats.sections}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Sections</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-emerald-600">{successStats.desks}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Desks</div>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-xl font-black text-purple-600">{successStats.meetingRooms}</div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase">Meeting Rooms</div>
-            </div>
-          </div>
-
-          {/* Call to action button to view floor plans */}
-          <div className="pt-2">
-            <button
-              onClick={() => navigate('/admin/floor-plans')}
-              className="py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center space-x-2 shadow-md transition-all cursor-pointer"
-            >
-              <span>Explore Interactive 2D Floor Plans</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

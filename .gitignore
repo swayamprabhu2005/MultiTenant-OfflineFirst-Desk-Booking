@@ -58,3 +58,7 @@ tempmediaStorage/
 
 # Turborepo / Cache
 .turbo/
+
+# Internal Project Planning Documents
+plan.md
+

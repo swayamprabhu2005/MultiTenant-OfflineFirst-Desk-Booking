@@ -135,7 +135,7 @@ echo   - Default Platform Admin: admin@deskbooking.com
 echo   - Default Password:       DeskBook$2026#SecureOps!X9
 echo ========================================================
 echo Press Ctrl+C in this terminal to terminate all processes.
-start "" cmd /c "powershell -NoProfile -Command \"$c = New-Object System.Net.Sockets.TcpClient; while (-not $c.Connected) { try { $c.Connect('127.0.0.1', 4000) } catch { Start-Sleep -Milliseconds 800 } }; $c.Close(); Start-Process 'http://localhost:3000'\""
+start "" cmd /c "powershell -NoProfile -Command \"$c = New-Object System.Net.Sockets.TcpClient; while (-not $c.Connected) { try { $c.Connect('127.0.0.1', 4000) } catch { Start-Sleep -Milliseconds 800 } }; $c.Close(); $url = 'http://localhost:3000'; $cp = 'C:\Program Files\Google\Chrome\Application\chrome.exe'; if (Test-Path $cp) { Start-Process $cp $url } else { try { Start-Process 'chrome' $url } catch { Start-Process $url } }\""
 call pnpm dev
 
 pause
