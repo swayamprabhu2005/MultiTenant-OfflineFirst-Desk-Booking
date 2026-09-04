@@ -1,6 +1,6 @@
 # Multi-Tenant Desk Booking & SaaS Control Plane
 
-An enterprise-grade, multi-tenant desk booking and facility management platform engineered with robust subdomain tenant isolation, a cascading 5-sheet Excel workspace ingestion pipeline, and an interactive 2D architectural floor plan explorer built under a **strict NO-SVG mandate** using Pure React, semantic HTML5 elements, and Tailwind CSS.
+An enterprise-grade, multi-tenant desk booking and facility management platform engineered with robust subdomain tenant isolation, a cascading 5-sheet Excel workspace ingestion pipeline, and an interactive 2D architectural floor plan explorer built using Pure React, semantic HTML5 elements, and Tailwind CSS.
 
 ---
 
