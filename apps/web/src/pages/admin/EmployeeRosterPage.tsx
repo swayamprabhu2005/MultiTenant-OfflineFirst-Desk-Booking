@@ -348,7 +348,7 @@ export const EmployeeRosterPage: React.FC = () => {
     <div className="space-y-6 max-w-6xl mx-auto px-4 sm:px-0 py-4">
 
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2.5">
             <Users className="w-6 h-6 text-emerald-600" />
@@ -359,7 +359,7 @@ export const EmployeeRosterPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col items-start sm:items-end gap-2.5 sm:ml-auto">
           <button
             type="button"
             onClick={() => {
