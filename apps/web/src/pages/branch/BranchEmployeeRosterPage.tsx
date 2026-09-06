@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import { fetchApi } from '../../services/api';
 import {
   Users, Download, Upload, Plus, Edit2, Search,
   RefreshCw, CheckCircle2, AlertTriangle, Globe,
-  UserX, UserCheck, FileSpreadsheet
+  UserX, UserCheck, FileSpreadsheet, Key
 } from 'lucide-react';
 
 interface EmployeeItem {
   id: string;
   name: string;
   email: string;
-  department?: string | null;
   role: string;
   isActive: boolean;
   status: string;
@@ -25,6 +25,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
   const activeOrg = user?.organization || tenant;
 
   const defaultDomain = activeOrg?.subdomain ? `${activeOrg.subdomain}.com` : 'acme.com';
+  const defaultFallbackPassword = (activeOrg?.name || 'acme').toLowerCase().replace(/[^a-z0-9]/g, '');
   const [domain, setDomain] = useState(defaultDomain);
 
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
@@ -41,12 +42,16 @@ export const BranchEmployeeRosterPage: React.FC = () => {
     text: string;
   } | null>(null);
 
+  // Default Password State (Inline Editing)
+  const [defaultPassword, setDefaultPassword] = useState(defaultFallbackPassword);
+  const [savingConfig, setSavingConfig] = useState(false);
+
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
-  const [addDept, setAddDept] = useState('Engineering');
   const [addPassword, setAddPassword] = useState('');
+  const [emailManuallyEdited, setEmailManuallyEdited] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
   const [editingEmployee, setEditingEmployee] = useState<EmployeeItem | null>(null);
@@ -56,18 +61,42 @@ export const BranchEmployeeRosterPage: React.FC = () => {
 
   const [confirmToggleUser, setConfirmToggleUser] = useState<EmployeeItem | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
+  const [branchInfo, setBranchInfo] = useState<{ name: string; code: string } | null>(null);
 
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      const data = await fetchApi<EmployeeItem[]>('/branch-roster/employees');
-      setEmployees(data || []);
+      const res = await fetchApi<any>('/branch-roster/employees');
+      if (res) {
+        if (res.branch) {
+          setBranchInfo({ name: res.branch.name, code: res.branch.code });
+          if (res.branch.defaultEmployeePassword) {
+            setDefaultPassword(res.branch.defaultEmployeePassword);
+          }
+        }
+        if (res.defaultPassword) {
+          setDefaultPassword(res.defaultPassword);
+        }
+        if (res.corporateDomain) {
+          setDomain(res.corporateDomain);
+        }
+        if (Array.isArray(res.employees)) {
+          setEmployees(res.employees);
+        } else if (Array.isArray(res)) {
+          setEmployees(res);
+        } else {
+          setEmployees([]);
+        }
+      } else {
+        setEmployees([]);
+      }
     } catch (err: any) {
       console.error('Failed to load branch employees:', err);
       setAlertMessage({
         type: 'error',
         text: err.message || 'Failed to load employee directory.',
       });
+      setEmployees([]);
     } finally {
       setLoading(false);
     }
@@ -83,7 +112,8 @@ export const BranchEmployeeRosterPage: React.FC = () => {
       setDownloadingTemplate(true);
       const token = localStorage.getItem('token');
       const cleanDomain = domain.trim() || defaultDomain;
-      const res = await fetch(`/api/branch-roster/template?domain=${encodeURIComponent(cleanDomain)}`, {
+      const passParam = defaultPassword ? `&defaultPassword=${encodeURIComponent(defaultPassword)}` : '';
+      const res = await fetch(`/api/branch-roster/template?domain=${encodeURIComponent(cleanDomain)}${passParam}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -163,27 +193,47 @@ export const BranchEmployeeRosterPage: React.FC = () => {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        setAlertMessage({
-          type: 'error',
-          text: data.error || (data.errorsSummary && data.errorsSummary[0]) || 'Upload validation failed.',
-        });
-      } else {
-        setAlertMessage({
-          type: 'success',
-          text: `Batch processing complete: ${data.stats?.created || 0} employees added, ${data.stats?.updated || 0} synchronized. Zero duplicate accounts created.`,
-        });
-        await loadEmployees();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import employee roster');
       }
+
+      setAlertMessage({
+        type: 'success',
+        text: data.message || `Successfully processed ${data.totalProcessed} employee records.`,
+      });
+      await loadEmployees();
     } catch (err: any) {
+      console.error('Roster upload error:', err);
       setAlertMessage({
         type: 'error',
-        text: err.message || 'Error occurred while uploading workbook.',
+        text: err.message || 'An error occurred during roster ingestion.',
       });
     } finally {
       setUploading(false);
       e.target.value = '';
     }
+  };
+
+  const handleOpenAddModal = () => {
+    setAddName('');
+    setAddEmail('');
+    setEmailManuallyEdited(false);
+    setAddPassword(defaultPassword || defaultFallbackPassword);
+    setShowAddModal(true);
+  };
+
+  const handleNameChange = (val: string) => {
+    setAddName(val);
+    if (!emailManuallyEdited) {
+      const cleanName = val.trim().toLowerCase().replace(/\s+/g, '.');
+      const targetDomain = domain.trim() || defaultDomain;
+      setAddEmail(cleanName ? `${cleanName}@${targetDomain}` : '');
+    }
+  };
+
+  const handleEmailChange = (val: string) => {
+    setAddEmail(val);
+    setEmailManuallyEdited(true);
   };
 
   // 4. Create Single Employee Manually
@@ -196,13 +246,14 @@ export const BranchEmployeeRosterPage: React.FC = () => {
         targetEmail = `${targetEmail}@${domain.trim() || defaultDomain}`;
       }
 
+      const targetPassword = addPassword.trim() || defaultPassword || defaultFallbackPassword;
+
       await fetchApi('/branch-roster/employee', {
         method: 'POST',
         body: JSON.stringify({
           name: addName.trim(),
           email: targetEmail,
-          department: addDept,
-          password: addPassword.trim() || undefined,
+          password: targetPassword,
         }),
       });
 
@@ -214,6 +265,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
       setAddName('');
       setAddEmail('');
       setAddPassword('');
+      setEmailManuallyEdited(false);
       await loadEmployees();
     } catch (err: any) {
       alert(err.message || 'Failed to add employee');
@@ -273,10 +325,39 @@ export const BranchEmployeeRosterPage: React.FC = () => {
     }
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase()))
+  // 7. Save Default Employee Temporary Password Inline (No Popup)
+  const handleSaveConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanPass = defaultPassword.trim();
+    if (!cleanPass || cleanPass.length < 4) {
+      alert('Default temporary password must be at least 4 characters long.');
+      return;
+    }
+    try {
+      setSavingConfig(true);
+      const res = await fetchApi<any>('/branch-roster/default-password', {
+        method: 'PATCH',
+        body: JSON.stringify({ defaultPassword: cleanPass }),
+      });
+      if (res.defaultPassword) {
+        setDefaultPassword(res.defaultPassword);
+      }
+      setAlertMessage({
+        type: 'success',
+        text: 'Corporate email domain and default temporary password configured successfully.',
+      });
+    } catch (err: any) {
+      console.error('Failed to update configuration:', err);
+      alert(err.message || 'Failed to update configuration.');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const safeEmployees = Array.isArray(employees) ? employees : [];
+  const filteredEmployees = safeEmployees.filter(emp =>
+    (emp.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (emp.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -291,7 +372,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 mt-0.5">
             <span>Branch Employee Directory</span>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold border border-slate-200">
-              {employees.length} Members
+              {branchInfo?.name ? `${branchInfo.name} • ${safeEmployees.length} Members` : `${safeEmployees.length} Members`}
             </span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
@@ -301,7 +382,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
 
         {/* Quick Add Button */}
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenAddModal}
           className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition-all cursor-pointer flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
@@ -350,7 +431,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
           
           {/* Corporate Domain Input */}
-          <div className="lg:col-span-4 space-y-1">
+          <div className="lg:col-span-3 space-y-1">
             <label className="block text-[11px] font-bold text-slate-600">
               Corporate Email Domain
             </label>
@@ -369,55 +450,95 @@ export const BranchEmployeeRosterPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Action Hub Buttons */}
-          <div className="lg:col-span-8 flex flex-wrap items-center gap-3 justify-start lg:justify-end">
-            
-            {/* Download Template Button */}
-            <button
-              onClick={handleDownloadTemplate}
-              disabled={downloadingTemplate}
-              className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            >
-              {downloadingTemplate ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Preparing Template...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Download Ingestion Template</span>
-                </>
-              )}
-            </button>
-
-            {/* Upload Completed Roster Button */}
-            <label className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer">
-              <input
-                type="file"
-                accept=".xlsx"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={uploading}
-              />
-              {uploading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Upserting Roster...</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>Upload Completed Roster (.xlsx)</span>
-                </>
-              )}
+          {/* Default Temporary Password (Inline Direct Editing) */}
+          <div className="lg:col-span-3 space-y-1">
+            <label className="block text-[11px] font-bold text-slate-600">
+              Default Temporary Password
             </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={defaultPassword}
+                  onChange={e => setDefaultPassword(e.target.value)}
+                  placeholder={defaultFallbackPassword}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSaveConfig()}
+                disabled={savingConfig}
+                className="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50 flex items-center space-x-1"
+                title="Save Configuration"
+              >
+                {savingConfig ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Configure</span>
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Initial fallback is organization name. Auto-fills in column C upon entering employee name.
+            </p>
+          </div>
 
-            {/* Export Complete Directory Button */}
+          {/* Action Hub Buttons: Two-Row Layout */}
+          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2.5">
+            {/* Top Row: Download on left, Upload to its right */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Download Template Button */}
+              <button
+                onClick={handleDownloadTemplate}
+                disabled={downloadingTemplate}
+                className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {downloadingTemplate ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Preparing Template...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>Download Ingestion Template</span>
+                  </>
+                )}
+              </button>
+
+              {/* Upload Completed Roster Button */}
+              <label className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer">
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+                {uploading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Upserting Roster...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Completed Roster (.xlsx)</span>
+                  </>
+                )}
+              </label>
+            </div>
+
+            {/* Bottom Row: Export Complete Directory Button placed underneath */}
             <button
               onClick={handleExportDirectory}
               disabled={exportingDirectory}
-              className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+              className="py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
             >
               {exportingDirectory ? (
                 <>
@@ -431,7 +552,6 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                 </>
               )}
             </button>
-
           </div>
         </div>
       </div>
@@ -447,7 +567,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or department..."
+              placeholder="Search by name or corporate email..."
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -479,8 +599,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                 <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-black uppercase tracking-wider text-slate-400">
                   <th className="py-3.5 px-6">Employee Full Name</th>
                   <th className="py-3.5 px-6">Corporate Email</th>
-                  <th className="py-3.5 px-6">Department</th>
-                  <th className="py-3.5 px-6">Status</th>
+                  <th className="py-3.5 px-6">Account Status</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -489,17 +608,12 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                   <tr key={emp.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-3.5 px-6 font-bold text-slate-900 flex items-center space-x-2.5">
                       <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center border border-slate-200">
-                        {emp.name.charAt(0).toUpperCase()}
+                        {(emp.name || 'U').charAt(0).toUpperCase()}
                       </div>
                       <span>{emp.name}</span>
                     </td>
                     <td className="py-3.5 px-6 font-mono text-slate-600">
                       {emp.email}
-                    </td>
-                    <td className="py-3.5 px-6">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold">
-                        {emp.department || 'General'}
-                      </span>
                     </td>
                     <td className="py-3.5 px-6">
                       <span
@@ -550,10 +664,10 @@ export const BranchEmployeeRosterPage: React.FC = () => {
 
       </div>
 
-      {/* MODAL 1: ADD SINGLE EMPLOYEE */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5">
+      {/* PORTAL MODAL 1: ADD SINGLE EMPLOYEE */}
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md transition-all animate-fade-in">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-white/60 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-slate-900">
                 Add Branch Employee
@@ -575,7 +689,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                   type="text"
                   required
                   value={addName}
-                  onChange={e => setAddName(e.target.value)}
+                  onChange={e => handleNameChange(e.target.value)}
                   placeholder="e.g. Mohit Kumar"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
@@ -589,44 +703,29 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                   type="text"
                   required
                   value={addEmail}
-                  onChange={e => setAddEmail(e.target.value)}
-                  placeholder={`e.g. mohit.kumar or mohit@${domain || defaultDomain}`}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  onChange={e => handleEmailChange(e.target.value)}
+                  placeholder={`e.g. mohit.kumar@${domain || defaultDomain}`}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  If domain is omitted, @{domain || defaultDomain} will automatically be appended.
+                  Auto-generated from employee name. You can adjust it if needed.
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Department
-                </label>
-                <select
-                  value={addDept}
-                  onChange={e => setAddDept(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value="Engineering">Engineering</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Sales">Sales</option>
-                  <option value="HR">HR</option>
-                  <option value="Finance">Finance</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Initial Temporary Password (Optional)
+                  Temporary Password
                 </label>
                 <input
                   type="text"
                   value={addPassword}
                   onChange={e => setAddPassword(e.target.value)}
-                  placeholder="Leave empty for auto-generated corporate password"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder={defaultPassword || defaultFallbackPassword}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Pre-filled with branch default ({defaultPassword || defaultFallbackPassword}). Employees reset this upon first login.
+                </p>
               </div>
 
               <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
@@ -654,13 +753,14 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* MODAL 2: EDIT EMPLOYEE */}
-      {editingEmployee && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5">
+      {/* PORTAL MODAL 2: EDIT EMPLOYEE */}
+      {editingEmployee && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md transition-all animate-fade-in">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-white/60 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-slate-900">
                 Edit Employee Details
@@ -696,7 +796,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                   required
                   value={editEmail}
                   onChange={e => setEditEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
               </div>
 
@@ -725,13 +825,14 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* MODAL 3: CONFIRM STATUS TOGGLE */}
-      {confirmToggleUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+      {/* PORTAL MODAL 3: CONFIRM STATUS TOGGLE */}
+      {confirmToggleUser && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md transition-all animate-fade-in">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-white/60 max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-start space-x-3.5">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
                 confirmToggleUser.isActive
@@ -781,7 +882,8 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -404,117 +404,145 @@ export async function parseAndValidateWorkspace(
 export async function generateBranchEmployeeTemplate(
   corporateDomain: string,
   branchCode: string,
-  branchName: string
+  branchName: string,
+  defaultPassword?: string
 ): Promise<Buffer> {
   const cleanDomain = corporateDomain.replace(/^@/, '').trim() || 'company.com';
+  const cleanPassword = (defaultPassword && defaultPassword.trim().length >= 4)
+    ? defaultPassword.trim()
+    : cleanDomain;
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'MultiTenant DeskBooking Platform';
 
-  // 1. Config Sheet (Contains domain & branch metadata)
+  // 1. Config Sheet (Enterprise Card Table)
   const configSheet = workbook.addWorksheet('Config');
-  configSheet.state = 'hidden';
-  configSheet.getCell('A1').value = 'CorporateDomain';
-  configSheet.getCell('B1').value = cleanDomain;
-  configSheet.getCell('A2').value = 'BranchCode';
-  configSheet.getCell('B2').value = branchCode;
-  configSheet.getCell('A3').value = 'BranchName';
-  configSheet.getCell('B3').value = branchName;
+  configSheet.views = [{ showGridLines: true }];
 
-  // 2. Employee Roster Sheet
+  // Table Header Row (Row 1)
+  const cfgHeader = configSheet.getRow(1);
+  cfgHeader.values = ['Configuration Parameter', 'Assigned Value'];
+  cfgHeader.height = 26;
+  cfgHeader.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+  cfgHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  cfgHeader.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  cfgHeader.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+
+  const configData = [
+    { param: 'Corporate Email Domain', val: cleanDomain },
+    { param: 'Branch Code', val: branchCode },
+    { param: 'Branch Name', val: branchName },
+    { param: 'Default Initial Password', val: cleanPassword },
+  ];
+
+  configData.forEach((item, idx) => {
+    const rowNum = idx + 2;
+    const r = configSheet.getRow(rowNum);
+    r.height = 22;
+
+    // Col A (Label)
+    const cellA = r.getCell(1);
+    cellA.value = item.param;
+    cellA.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1E293B' } };
+    cellA.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F8' } };
+    cellA.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    cellA.border = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+
+    // Col B (Value)
+    const cellB = r.getCell(2);
+    cellB.value = item.val;
+    cellB.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF002060' } };
+    cellB.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    cellB.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    cellB.border = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+  });
+
+  configSheet.getColumn(1).width = 28;
+  configSheet.getColumn(2).width = 36;
+
+  // 2. Employee Roster Sheet (Strictly 3 Columns)
   const sheet = workbook.addWorksheet('Employee Roster');
   sheet.views = [{ showGridLines: true }];
 
-  // Header Row
   const headerRow = sheet.getRow(1);
   headerRow.values = [
-    'Branch ID',
-    'Branch Name',
     'Employee Full Name',
-    'Department',
-    'Corporate Email (Auto-Generated)',
-    'Initial Temporary Password (Auto-Generated)',
+    'Corporate Email',
+    'Temporary Password',
   ];
-  headerRow.font = { name: 'Segoe UI', size: 10, bold: true };
-  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
   headerRow.height = 26;
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Header Colors
-  // Col A & B: Navy Read-Only
-  headerRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
-  headerRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-  headerRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
-  headerRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  // Col A: Yellow User-Input
+  headerRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+  headerRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF002060' } };
 
-  // Col C & D: Yellow User-Input
-  for (let c = 3; c <= 4; c++) {
-    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
-    headerRow.getCell(c).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF002060' } };
-  }
+  // Col B: Soft Green Formula
+  headerRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+  headerRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
 
-  // Col E & F: Green Formula-Assisted
-  for (let c = 5; c <= 6; c++) {
-    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
-    headerRow.getCell(c).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
-  }
+  // Col C: Soft Green Formula
+  headerRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+  headerRow.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
 
-  // Pre-fill 200 rows with formulas and locked branch info
+  // Pre-fill 200 rows with formulas linking to Config sheet
   for (let r = 2; r <= 201; r++) {
     const row = sheet.getRow(r);
     row.height = 20;
 
-    // Col A: Branch ID
-    row.getCell(1).value = branchCode;
-    row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F7' } };
-    row.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true };
-    row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    // Col A: Employee Full Name (Yellow input)
+    row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    row.getCell(1).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    row.getCell(1).border = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
 
-    // Col B: Branch Name
-    row.getCell(2).value = branchName;
-    row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F7' } };
+    // Col B: Corporate Email formula (links to Config!$B$2)
+    row.getCell(2).value = {
+      formula: `IF(ISBLANK(A${r}), "", LOWER(SUBSTITUTE(TRIM(A${r}), " ", ".")) & "@" & Config!$B$2)`,
+    };
+    row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
     row.getCell(2).font = { name: 'Segoe UI', size: 10 };
-    row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+    row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    row.getCell(2).border = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
 
-    // Col C: Employee Full Name (Yellow input)
-    row.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    // Col C: Temporary Password formula (links to Config!$B$5)
+    row.getCell(3).value = {
+      formula: `IF(ISBLANK(A${r}), "", Config!$B$5)`,
+    };
+    row.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
     row.getCell(3).font = { name: 'Segoe UI', size: 10 };
-    row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
-
-    // Col D: Department (Yellow input with dropdown validation)
-    row.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
-    row.getCell(4).font = { name: 'Segoe UI', size: 10 };
-    row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(4).dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: ['"Engineering,Product,Operations,Sales,Marketing,Human Resources,Finance,Legal"'],
-      showErrorMessage: true,
-      errorTitle: 'Invalid Department',
-      error: 'Please choose a department from the dropdown list.',
+    row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    row.getCell(3).border = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
     };
-
-    // Col E: Corporate Email formula
-    row.getCell(5).value = {
-      formula: `IF(ISBLANK(C${r}), "", LOWER(SUBSTITUTE(TRIM(C${r}), " ", ".")) & "@" & Config!$B$1)`,
-    };
-    row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
-    row.getCell(5).font = { name: 'Segoe UI', size: 10 };
-    row.getCell(5).alignment = { horizontal: 'left', vertical: 'middle' };
-
-    // Col F: Initial Password formula
-    row.getCell(6).value = {
-      formula: `IF(ISBLANK(C${r}), "", "DeskBook$" & YEAR(TODAY()) & "#" & UPPER(LEFT(TRIM(C${r}), 3)) & "!" & ROW())`,
-    };
-    row.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
-    row.getCell(6).font = { name: 'Segoe UI', size: 10 };
-    row.getCell(6).alignment = { horizontal: 'left', vertical: 'middle' };
   }
 
-  sheet.getColumn(1).width = 16;
-  sheet.getColumn(2).width = 24;
+  sheet.getColumn(1).width = 32;
+  sheet.getColumn(2).width = 36;
   sheet.getColumn(3).width = 30;
-  sheet.getColumn(4).width = 24;
-  sheet.getColumn(5).width = 36;
-  sheet.getColumn(6).width = 36;
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -542,7 +570,6 @@ export async function exportBranchEmployeesToExcel(
   headerRow.values = [
     'Employee Full Name',
     'Corporate Email',
-    'Department',
     'Status',
     'Enrolled Date',
   ];
@@ -556,23 +583,21 @@ export async function exportBranchEmployeesToExcel(
     r.height = 20;
     r.getCell(1).value = emp.name;
     r.getCell(2).value = emp.email;
-    r.getCell(3).value = emp.department || '—';
-    r.getCell(4).value = emp.isActive ? 'Active' : 'Deactivated';
-    r.getCell(5).value = new Date(emp.createdAt).toLocaleDateString();
+    r.getCell(3).value = emp.isActive ? 'Active' : 'Deactivated';
+    r.getCell(4).value = new Date(emp.createdAt).toLocaleDateString();
 
     const isDeactivated = !emp.isActive || emp.status === 'DEACTIVATED';
     if (isDeactivated) {
-      r.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FFDC2626' }, bold: true };
+      r.getCell(3).font = { name: 'Segoe UI', size: 10, color: { argb: 'FFDC2626' }, bold: true };
     } else {
-      r.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF16A34A' }, bold: true };
+      r.getCell(3).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF16A34A' }, bold: true };
     }
   });
 
-  sheet.getColumn(1).width = 30;
+  sheet.getColumn(1).width = 32;
   sheet.getColumn(2).width = 36;
-  sheet.getColumn(3).width = 24;
-  sheet.getColumn(4).width = 18;
-  sheet.getColumn(5).width = 20;
+  sheet.getColumn(3).width = 18;
+  sheet.getColumn(4).width = 20;
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

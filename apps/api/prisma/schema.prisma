@@ -42,12 +42,13 @@ model Branch {
   name           String
   code           String
   address        String?
-  status         String       @default("ACTIVE")
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  buildings      Building[]
-  users          User[]       @relation("UserBaseBranch")
-  scopedUsers    User[]       @relation("UserScopedBranch")
+  status                 String       @default("ACTIVE")
+  defaultEmployeePassword String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  buildings              Building[]
+  users                  User[]       @relation("UserBaseBranch")
+  scopedUsers            User[]       @relation("UserScopedBranch")
 
   @@unique([organizationId, code])
 }

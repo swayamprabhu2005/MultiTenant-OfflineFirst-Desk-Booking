@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1520" width="100%" height="100%" style="background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <!-- Background Grid Pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.75" stroke-opacity="0.4"/>
+      <circle cx="40" cy="40" r="1" fill="#334155" fill-opacity="0.5"/>
+    </pattern>
+
+    <!-- Drop Shadow Filters -->
+    <filter id="shadow" x="-8%" y="-8%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glow-cyan" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#06b6d4" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="aurora-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="25%" stop-color="#312e81"/>
+      <stop offset="50%" stop-color="#4338ca"/>
+      <stop offset="75%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+
+    <linearGradient id="card-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- Entity Header Gradients -->
+    <linearGradient id="h-org" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="h-facility" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="h-workstation" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="h-user" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="h-audit" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+
+    <!-- Line Marker Arrowheads -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981"/>
+    </marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#06b6d4"/>
+    </marker>
+    <marker id="arrow-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#818cf8"/>
+    </marker>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="100%" height="100%" fill="#0b0f19"/>
+  <rect width="100%" height="100%" fill="url(#grid)"/>
+
+  <!-- ==================================================================== -->
+  <!-- 1. TOP HEADER BANNER (AURORA SPECTRUM)                              -->
+  <!-- ==================================================================== -->
+  <g transform="translate(40, 30)">
+    <rect width="1920" height="90" rx="16" fill="url(#aurora-grad)" filter="url(#shadow)" stroke="#4338ca" stroke-width="1.5" stroke-opacity="0.4"/>
+    
+    <text x="32" y="42" font-size="22" font-weight="900" fill="#ffffff" letter-spacing="-0.5">MULTI-TENANT DESK BOOKING PLATFORM</text>
+    <text x="32" y="68" font-size="13" font-weight="500" fill="#e0e7ff" opacity="0.9">Enterprise Entity-Relationship Database Schema, Administrative Governance Tiers &amp; Ingestion Lifecycles</text>
+
+    <!-- Top Badges -->
+    <g transform="translate(1360, 26)">
+      <!-- Platform Badge -->
+      <rect x="0" y="0" width="165" height="38" rx="10" fill="#1e1b4b" fill-opacity="0.6" stroke="#818cf8" stroke-width="1"/>
+      <circle cx="18" cy="19" r="5" fill="#a855f7"/>
+      <text x="32" y="18" font-size="10" font-weight="800" fill="#ffffff">PLATFORM ADMIN</text>
+      <text x="32" y="30" font-size="9" font-mono="true" fill="#c084fc">subdomain: system</text>
+
+      <!-- Org Admin Badge -->
+      <rect x="180" y="0" width="175" height="38" rx="10" fill="#1e1b4b" fill-opacity="0.6" stroke="#0284c7" stroke-width="1"/>
+      <circle cx="198" cy="19" r="5" fill="#38bdf8"/>
+      <text x="212" y="18" font-size="10" font-weight="800" fill="#ffffff">ORG ADMINISTRATOR</text>
+      <text x="212" y="30" font-size="9" font-mono="true" fill="#7dd3fc">Global Tenant Scope</text>
+
+      <!-- Branch Admin Badge -->
+      <rect x="370" y="0" width="160" height="38" rx="10" fill="#1e1b4b" fill-opacity="0.6" stroke="#10b981" stroke-width="1"/>
+      <circle cx="388" cy="19" r="5" fill="#34d399"/>
+      <text x="402" y="18" font-size="10" font-weight="800" fill="#ffffff">BRANCH ADMIN</text>
+      <text x="402" y="30" font-size="9" font-mono="true" fill="#6ee7b7">Scoped Facility Authority</text>
+    </g>
+  </g>
+
+  <!-- ==================================================================== -->
+  <!-- 2. ADMINISTRATIVE GOVERNANCE & INGESTION TIERS (UPPER SECTION)      -->
+  <!-- ==================================================================== -->
+
+  <!-- Tier 1: Platform Admin Control Plane -->
+  <g transform="translate(40, 145)">
+    <rect width="580" height="230" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="580" height="38" rx="14" fill="#1e293b"/>
+    <rect y="24" width="580" height="14" fill="#1e293b"/>
+    <circle cx="20" cy="19" r="6" fill="#a855f7"/>
+    <text x="34" y="24" font-size="12" font-weight="800" fill="#f1f5f9" letter-spacing="0.5">TIER 1: PLATFORM SUPERADMIN CONTROL PLANE</text>
+    <rect x="470" y="8" width="95" height="22" rx="6" fill="#4c1d95" stroke="#7c3aed" stroke-width="1"/>
+    <text x="517" y="23" font-size="9" font-weight="800" fill="#e9d5ff" text-anchor="middle">SUPERADMIN</text>
+
+    <text x="20" y="64" font-size="11" font-weight="700" fill="#38bdf8">• Master Tenant Management:</text>
+    <text x="35" y="82" font-size="10" fill="#94a3b8">Provisions tenant organizations, assigns codes &amp; custom subdomains (acme, corp).</text>
+
+    <text x="20" y="108" font-size="11" font-weight="700" fill="#f43f5e">• Atomic Cascade Purge (DELETE /api/organizations/:id):</text>
+    <text x="35" y="126" font-size="10" fill="#94a3b8">Purges child bookings, rooms, desks, sections, floors, buildings, branches &amp; users.</text>
+    <text x="35" y="142" font-size="9" font-mono="true" fill="#fb7185">Protected Guard: SYSTEM root organization is strictly immutable &amp; undeletable.</text>
+
+    <text x="20" y="168" font-size="11" font-weight="700" fill="#a855f7">• Global SaaS Audit Stream:</text>
+    <text x="35" y="186" font-size="10" fill="#94a3b8">Centralized audit trail tracking all tenant registration, deletion, and auth events.</text>
+    <text x="20" y="210" font-size="9" font-mono="true" fill="#64748b">Routes: /api/organizations • /api/audit • Role: PLATFORM_ADMIN</text>
+  </g>
+
+  <!-- Tier 2: Organization Admin Workspace Orchestration -->
+  <g transform="translate(650, 145)">
+    <rect width="660" height="230" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="660" height="38" rx="14" fill="#1e293b"/>
+    <rect y="24" width="660" height="14" fill="#1e293b"/>
+    <circle cx="20" cy="19" r="6" fill="#0284c7"/>
+    <text x="34" y="24" font-size="12" font-weight="800" fill="#f1f5f9" letter-spacing="0.5">TIER 2: ORGANIZATION ADMIN (5-SHEET WORKSPACE INGESTION)</text>
+    <rect x="550" y="8" width="95" height="22" rx="6" fill="#075985" stroke="#0284c7" stroke-width="1"/>
+    <text x="597" y="23" font-size="9" font-weight="800" fill="#bae6fd" text-anchor="middle">ORG ADMIN</text>
+
+    <text x="20" y="64" font-size="11" font-weight="700" fill="#38bdf8">• 5-Sheet Cascading Excel Ingestion (JSZip XML Processor):</text>
+    <text x="35" y="82" font-size="10" fill="#94a3b8">Sheet 1: Org  ➔ Sheet 2: Branches  ➔ Sheet 3: Buildings  ➔ Sheet 4: Floors  ➔ Sheet 5: Sections</text>
+
+    <text x="20" y="108" font-size="11" font-weight="700" fill="#fbbf24">• 72-Hour Modification Grace Window:</text>
+    <text x="35" y="126" font-size="10" fill="#94a3b8">Org Admins can re-download &amp; update populated sheets for 72h. Permanently locks after 72h.</text>
+    <text x="35" y="142" font-size="9" font-mono="true" fill="#fde68a">Stored in: Organization.workspaceSetupAt &amp; Organization.workspaceSetupExcel</text>
+
+    <text x="20" y="168" font-size="11" font-weight="700" fill="#34d399">• Branch Admin Provisioning &amp; Global Oversight:</text>
+    <text x="35" y="186" font-size="10" fill="#94a3b8">Assigns Branch Admins with defaultBranchAdminPassword. Architectural view (No Desk Booking).</text>
+    <text x="20" y="210" font-size="9" font-mono="true" fill="#64748b">Routes: /api/workspace/upload • /api/roster • Role: ORGANIZATION_ADMIN</text>
+  </g>
+
+  <!-- Tier 3: Branch Admin Facility Management & 3-Column Roster -->
+  <g transform="translate(1340, 145)">
+    <rect width="620" height="230" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="620" height="38" rx="14" fill="#1e293b"/>
+    <rect y="24" width="620" height="14" fill="#1e293b"/>
+    <circle cx="20" cy="19" r="6" fill="#10b981"/>
+    <text x="34" y="24" font-size="12" font-weight="800" fill="#f1f5f9" letter-spacing="0.5">TIER 3: BRANCH ADMIN (FACILITY OPS &amp; 3-COL ROSTER)</text>
+    <rect x="500" y="8" width="105" height="22" rx="6" fill="#065f46" stroke="#10b981" stroke-width="1"/>
+    <text x="552" y="23" font-size="9" font-weight="800" fill="#a7f3d0" text-anchor="middle">BRANCH ADMIN</text>
+
+    <text x="20" y="64" font-size="11" font-weight="700" fill="#34d399">• Scoped Facility Authority (scopedBranchId):</text>
+    <text x="35" y="82" font-size="10" fill="#94a3b8">Strictly manages desks, reservations, pods, meeting rooms, and staff in assigned branch.</text>
+
+    <text x="20" y="108" font-size="11" font-weight="700" fill="#38bdf8">• 3-Column Formula Roster (Option A Batch Ingestion):</text>
+    <text x="35" y="126" font-size="10" fill="#94a3b8">Col A: Full Name | Col B: =IF(ISBLANK(A2), "", ...) Email | Col C: =IF(ISBLANK(A2), "", ...) Temp Pwd</text>
+    <text x="35" y="142" font-size="9" font-mono="true" fill="#6ee7b7">Config Sheet: Navy #1F4E79 • Ghost rows prevented • Upsert keyed on (orgId, email)</text>
+
+    <text x="20" y="168" font-size="11" font-weight="700" fill="#f59e0b">• Default Password Hub &amp; Branch Audit Log Console:</text>
+    <text x="35" y="186" font-size="10" fill="#94a3b8">Branch.defaultEmployeePassword hub + Scoped audit trail (/branch/audit).</text>
+    <text x="20" y="210" font-size="9" font-mono="true" fill="#64748b">Routes: /api/branch-roster/* • /api/audit (scoped) • Role: BRANCH_ADMIN</text>
+  </g>
+
+  <!-- Connectors from Tiers to Database Layer -->
+  <path d="M 330 375 L 330 430 L 190 430 L 190 490" fill="none" stroke="#818cf8" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arrow-indigo)"/>
+  <path d="M 980 375 L 980 440 L 190 440 L 190 490" fill="none" stroke="#0284c7" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arrow-cyan)"/>
+  <path d="M 1650 375 L 1650 440 L 580 440 L 580 490" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arrow-emerald)"/>
+
+  <!-- ==================================================================== -->
+  <!-- 3. CORE DATABASE ENTITY RELATIONSHIP DIAGRAM (PRISMA SCHEMA)         -->
+  <!-- ==================================================================== -->
+
+  <!-- ENTITY 1: Organization -->
+  <g transform="translate(40, 500)">
+    <rect width="320" height="345" rx="12" fill="#0f172a" stroke="#6366f1" stroke-width="2" filter="url(#shadow)"/>
+    <rect width="320" height="34" rx="12" fill="url(#h-org)"/>
+    <rect y="22" width="320" height="12" fill="url(#h-org)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Organization</text>
+    <text x="304" y="22" font-size="9" font-mono="true" fill="#e0e7ff" text-anchor="end">TABLE</text>
+
+    <!-- Fields -->
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0"><tspan fill="#38bdf8" font-weight="bold">UK </tspan>code: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#38bdf8" font-weight="bold">UK </tspan>subdomain: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="60" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="80" fill="#e2e8f0">   logoUrl: <tspan fill="#94a3b8">String?</tspan></text>
+      <text y="100" fill="#e2e8f0">   themeColor: <tspan fill="#94a3b8">String? (default: #16a34a)</tspan></text>
+      <text y="120" fill="#e2e8f0">   timezone: <tspan fill="#94a3b8">String (default: UTC)</tspan></text>
+      <text y="140" fill="#e2e8f0">   status: <tspan fill="#94a3b8">String (ACTIVE)</tspan></text>
+      <text y="160" fill="#fbbf24">★  workspaceSetupAt: <tspan fill="#94a3b8">DateTime?</tspan></text>
+      <text y="180" fill="#fbbf24">★  workspaceSetupExcel: <tspan fill="#94a3b8">Bytes?</tspan></text>
+      <text y="200" fill="#34d399">★  defaultBranchAdminPassword: <tspan fill="#94a3b8">String?</tspan></text>
+      <text y="220" fill="#64748b">   createdAt: DateTime</text>
+      <text y="240" fill="#64748b">   updatedAt: DateTime</text>
+
+      <!-- Relations note -->
+      <line x1="-6" y1="254" x2="294" y2="254" stroke="#334155" stroke-width="1"/>
+      <text y="270" font-size="9.5" fill="#a5b4fc">Relations: 1:N Branches, Buildings, Users, Logs</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 2: Branch -->
+  <g transform="translate(420, 500)">
+    <rect width="330" height="320" rx="12" fill="#0f172a" stroke="#0891b2" stroke-width="2" filter="url(#shadow)"/>
+    <rect width="330" height="34" rx="12" fill="url(#h-facility)"/>
+    <rect y="22" width="330" height="12" fill="url(#h-facility)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Branch</text>
+    <text x="314" y="22" font-size="9" font-mono="true" fill="#cffafe" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0"><tspan fill="#818cf8" font-weight="bold">FK </tspan>organizationId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="40" fill="#e2e8f0">   code: <tspan fill="#94a3b8">String (e.g. BR001)</tspan></text>
+      <text y="60" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String (e.g. Goa HQ)</tspan></text>
+      <text y="80" fill="#e2e8f0">   address: <tspan fill="#94a3b8">String?</tspan></text>
+      <text y="100" fill="#e2e8f0">   status: <tspan fill="#94a3b8">String (ACTIVE)</tspan></text>
+      <text y="120" fill="#34d399">★  defaultEmployeePassword: <tspan fill="#94a3b8">String?</tspan></text>
+      <text y="140" fill="#64748b">   createdAt: DateTime</text>
+      <text y="160" fill="#64748b">   updatedAt: DateTime</text>
+
+      <line x1="-6" y1="176" x2="304" y2="176" stroke="#334155" stroke-width="1"/>
+      <text y="194" font-size="9.5" fill="#67e8f9">Index: @@unique([organizationId, code])</text>
+      <text y="214" font-size="9.5" fill="#a5b4fc">Relations: 1:N Buildings</text>
+      <text y="234" font-size="9.5" fill="#34d399">Scope: 1:N User.scopedBranch (Branch Admins)</text>
+      <text y="250" font-size="9.5" fill="#94a3b8">Scope: 1:N User.baseBranch (Staff Members)</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 3: Building -->
+  <g transform="translate(800, 500)">
+    <rect width="310" height="290" rx="12" fill="#0f172a" stroke="#0891b2" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="310" height="34" rx="12" fill="url(#h-facility)"/>
+    <rect y="22" width="310" height="12" fill="url(#h-facility)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Building</text>
+    <text x="294" y="22" font-size="9" font-mono="true" fill="#cffafe" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0"><tspan fill="#818cf8" font-weight="bold">FK </tspan>organizationId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#06b6d4" font-weight="bold">FK </tspan>branchId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0">   code: <tspan fill="#94a3b8">String (e.g. BLD001)</tspan></text>
+      <text y="80" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String (e.g. Bhaskar)</tspan></text>
+      <text y="100" fill="#e2e8f0">   address: <tspan fill="#94a3b8">String?</tspan></text>
+      <text y="120" fill="#e2e8f0">   status: <tspan fill="#94a3b8">String (ACTIVE)</tspan></text>
+      <text y="140" fill="#64748b">   createdAt: DateTime</text>
+      <text y="160" fill="#64748b">   updatedAt: DateTime</text>
+
+      <line x1="-6" y1="176" x2="284" y2="176" stroke="#334155" stroke-width="1"/>
+      <text y="194" font-size="9.5" fill="#67e8f9">Index: @@unique([organizationId, code])</text>
+      <text y="214" font-size="9.5" fill="#a5b4fc">Relations: 1:N Floors</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 4: Floor -->
+  <g transform="translate(1160, 500)">
+    <rect width="310" height="280" rx="12" fill="#0f172a" stroke="#0891b2" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="310" height="34" rx="12" fill="url(#h-facility)"/>
+    <rect y="22" width="310" height="12" fill="url(#h-facility)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Floor</text>
+    <text x="294" y="22" font-size="9" font-mono="true" fill="#cffafe" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0">   organizationId: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#06b6d4" font-weight="bold">FK </tspan>buildingId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0">   code: <tspan fill="#94a3b8">String (e.g. 1-FL01)</tspan></text>
+      <text y="80" fill="#e2e8f0">   floorNumber: <tspan fill="#94a3b8">Int</tspan></text>
+      <text y="100" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String (Floor 1)</tspan></text>
+      <text y="120" fill="#64748b">   createdAt: DateTime</text>
+      <text y="140" fill="#64748b">   updatedAt: DateTime</text>
+
+      <line x1="-6" y1="156" x2="284" y2="156" stroke="#334155" stroke-width="1"/>
+      <text y="174" font-size="9.5" fill="#67e8f9">Index: @@unique([buildingId, code])</text>
+      <text y="194" font-size="9.5" fill="#a5b4fc">Relations: 1:N Sections (Max 4)</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 5: Section -->
+  <g transform="translate(1520, 500)">
+    <rect width="330" height="295" rx="12" fill="#0f172a" stroke="#0891b2" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="330" height="34" rx="12" fill="url(#h-facility)"/>
+    <rect y="22" width="330" height="12" fill="url(#h-facility)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Section</text>
+    <text x="314" y="22" font-size="9" font-mono="true" fill="#cffafe" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0">   organizationId: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#06b6d4" font-weight="bold">FK </tspan>floorId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String (First North)</tspan></text>
+      <text y="80" fill="#e2e8f0">   direction: <tspan fill="#94a3b8">String (N,S,E,W)</tspan></text>
+      <text y="100" fill="#e2e8f0">   standardDeskCount: <tspan fill="#94a3b8">Int</tspan></text>
+      <text y="120" fill="#e2e8f0">   hdmiDeskCount: <tspan fill="#94a3b8">Int</tspan></text>
+      <text y="140" fill="#64748b">   createdAt: DateTime</text>
+      <text y="160" fill="#64748b">   updatedAt: DateTime</text>
+
+      <line x1="-6" y1="176" x2="304" y2="176" stroke="#334155" stroke-width="1"/>
+      <text y="194" font-size="9.5" fill="#67e8f9">Index: @@unique([floorId, name])</text>
+      <text y="214" font-size="9.5" fill="#a5b4fc">Relations: 1:N Desks • 1:1 MeetingRoom?</text>
+    </g>
+  </g>
+
+  <!-- ==================================================================== -->
+  <!-- 4. ROW 2: IDENTITY, BOOKINGS, DESKS, ROOMS, AUDIT (PRISMA SCHEMA)    -->
+  <!-- ==================================================================== -->
+
+  <!-- ENTITY 6: User -->
+  <g transform="translate(40, 890)">
+    <rect width="340" height="420" rx="12" fill="#0f172a" stroke="#2563eb" stroke-width="2" filter="url(#shadow)"/>
+    <rect width="340" height="34" rx="12" fill="url(#h-user)"/>
+    <rect y="22" width="340" height="12" fill="url(#h-user)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">User</text>
+    <text x="324" y="22" font-size="9" font-mono="true" fill="#dbeafe" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="18" fill="#e2e8f0"><tspan fill="#818cf8" font-weight="bold">FK </tspan>organizationId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="36" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="54" fill="#e2e8f0"><tspan fill="#38bdf8" font-weight="bold">UK </tspan>email: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="72" fill="#64748b">   passwordHash: String</text>
+      <text y="90" fill="#38bdf8">★  role: <tspan fill="#f1f5f9" font-weight="bold">Role (Enum)</tspan></text>
+      <text y="108" fill="#64748b">   department: String? (Deprecated)</text>
+      <text y="126" fill="#06b6d4"><tspan fill="#0891b2" font-weight="bold">FK </tspan>baseBranchId: <tspan fill="#94a3b8">UUID? (SetNull)</tspan></text>
+      <text y="144" fill="#10b981"><tspan fill="#059669" font-weight="bold">FK </tspan>scopedBranchId: <tspan fill="#94a3b8">UUID? (Branch Admin)</tspan></text>
+      <text y="162" fill="#818cf8"><tspan fill="#6366f1" font-weight="bold">FK </tspan>teamLeadId: <tspan fill="#94a3b8">UUID? (Self-Relation)</tspan></text>
+      <text y="180" fill="#f59e0b">★  mustChangePassword: <tspan fill="#94a3b8">Boolean</tspan></text>
+      <text y="198" fill="#e2e8f0">   isActive: <tspan fill="#94a3b8">Boolean (default: true)</tspan></text>
+      <text y="216" fill="#e2e8f0">   status: <tspan fill="#94a3b8">String (ACTIVE)</tspan></text>
+      <text y="234" fill="#64748b">   createdAt / updatedAt: DateTime</text>
+
+      <line x1="-6" y1="248" x2="314" y2="248" stroke="#334155" stroke-width="1"/>
+      <text y="266" font-size="9.5" fill="#93c5fd">Role Enum Values:</text>
+      <text y="284" font-size="9" fill="#cbd5e1">• PLATFORM_ADMIN  • ORGANIZATION_ADMIN</text>
+      <text y="300" font-size="9" fill="#cbd5e1">• BRANCH_ADMIN    • TECH_LEAD  • EMPLOYEE</text>
+      <text y="324" font-size="9.5" fill="#a5b4fc">Relations: 1:N Bookings, 1:N AuditLogs</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 7: AuditLog -->
+  <g transform="translate(430, 890)">
+    <rect width="330" height="300" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="330" height="34" rx="12" fill="url(#h-audit)"/>
+    <rect y="22" width="330" height="12" fill="url(#h-audit)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">AuditLog</text>
+    <text x="314" y="22" font-size="9" font-mono="true" fill="#fef3c7" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0"><tspan fill="#818cf8" font-weight="bold">FK </tspan>organizationId: <tspan fill="#94a3b8">UUID? (SetNull)</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#3b82f6" font-weight="bold">FK </tspan>actorUserId: <tspan fill="#94a3b8">UUID? (SetNull)</tspan></text>
+      <text y="60" fill="#e2e8f0">   action: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="80" fill="#e2e8f0">   entityType: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="100" fill="#e2e8f0">   entityId: <tspan fill="#94a3b8">String</tspan></text>
+      <text y="120" fill="#f59e0b">   metadata: <tspan fill="#94a3b8">Json?</tspan></text>
+      <text y="140" fill="#64748b">   createdAt: DateTime (default: now)</text>
+
+      <line x1="-6" y1="156" x2="304" y2="156" stroke="#334155" stroke-width="1"/>
+      <text y="174" font-size="9.5" fill="#fde68a">Actions Logged:</text>
+      <text y="192" font-size="9" fill="#cbd5e1">• REGISTER_TENANT  • DELETE_ORGANIZATION</text>
+      <text y="208" font-size="9" fill="#cbd5e1">• BATCH_IMPORT_EMPLOYEES  • UPDATE_PASSWORD</text>
+      <text y="224" font-size="9" fill="#cbd5e1">• TOGGLE_EMPLOYEE_STATUS • DESK_RESERVED</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 8: Booking -->
+  <g transform="translate(800, 890)">
+    <rect width="320" height="280" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="2" filter="url(#shadow)"/>
+    <rect width="320" height="34" rx="12" fill="url(#h-workstation)"/>
+    <rect y="22" width="320" height="12" fill="url(#h-workstation)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Booking</text>
+    <text x="304" y="22" font-size="9" font-mono="true" fill="#d1fae5" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0">   organizationId: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#10b981" font-weight="bold">FK </tspan>deskId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0"><tspan fill="#3b82f6" font-weight="bold">FK </tspan>userId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="80" fill="#e2e8f0">   startTime: <tspan fill="#94a3b8">DateTime</tspan></text>
+      <text y="100" fill="#e2e8f0">   endTime: <tspan fill="#94a3b8">DateTime</tspan></text>
+      <text y="120" fill="#34d399">   status: <tspan fill="#94a3b8">String (CONFIRMED)</tspan></text>
+      <text y="140" fill="#64748b">   createdAt / updatedAt: DateTime</text>
+
+      <line x1="-6" y1="156" x2="294" y2="156" stroke="#334155" stroke-width="1"/>
+      <text y="174" font-size="9.5" fill="#a7f3d0">Scope: Branch Admins &amp; Staff</text>
+      <text y="192" font-size="9" fill="#f43f5e">Rule: ORG_ADMIN forbidden from booking desks</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 9: Desk -->
+  <g transform="translate(1160, 890)">
+    <rect width="320" height="295" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="320" height="34" rx="12" fill="url(#h-workstation)"/>
+    <rect y="22" width="320" height="12" fill="url(#h-workstation)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">Desk</text>
+    <text x="304" y="22" font-size="9" font-mono="true" fill="#d1fae5" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0">   organizationId: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#06b6d4" font-weight="bold">FK </tspan>sectionId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0">   deskCode: <tspan fill="#94a3b8">String (e.g. C-01)</tspan></text>
+      <text y="80" fill="#e2e8f0">   deskNumber: <tspan fill="#94a3b8">Int</tspan></text>
+      <text y="100" fill="#38bdf8">   hasHdmi: <tspan fill="#94a3b8">Boolean (default: false)</tspan></text>
+      <text y="120" fill="#e2e8f0">   isMeetingRoom: <tspan fill="#94a3b8">Boolean (false)</tspan></text>
+      <text y="140" fill="#34d399">   status: <tspan fill="#94a3b8">String (AVAILABLE)</tspan></text>
+      <text y="160" fill="#64748b">   createdAt / updatedAt: DateTime</text>
+
+      <line x1="-6" y1="176" x2="294" y2="176" stroke="#334155" stroke-width="1"/>
+      <text y="194" font-size="9.5" fill="#67e8f9">Index: @@unique([sectionId, deskCode])</text>
+      <text y="214" font-size="9.5" fill="#a7f3d0">Floor Plan: Rendered in 4-Desk Facing Pods</text>
+      <text y="230" font-size="9.5" fill="#a7f3d0">HDMI: Symmetric round-robin pod layout</text>
+    </g>
+  </g>
+
+  <!-- ENTITY 10: MeetingRoom -->
+  <g transform="translate(1520, 890)">
+    <rect width="330" height="280" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect width="330" height="34" rx="12" fill="url(#h-workstation)"/>
+    <rect y="22" width="330" height="12" fill="url(#h-workstation)"/>
+    <text x="16" y="23" font-size="13" font-weight="900" fill="#ffffff">MeetingRoom</text>
+    <text x="314" y="22" font-size="9" font-mono="true" fill="#d1fae5" text-anchor="end">TABLE</text>
+
+    <g transform="translate(16, 52)" font-size="11" font-mono="true">
+      <text y="0" fill="#e2e8f0"><tspan fill="#f43f5e" font-weight="bold">PK </tspan>id: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="20" fill="#e2e8f0">   organizationId: <tspan fill="#94a3b8">UUID</tspan></text>
+      <text y="40" fill="#e2e8f0"><tspan fill="#38bdf8" font-weight="bold">UK </tspan><tspan fill="#06b6d4">FK </tspan>sectionId: <tspan fill="#94a3b8">UUID (Cascade)</tspan></text>
+      <text y="60" fill="#e2e8f0">   name: <tspan fill="#94a3b8">String (e.g. Conference)</tspan></text>
+      <text y="80" fill="#e2e8f0">   capacity: <tspan fill="#94a3b8">Int (default: 0)</tspan></text>
+      <text y="100" fill="#38bdf8">   hasHdmi: <tspan fill="#94a3b8">Boolean</tspan></text>
+      <text y="120" fill="#e2e8f0">   hdmiCount: <tspan fill="#94a3b8">Int</tspan></text>
+      <text y="140" fill="#64748b">   createdAt / updatedAt: DateTime</text>
+
+      <line x1="-6" y1="156" x2="304" y2="156" stroke="#334155" stroke-width="1"/>
+      <text y="174" font-size="9.5" fill="#67e8f9">Relation: 1:1 with Section (Unique)</text>
+      <text y="192" font-size="9.5" fill="#a7f3d0">Condition: Enabled only if Sheet 5 has "Yes"</text>
+    </g>
+  </g>
+
+  <!-- ==================================================================== -->
+  <!-- 5. RELATIONSHIP CONNECTORS & CARDINALITIES                           -->
+  <!-- ==================================================================== -->
+
+  <!-- Organization -> Branch (1:N) -->
+  <path d="M 360 620 L 420 620" fill="none" stroke="#818cf8" stroke-width="2" marker-end="url(#arrow-indigo)"/>
+  <text x="390" y="612" font-size="9" font-weight="bold" fill="#a5b4fc" text-anchor="middle">1:N</text>
+
+  <!-- Branch -> Building (1:N) -->
+  <path d="M 750 620 L 800 620" fill="none" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <text x="775" y="612" font-size="9" font-weight="bold" fill="#67e8f9" text-anchor="middle">1:N</text>
+
+  <!-- Building -> Floor (1:N) -->
+  <path d="M 1110 620 L 1160 620" fill="none" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <text x="1135" y="612" font-size="9" font-weight="bold" fill="#67e8f9" text-anchor="middle">1:N</text>
+
+  <!-- Floor -> Section (1:N) -->
+  <path d="M 1470 620 L 1520 620" fill="none" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <text x="1495" y="612" font-size="9" font-weight="bold" fill="#67e8f9" text-anchor="middle">1:N</text>
+
+  <!-- Section -> Desk (1:N) -->
+  <path d="M 1680 795 L 1680 845 L 1320 845 L 1320 890" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <text x="1500" y="840" font-size="9" font-weight="bold" fill="#34d399" text-anchor="middle">1:N (Desks in Section)</text>
+
+  <!-- Section -> MeetingRoom (1:1) -->
+  <path d="M 1720 795 L 1720 890" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <text x="1740" y="845" font-size="9" font-weight="bold" fill="#34d399" text-anchor="start">1:1 (Unique)</text>
+
+  <!-- Organization -> User (1:N) -->
+  <path d="M 200 845 L 200 890" fill="none" stroke="#818cf8" stroke-width="2" marker-end="url(#arrow-indigo)"/>
+  <text x="210" y="870" font-size="9" font-weight="bold" fill="#a5b4fc">1:N</text>
+
+  <!-- User -> Booking (1:N) -->
+  <path d="M 380 1020 L 800 1020" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="590" y="1012" font-size="9" font-weight="bold" fill="#93c5fd" text-anchor="middle">1:N (User Reservations)</text>
+
+  <!-- Desk -> Booking (1:N) -->
+  <path d="M 1160 1020 L 1120 1020" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <text x="1140" y="1012" font-size="9" font-weight="bold" fill="#34d399" text-anchor="middle">1:N</text>
+
+  <!-- User -> AuditLog (1:N) -->
+  <path d="M 380 940 L 430 940" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="405" y="932" font-size="9" font-weight="bold" fill="#fcd34d" text-anchor="middle">1:N</text>
+
+  <!-- Branch -> User Scoped (1:N) -->
+  <path d="M 480 820 L 480 860 L 350 860 L 350 890" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <text x="415" y="855" font-size="8.5" font-weight="bold" fill="#34d399">scopedBranchId</text>
+
+  <!-- ==================================================================== -->
+  <!-- 6. BOTTOM LEGEND & MULTI-TENANT BOUNDARY SPECIFICATION               -->
+  <!-- ==================================================================== -->
+  <g transform="translate(40, 1345)">
+    <rect width="1920" height="135" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    
+    <!-- Legend Items -->
+    <g transform="translate(24, 25)">
+      <text x="0" y="0" font-size="12" font-weight="900" fill="#ffffff" letter-spacing="0.5">ARCHITECTURAL LEGEND &amp; SCHEMA CONVENTIONS</text>
+      
+      <!-- PK -->
+      <rect x="0" y="15" width="28" height="18" rx="4" fill="#f43f5e"/>
+      <text x="14" y="28" font-size="9" font-mono="true" font-weight="bold" fill="#ffffff" text-anchor="middle">PK</text>
+      <text x="36" y="28" font-size="10" fill="#cbd5e1">Primary Key (UUID v4)</text>
+
+      <!-- FK -->
+      <rect x="180" y="15" width="28" height="18" rx="4" fill="#818cf8"/>
+      <text x="194" y="28" font-size="9" font-mono="true" font-weight="bold" fill="#ffffff" text-anchor="middle">FK</text>
+      <text x="216" y="28" font-size="10" fill="#cbd5e1">Foreign Key (Referential Cascade)</text>
+
+      <!-- UK -->
+      <rect x="420" y="15" width="28" height="18" rx="4" fill="#0284c7"/>
+      <text x="434" y="28" font-size="9" font-mono="true" font-weight="bold" fill="#ffffff" text-anchor="middle">UK</text>
+      <text x="456" y="28" font-size="10" fill="#cbd5e1">Unique Constraint / Key</text>
+
+      <!-- Star -->
+      <text x="630" y="28" font-size="12" fill="#fbbf24">★</text>
+      <text x="646" y="28" font-size="10" fill="#cbd5e1">Feature Highlight (72h Grace, Default Password Hub, Formula Automation)</text>
+
+      <!-- Multi-Tenant Scope Summary -->
+      <line x1="0" y1="48" x2="1870" y2="48" stroke="#1e293b" stroke-width="1"/>
+      
+      <text x="0" y="68" font-size="10.5" font-weight="700" fill="#38bdf8">Strict Multi-Tenant Isolation:</text>
+      <text x="180" y="68" font-size="10" fill="#94a3b8">Every entity carries an <tspan fill="#ffffff" font-mono="true">organizationId</tspan> foreign key. All Prisma queries are scoped by the active tenant subdomain.</text>
+
+      <text x="0" y="88" font-size="10.5" font-weight="700" fill="#34d399">Branch Governance Scope:</text>
+      <text x="180" y="88" font-size="10" fill="#94a3b8">Branch Admins possess authority restricted to their <tspan fill="#ffffff" font-mono="true">scopedBranchId</tspan>. Floor plan selectors, roster batch ingestion, and audit logs auto-scope to their branch.</text>
+
+      <text x="1200" y="88" font-size="9" font-mono="true" fill="#64748b">Generated for Multi-Tenant Offline-First Desk Booking Platform • v2.5 Enterprise Edition</text>
+    </g>
+  </g>
+
+</svg>
