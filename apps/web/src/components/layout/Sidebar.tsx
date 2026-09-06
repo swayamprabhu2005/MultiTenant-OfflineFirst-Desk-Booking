@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -14,6 +15,10 @@ import {
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
+  const { tenant } = useTenant();
+  const activeOrg = user?.organization || tenant;
+  const orgColor = activeOrg?.themeColor || '#16a34a';
+
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
   const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -27,6 +32,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
         { name: 'Employee Directory', to: '/branch/employees', icon: Users },
+        { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -76,13 +82,24 @@ export const Sidebar: React.FC = () => {
                 to={item.to}
                 end={item.to === '/'}
                 title={isCollapsed ? item.name : undefined}
+                style={({ isActive }) =>
+                  isActive && !isPlatformAdmin
+                    ? {
+                        backgroundColor: `${orgColor}15`,
+                        color: orgColor,
+                        borderColor: `${orgColor}30`,
+                      }
+                    : undefined
+                }
                 className={({ isActive }) =>
                   `flex items-center ${
                     isCollapsed ? 'justify-center px-2 py-3' : 'space-x-3 px-3 py-2.5'
-                  } rounded-xl text-sm font-semibold transition-all ${
+                  } rounded-xl text-sm font-semibold transition-all border ${
                     isActive
-                      ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      ? isPlatformAdmin
+                        ? 'bg-purple-50 text-purple-700 shadow-xs border-purple-200'
+                        : 'shadow-xs'
+                      : 'border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   }`
                 }
               >

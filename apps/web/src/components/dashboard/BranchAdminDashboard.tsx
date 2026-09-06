@@ -90,9 +90,13 @@ export const BranchAdminDashboard: React.FC = () => {
 
           let empCount = 0;
           try {
-            const employees = await fetchApi<any[]>('/branch-roster/employees');
-            if (Array.isArray(employees)) {
-              empCount = employees.length;
+            const res = await fetchApi<any>('/branch-roster/employees');
+            if (res && typeof res.total === 'number') {
+              empCount = res.total;
+            } else if (res && Array.isArray(res.employees)) {
+              empCount = res.employees.length;
+            } else if (Array.isArray(res)) {
+              empCount = res.length;
             }
           } catch (e) {
             console.warn('Could not load branch employee count:', e);

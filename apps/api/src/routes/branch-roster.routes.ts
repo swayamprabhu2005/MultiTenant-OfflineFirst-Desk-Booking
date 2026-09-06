@@ -86,17 +86,119 @@ router.get(
         orderBy: { name: 'asc' },
       });
 
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      const orgDomain = `${org?.subdomain || 'company'}.com`;
+      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
+      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+
       return res.json({
         branch: {
           id: branch.id,
           name: branch.name,
           code: branch.code,
+          defaultEmployeePassword: branch.defaultEmployeePassword,
         },
+        corporateDomain: orgDomain,
+        defaultPassword,
         employees,
         total: employees.length,
       });
     } catch (error: any) {
       console.error('Failed to load branch employees:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/branch-roster/config
+ * Returns branch metadata, corporate domain, and active default password
+ */
+router.get(
+  '/config',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const branch = await resolveBranch(req);
+
+      if (!branch) {
+        return res.status(404).json({ error: 'Assigned branch not found.' });
+      }
+
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      const orgDomain = `${org?.subdomain || 'company'}.com`;
+      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
+      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+
+      return res.json({
+        branch: {
+          id: branch.id,
+          name: branch.name,
+          code: branch.code,
+          defaultEmployeePassword: branch.defaultEmployeePassword,
+        },
+        corporateDomain: orgDomain,
+        defaultPassword,
+      });
+    } catch (error: any) {
+      console.error('Failed to load branch config:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * PATCH /api/branch-roster/default-password
+ * Set or update the branch default temporary employee password
+ */
+router.patch(
+  '/default-password',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const branch = await resolveBranch(req);
+
+      if (!branch) {
+        return res.status(404).json({ error: 'Assigned branch not found.' });
+      }
+
+      const { defaultPassword } = req.body;
+      if (!defaultPassword || typeof defaultPassword !== 'string' || defaultPassword.trim().length < 4) {
+        return res.status(400).json({ error: 'Default password must be at least 4 characters long.' });
+      }
+
+      const trimmedPassword = defaultPassword.trim();
+      const updatedBranch = await prisma.branch.update({
+        where: { id: branch.id },
+        data: { defaultEmployeePassword: trimmedPassword },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: orgId,
+          actorUserId: req.user!.id,
+          action: 'UPDATE_BRANCH_DEFAULT_PASSWORD',
+          entityType: 'Branch',
+          entityId: branch.id,
+          metadata: {
+            branchCode: branch.code,
+            branchName: branch.name,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Default employee temporary password updated successfully.',
+        defaultPassword: updatedBranch.defaultEmployeePassword,
+      });
+    } catch (error: any) {
+      console.error('Failed to update branch default password:', error);
       return res.status(500).json({ error: error.message });
     }
   }
@@ -137,8 +239,10 @@ router.post(
       }
 
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
-      const fallbackPassword = org?.defaultBranchAdminPassword || org?.name || 'DeskBook$2026#Initial';
-      const targetPassword = password && password.trim().length >= 6 ? password.trim() : fallbackPassword;
+      const orgDomain = `${org?.subdomain || 'company'}.com`;
+      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
+      const fallbackPassword = branch.defaultEmployeePassword || orgNameClean || org?.defaultBranchAdminPassword || orgDomain;
+      const targetPassword = password && password.trim().length >= 4 ? password.trim() : fallbackPassword;
       const passwordHash = await bcrypt.hash(targetPassword, 10);
 
       const user = await prisma.user.create({
@@ -335,11 +439,15 @@ router.get(
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
       const queryDomain = (req.query.domain as string)?.trim();
       const corporateDomain = queryDomain || `${org?.subdomain || 'company'}.com`;
+      const queryPassword = (req.query.defaultPassword as string)?.trim();
+      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : corporateDomain;
+      const defaultPassword = queryPassword || branch.defaultEmployeePassword || orgNameClean;
 
       const buffer = await generateBranchEmployeeTemplate(
         corporateDomain,
         branch.code,
-        branch.name
+        branch.name,
+        defaultPassword
       );
 
       res.setHeader(
@@ -386,14 +494,29 @@ router.post(
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(req.file.buffer as any);
 
-      // Read domain from hidden Config sheet if available
+      // Read domain and default password from Config sheet if available
       const configSheet = workbook.getWorksheet('Config');
-      const corporateDomain = configSheet?.getCell('B1').text?.trim() || orgDomain;
+      // In new 3-col format: B2 is Corporate Email Domain, B5 is Default Initial Password
+      // In legacy format: B1 was CorporateDomain
+      const corporateDomain =
+        configSheet?.getCell('B2').text?.trim() ||
+        configSheet?.getCell('B1').text?.trim() ||
+        orgDomain;
+
+      const defaultPasswordFromConfig =
+        configSheet?.getCell('B5').text?.trim() ||
+        branch.defaultEmployeePassword ||
+        corporateDomain;
 
       const sheet = workbook.getWorksheet('Employee Roster') || workbook.worksheets[0];
       if (!sheet) {
         return res.status(400).json({ error: 'Invalid file: Missing Employee Roster worksheet.' });
       }
+
+      // Detect modern 3-column layout vs legacy 6-column layout
+      const headerRow = sheet.getRow(1);
+      const h1 = headerRow.getCell(1).text?.trim().toLowerCase();
+      const isModern3Col = h1.includes('full name') || h1.includes('employee');
 
       let importedCount = 0;
       let updatedCount = 0;
@@ -401,23 +524,22 @@ router.post(
 
       for (let r = 2; r <= sheet.rowCount; r++) {
         const row = sheet.getRow(r);
-        const fullName = row.getCell(3).text?.trim();
-        const department = row.getCell(4).text?.trim() || null;
+        const fullName = isModern3Col ? row.getCell(1).text?.trim() : row.getCell(3).text?.trim();
 
-        // Cell 5 is Email (may contain formula or calculated text)
-        let email = row.getCell(5).text?.trim().toLowerCase();
+        // Email: Col 2 in modern 3-col, Col 5 in legacy 6-col
+        let email = (isModern3Col ? row.getCell(2).text : row.getCell(5).text)?.trim().toLowerCase();
         // If blank or formula uncomputed by client software, calculate dynamically
         if (!email && fullName) {
           email = `${fullName.toLowerCase().replace(/\s+/g, '.')}@${corporateDomain}`.toLowerCase();
         }
 
-        // Cell 6 is Password (may contain formula or calculated text)
-        let rawPassword = row.getCell(6).text?.trim();
+        // Password: Col 3 in modern 3-col, Col 6 in legacy 6-col
+        let rawPassword = (isModern3Col ? row.getCell(3).text : row.getCell(6).text)?.trim();
         if (!rawPassword && fullName) {
-          const initials = fullName.slice(0, 3).toUpperCase();
-          rawPassword = `DeskBook$${new Date().getFullYear()}#${initials}!${r}`;
+          rawPassword = defaultPasswordFromConfig;
         }
 
+        // Skip completely empty rows
         if (!fullName && !email) continue;
 
         if (!fullName) {
@@ -430,7 +552,7 @@ router.post(
           continue;
         }
 
-        const targetPassword = rawPassword && rawPassword.length >= 6 ? rawPassword : `DeskBook$${new Date().getFullYear()}#Emp!${r}`;
+        const targetPassword = rawPassword && rawPassword.length >= 4 ? rawPassword : defaultPasswordFromConfig;
         const passwordHash = await bcrypt.hash(targetPassword, 10);
 
         const existingUser = await prisma.user.findUnique({
@@ -438,12 +560,11 @@ router.post(
         });
 
         if (existingUser) {
-          // Idempotent update: synchronize name, department, and branch without wiping existing password
+          // Idempotent update: synchronize name and branch without wiping existing password
           await prisma.user.update({
             where: { email },
             data: {
               name: fullName,
-              department,
               scopedBranchId: branch.id,
               baseBranchId: branch.id,
               status: 'ACTIVE',
@@ -458,7 +579,7 @@ router.post(
               organizationId: orgId,
               name: fullName,
               email,
-              department,
+              department: null,
               role: Role.EMPLOYEE,
               scopedBranchId: branch.id,
               baseBranchId: branch.id,
@@ -481,9 +602,10 @@ router.post(
           organizationId: orgId,
           actorUserId: req.user!.id,
           action: 'IMPORT_BRANCH_EMPLOYEES',
-          entityType: 'User',
+          entityType: 'Branch',
           entityId: branch.id,
           metadata: {
+            branchCode: branch.code,
             branchName: branch.name,
             importedCount,
             updatedCount,

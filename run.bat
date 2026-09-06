@@ -1,6 +1,7 @@
 @echo off
 TITLE Multi-Tenant SaaS Control Plane
 SETLOCAL EnableDelayedExpansion
+cd /d "%~dp0"
 
 echo ========================================================
 echo   Multi-Tenant SaaS Control Plane - Platform ^& Org Admin
@@ -135,7 +136,8 @@ echo   - Default Platform Admin: admin@deskbooking.com
 echo   - Default Password:       DeskBook$2026#SecureOps!X9
 echo ========================================================
 echo Press Ctrl+C in this terminal to terminate all processes.
-start "" cmd /c "powershell -NoProfile -Command \"$c = New-Object System.Net.Sockets.TcpClient; while (-not $c.Connected) { try { $c.Connect('127.0.0.1', 4000) } catch { Start-Sleep -Milliseconds 800 } }; $c.Close(); $url = 'http://localhost:3000'; $cp = 'C:\Program Files\Google\Chrome\Application\chrome.exe'; if (Test-Path $cp) { Start-Process $cp $url } else { try { Start-Process 'chrome' $url } catch { Start-Process $url } }\""
+echo Opening the browser in 3 seconds...
+start "" /min cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:3000"
 call pnpm dev
 
 pause

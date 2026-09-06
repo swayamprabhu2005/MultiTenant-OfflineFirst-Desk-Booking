@@ -8,6 +8,8 @@ dist-ssr/
 build/
 out/
 *.tsbuildinfo
+apps/*/dist/
+packages/*/dist/
 
 # Environment Variables & Local Config
 .env
@@ -42,9 +44,16 @@ coverage/
 ~$*.xlsx
 *.xlsx.bak
 *.xlsx.tmp
+*.tmp
 temp/
 scratch/
+uploads/
 tempmediaStorage/
+test_*.xlsx
+Workspace_Errors_*.xlsx
+Workspace_Config_*.xlsx
+Branch_Employees_Template_*.xlsx
+Branch_Employee_Directory_*.xlsx
 
 # Database Dumps & Cache
 *.sql
@@ -55,10 +64,10 @@ tempmediaStorage/
 # Agent & System Generated Files
 .gemini/
 .system_generated/
+.user_uploaded/
 
 # Turborepo / Cache
 .turbo/
 
 # Internal Project Planning Documents
 plan.md
-

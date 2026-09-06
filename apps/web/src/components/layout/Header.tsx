@@ -19,13 +19,22 @@ export const Header: React.FC = () => {
   const { tenant } = useTenant();
 
   const activeOrg = user?.organization || tenant;
+  const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN' || activeOrg?.code === 'SYSTEM';
   const orgColor = activeOrg?.themeColor || '#16a34a';
-  const isDark = isColorDark(orgColor);
+  const isDark = isPlatformAdmin ? true : isColorDark(orgColor);
+
+  const headerStyle: React.CSSProperties = isPlatformAdmin
+    ? {
+        background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 25%, #4338ca 52%, #0284c7 78%, #059669 100%)',
+      }
+    : { backgroundColor: orgColor };
 
   return (
     <header 
-      className="sticky top-0 z-30 shadow-md transition-all duration-300"
-      style={{ backgroundColor: orgColor }}
+      className={`sticky top-0 z-30 shadow-md transition-all duration-300 ${
+        isPlatformAdmin ? 'border-b border-indigo-400/20 shadow-indigo-950/30' : ''
+      }`}
+      style={headerStyle}
     >
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
@@ -42,12 +51,14 @@ export const Header: React.FC = () => {
           ) : (
             <div 
               className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-lg shadow-sm border ${
-                isDark
+                isPlatformAdmin
+                  ? 'bg-gradient-to-br from-indigo-600 via-purple-600 to-emerald-500 text-white border-white/30 shadow-indigo-950/50'
+                  : isDark
                   ? 'bg-white/20 text-white border-white/30'
                   : 'bg-black/15 text-slate-950 border-black/20'
               }`}
             >
-              {activeOrg?.name?.charAt(0) || 'D'}
+              {activeOrg?.name?.charAt(0) || 'P'}
             </div>
           )}
 
@@ -59,11 +70,13 @@ export const Header: React.FC = () => {
                 {activeOrg?.name || 'SaaS Management Portal'}
               </span>
               <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
-                isDark
+                isPlatformAdmin
+                  ? 'bg-gradient-to-r from-indigo-500/40 via-cyan-500/30 to-emerald-500/40 text-white border-cyan-400/40 shadow-xs tracking-wider'
+                  : isDark
                   ? 'bg-white/20 text-white border-white/30'
                   : 'bg-black/10 text-slate-900 border-black/20'
               }`}>
-                {activeOrg?.code || 'TENANT'}
+                {activeOrg?.code || (isPlatformAdmin ? 'SYSTEM' : 'TENANT')}
               </span>
             </div>
             <p className={`text-xs font-mono font-medium ${

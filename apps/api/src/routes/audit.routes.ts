@@ -5,12 +5,23 @@ import { Role } from '@deskbooking/shared';
 
 const router = Router();
 
-router.get('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const isPlatformAdmin = req.user?.role === Role.PLATFORM_ADMIN;
-    const where = isPlatformAdmin
-      ? { action: 'CREATE_ORGANIZATION' }
-      : { organizationId: req.organizationId! };
+    let where: any = {};
+    if (req.user?.role === Role.PLATFORM_ADMIN) {
+      where = { action: 'CREATE_ORGANIZATION' };
+    } else if (req.user?.role === Role.BRANCH_ADMIN) {
+      const branchId = req.user.scopedBranchId || req.user.baseBranchId;
+      where = {
+        organizationId: req.organizationId!,
+        OR: [
+          { actorUserId: req.user.id },
+          ...(branchId ? [{ entityId: branchId }] : []),
+        ],
+      };
+    } else {
+      where = { organizationId: req.organizationId! };
+    }
 
     const logs = await prisma.auditLog.findMany({
       where,

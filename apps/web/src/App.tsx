@@ -14,6 +14,7 @@ import { OrganizationAdminDashboard } from './components/dashboard/OrganizationA
 import { BranchAdminDashboard } from './components/dashboard/BranchAdminDashboard';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
 import { BranchEmployeeRosterPage } from './pages/branch/BranchEmployeeRosterPage';
+import { BranchAuditLogsPage } from './pages/branch/BranchAuditLogsPage';
 import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
@@ -92,6 +93,7 @@ export const App: React.FC = () => {
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
                 <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
+                <Route path="branch/audit" element={<BranchAuditLogsPage />} />
               </Route>
 
               {/* Catch-all fallback */}

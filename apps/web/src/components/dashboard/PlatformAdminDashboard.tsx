@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { 
   Building2, ShieldCheck, Clock, Trash2, AlertTriangle, 
@@ -85,22 +86,34 @@ export const PlatformAdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Banner */}
-      <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight flex items-center space-x-2">
-            <Building2 className="w-6 h-6 text-emerald-400" />
-            <span>Platform Administration Console</span>
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Global SaaS Orchestrator: Monitor registered tenants, configure subdomains, manage organization lifecycles, and view audit trails.
+      {/* Top Banner with Multi-Tenant Aurora Spectrum */}
+      <div 
+        className="rounded-2xl p-7 text-white shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-indigo-400/30 relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 22%, #4338ca 48%, #0284c7 75%, #059669 100%)'
+        }}
+      >
+        <div className="relative z-10">
+          <div className="flex items-center space-x-2.5 mb-1.5">
+            <div className="p-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 shadow-inner">
+              <Building2 className="w-5 h-5 text-cyan-300" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-white drop-shadow-sm">
+              Platform Administration Console
+            </h1>
+            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-md text-white border border-white/25 tracking-widest">
+              SYSTEM
+            </span>
+          </div>
+          <p className="text-indigo-100/90 text-xs font-medium max-w-2xl leading-relaxed">
+            Global SaaS Orchestrator: Monitor registered tenants, configure subdomains, manage organization lifecycles, and audit platform activities.
           </p>
         </div>
         <Link
           to="/admin/organizations"
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center space-x-1.5 self-start sm:self-auto"
+          className="relative z-10 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 hover:text-slate-900 font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-950/40 border border-emerald-300/40 transition-all flex items-center space-x-2 self-start sm:self-auto backdrop-blur-sm"
         >
-          <Building2 className="w-4 h-4" />
+          <Building2 className="w-4 h-4 text-slate-950" />
           <span>Manage Organizations</span>
         </Link>
       </div>
@@ -259,9 +272,9 @@ export const PlatformAdminDashboard: React.FC = () => {
       </div>
 
       {/* CONFIRMATION MODAL: DELETE ORGANIZATION */}
-      {orgToDelete && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in">
+      {orgToDelete && createPortal(
+        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in border border-slate-200">
             <div className="flex items-center space-x-3 text-rose-600">
               <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-5 h-5 text-rose-600" />
@@ -304,7 +317,8 @@ export const PlatformAdminDashboard: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
