@@ -137,7 +137,8 @@ echo   - Default Password:       DeskBook$2026#SecureOps!X9
 echo ========================================================
 echo Press Ctrl+C in this terminal to terminate all processes.
 echo Opening the browser in 3 seconds...
-start "" /min cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:3000"
+ping 127.0.0.1 -n 4 >nul
+start http://localhost:3000
 call pnpm dev
 
 pause

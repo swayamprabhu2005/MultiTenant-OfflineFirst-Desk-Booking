@@ -489,9 +489,9 @@ export const BranchEmployeeRosterPage: React.FC = () => {
           </div>
 
           {/* Action Hub Buttons: Two-Row Layout */}
-          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2.5">
+          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2.5 lg:ml-auto">
             {/* Top Row: Download on left, Upload to its right */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2.5">
               {/* Download Template Button */}
               <button
                 onClick={handleDownloadTemplate}
@@ -512,7 +512,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </button>
 
               {/* Upload Completed Roster Button */}
-              <label className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer">
+              <label className="py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer">
                 <input
                   type="file"
                   accept=".xlsx"
@@ -528,7 +528,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
                 ) : (
                   <>
                     <Upload className="w-4 h-4" />
-                    <span>Upload Completed Roster (.xlsx)</span>
+                    <span>Upload Completed Roster</span>
                   </>
                 )}
               </label>
