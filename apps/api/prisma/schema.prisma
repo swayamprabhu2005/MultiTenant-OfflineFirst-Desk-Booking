@@ -23,13 +23,16 @@ model Organization {
   logoUrl    String?
   themeColor String?      @default("#16a34a")
   timezone   String       @default("UTC")
-  status     String       @default("ACTIVE")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  branches   Branch[]
-  buildings  Building[]
-  users      User[]
-  auditLogs  AuditLog[]
+  status                      String       @default("ACTIVE")
+  workspaceSetupAt            DateTime?
+  workspaceSetupExcel         Bytes?
+  defaultBranchAdminPassword  String?
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime     @updatedAt
+  branches                    Branch[]
+  buildings                   Building[]
+  users                       User[]
+  auditLogs                   AuditLog[]
 }
 
 model Branch {
@@ -84,6 +87,7 @@ model User {
   teamLead           User?        @relation("TeamLead", fields: [teamLeadId], references: [id], onDelete: SetNull)
   teamMembers        User[]       @relation("TeamLead")
   mustChangePassword Boolean      @default(false)
+  isActive           Boolean      @default(true)
   status             String       @default("ACTIVE")
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt

@@ -7,9 +7,13 @@ import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
+import { ForcePasswordChangePage } from './pages/auth/ForcePasswordChangePage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { PlatformAdminDashboard } from './components/dashboard/PlatformAdminDashboard';
 import { OrganizationAdminDashboard } from './components/dashboard/OrganizationAdminDashboard';
+import { BranchAdminDashboard } from './components/dashboard/BranchAdminDashboard';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
+import { BranchEmployeeRosterPage } from './pages/branch/BranchEmployeeRosterPage';
 import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
@@ -28,6 +32,9 @@ const DashboardRoute: React.FC = () => {
   const { user } = useAuth();
   if (user?.role === 'PLATFORM_ADMIN') {
     return <PlatformAdminDashboard />;
+  }
+  if (user?.role === 'BRANCH_ADMIN') {
+    return <BranchAdminDashboard />;
   }
   return <OrganizationAdminDashboard />;
 };
@@ -48,7 +55,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   if (user?.mustChangePassword) {
-    return <Navigate to="/change-password" replace />;
+    return <Navigate to="/force-password-change" replace />;
   }
 
   return <>{children}</>;
@@ -64,6 +71,8 @@ export const App: React.FC = () => {
               {/* Public Authentication Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
               <Route path="/change-password" element={<ChangePasswordPage />} />
 
               {/* Protected Administration Routes */}
@@ -82,6 +91,7 @@ export const App: React.FC = () => {
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
+                <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
               </Route>
 
               {/* Catch-all fallback */}

@@ -20,6 +20,7 @@ import {
   UserPlus,
   Eye,
   EyeOff,
+  KeyRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -47,6 +48,14 @@ export const EmployeeRosterPage: React.FC = () => {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [uploadingExcel, setUploadingExcel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Default Password State
+  const [defaultPassword, setDefaultPassword] = useState('');
+  const [isCustomPassword, setIsCustomPassword] = useState(false);
+  const [showDefaultPasswordModal, setShowDefaultPasswordModal] = useState(false);
+  const [newDefaultPassword, setNewDefaultPassword] = useState('');
+  const [savingDefaultPassword, setSavingDefaultPassword] = useState(false);
+  const [showDefaultPasswordEye, setShowDefaultPasswordEye] = useState(false);
 
   // Modal State for Branch Admin Assign/Edit
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -83,9 +92,47 @@ export const EmployeeRosterPage: React.FC = () => {
     }
   };
 
+  // 1b. Fetch Default Password Setting
+  const loadDefaultPassword = async () => {
+    try {
+      const data = await fetchApi<{ defaultPassword: string; isCustom: boolean }>('/roster/default-password');
+      if (data?.defaultPassword) {
+        setDefaultPassword(data.defaultPassword);
+        setIsCustomPassword(data.isCustom);
+      }
+    } catch (err) {
+      console.error('Failed to load default password setting:', err);
+    }
+  };
+
   useEffect(() => {
     loadBranchAdmins();
+    loadDefaultPassword();
   }, []);
+
+  // Save Default Password Handler
+  const handleSaveDefaultPassword = async () => {
+    if (!newDefaultPassword || newDefaultPassword.trim().length < 6) {
+      setErrorMsg('Default password must be at least 6 characters.');
+      return;
+    }
+    try {
+      setSavingDefaultPassword(true);
+      setErrorMsg(null);
+      await fetchApi('/roster/default-password', {
+        method: 'PUT',
+        body: JSON.stringify({ defaultPassword: newDefaultPassword.trim() }),
+      });
+      setDefaultPassword(newDefaultPassword.trim());
+      setIsCustomPassword(true);
+      setShowDefaultPasswordModal(false);
+      setStatusMsg(`Default initial password updated to "${newDefaultPassword.trim()}". Newly assigned branch administrators will be provisioned with this password.`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update default password.');
+    } finally {
+      setSavingDefaultPassword(false);
+    }
+  };
 
   // 2. Download Branch Admin Excel Template (Only unassigned branches)
   const handleDownloadTemplate = async () => {
@@ -312,17 +359,34 @@ export const EmployeeRosterPage: React.FC = () => {
           </p>
         </div>
 
-        {totalBranches > 0 && (
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
-            <Shield className="w-4 h-4 text-purple-600" />
-            <span>Assigned:</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
-              assignedCount === totalBranches ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-            }`}>
-              {assignedCount} / {totalBranches} Branches
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setNewDefaultPassword(defaultPassword || tenant?.name || '');
+              setShowDefaultPasswordModal(true);
+            }}
+            className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-xs font-bold text-slate-700 shadow-sm transition-all cursor-pointer"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Set Default Password</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-mono font-semibold border border-indigo-200">
+              {defaultPassword || tenant?.name || 'Default'}
             </span>
-          </div>
-        )}
+          </button>
+
+          {totalBranches > 0 && (
+            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
+              <Shield className="w-4 h-4 text-purple-600" />
+              <span>Assigned:</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                assignedCount === totalBranches ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {assignedCount} / {totalBranches} Branches
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Notification Banners */}
@@ -748,6 +812,88 @@ export const EmployeeRosterPage: React.FC = () => {
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50 cursor-pointer"
               >
                 {deletingInProgress ? 'Removing...' : 'Confirm Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: DEFAULT PASSWORD CONFIGURATION                                    */}
+      {/* ========================================================================= */}
+      {showDefaultPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Configure Default Password</h3>
+                  <p className="text-[11px] text-slate-500">Fallback credential for newly provisioned branch admins</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDefaultPasswordModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Default Initial Password
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={newDefaultPassword}
+                    onChange={(e) => setNewDefaultPassword(e.target.value)}
+                    style={{ WebkitTextSecurity: showDefaultPasswordEye ? 'none' : 'disc' } as any}
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    placeholder="Enter default password..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDefaultPasswordEye(!showDefaultPasswordEye)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showDefaultPasswordEye ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <p>
+                  <strong>Current Status:</strong> {isCustomPassword ? 'Custom Password Active' : `Defaults to Organization Name (${tenant?.name})`}
+                </p>
+                <p className="text-slate-500">
+                  Branch administrators created via bulk Excel upload or manual assignment will receive this initial password and will be <strong>required to change it on their first login</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2.5 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setShowDefaultPasswordModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDefaultPassword}
+                disabled={savingDefaultPassword}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {savingDefaultPassword ? 'Saving...' : 'Save Default Password'}
               </button>
             </div>
           </div>

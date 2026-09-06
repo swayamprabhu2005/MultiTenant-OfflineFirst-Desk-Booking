@@ -283,6 +283,53 @@ router.get('/branch-admins', authMiddleware, requireRole([Role.PLATFORM_ADMIN, R
 });
 
 /**
+ * GET /api/roster/default-password
+ * Retrieves the current default password setting for branch administrators
+ */
+router.get('/default-password', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: req.organizationId! },
+      select: { name: true, defaultBranchAdminPassword: true },
+    });
+    const defaultPassword = org?.defaultBranchAdminPassword || org?.name || 'Welcome123!';
+    return res.json({
+      defaultPassword,
+      isCustom: Boolean(org?.defaultBranchAdminPassword),
+      organizationName: org?.name || '',
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/roster/default-password
+ * Updates the fallback default password for newly provisioned branch administrators
+ */
+router.put('/default-password', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { defaultPassword } = req.body;
+    if (!defaultPassword || defaultPassword.trim().length < 6) {
+      return res.status(400).json({ error: 'Default password must be at least 6 characters.' });
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id: req.organizationId! },
+      data: { defaultBranchAdminPassword: defaultPassword.trim() },
+    });
+
+    return res.json({
+      success: true,
+      defaultPassword: updated.defaultBranchAdminPassword,
+      message: 'Default branch administrator password updated successfully.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/roster/branch-admin-template
  * Generates an Excel template with pre-filled Branch IDs and Branch Names
  */
@@ -290,6 +337,8 @@ router.get('/branch-admin-template', authMiddleware, requireRole([Role.PLATFORM_
   try {
     const orgId = req.organizationId!;
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const defaultInitialPassword = org?.defaultBranchAdminPassword || org?.name || 'DeskBook$2026#BranchOps';
+
     const existingAdmins = await prisma.user.findMany({
       where: {
         organizationId: orgId,
@@ -360,6 +409,9 @@ router.get('/branch-admin-template', authMiddleware, requireRole([Role.PLATFORM_
         row.getCell(c).font = { name: 'Segoe UI', size: 10 };
         row.getCell(c).alignment = { horizontal: 'left', vertical: 'middle' };
       }
+
+      // Pre-fill initial password with configured default password
+      row.getCell(5).value = defaultInitialPassword;
     });
 
     sheet.getColumn(1).width = 18;
@@ -388,6 +440,9 @@ router.post('/branch-admin-import', authMiddleware, requireRole([Role.PLATFORM_A
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'Please upload a valid Excel (.xlsx) file.' });
     }
+
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const fallbackPassword = org?.defaultBranchAdminPassword || org?.name || 'DeskBook$2026#BranchOps';
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer as any);
@@ -428,7 +483,7 @@ router.post('/branch-admin-import', authMiddleware, requireRole([Role.PLATFORM_A
       }
 
       const branch = branchMap.get(branchCode)!;
-      const targetPassword = rawPassword && rawPassword.length >= 8 ? rawPassword : 'DeskBook$2026#BranchOps';
+      const targetPassword = rawPassword && rawPassword.length >= 6 ? rawPassword : fallbackPassword;
       const passwordHash = await bcrypt.hash(targetPassword, 10);
 
       await prisma.user.upsert({
@@ -438,7 +493,7 @@ router.post('/branch-admin-import', authMiddleware, requireRole([Role.PLATFORM_A
           role: Role.BRANCH_ADMIN,
           scopedBranchId: branch.id,
           passwordHash,
-          mustChangePassword: false,
+          mustChangePassword: true,
           status: 'ACTIVE',
         },
         create: {
@@ -448,7 +503,7 @@ router.post('/branch-admin-import', authMiddleware, requireRole([Role.PLATFORM_A
           passwordHash,
           role: Role.BRANCH_ADMIN,
           scopedBranchId: branch.id,
-          mustChangePassword: false,
+          mustChangePassword: true,
           status: 'ACTIVE',
         },
       });
@@ -490,6 +545,9 @@ router.post('/branch-admin-import', authMiddleware, requireRole([Role.PLATFORM_A
 router.post('/branch-admin', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = req.organizationId!;
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const fallbackPassword = org?.defaultBranchAdminPassword || org?.name || 'DeskBook$2026#BranchOps';
+
     const { branchId, name, email, password } = req.body;
 
     if (!branchId || !name || !email) {
@@ -507,7 +565,7 @@ router.post('/branch-admin', authMiddleware, requireRole([Role.PLATFORM_ADMIN, R
       return res.status(404).json({ error: 'Branch not found in your organization.' });
     }
 
-    const targetPassword = password && password.trim().length >= 8 ? password.trim() : 'DeskBook$2026#BranchOps';
+    const targetPassword = password && password.trim().length >= 6 ? password.trim() : fallbackPassword;
     const passwordHash = await bcrypt.hash(targetPassword, 10);
 
     const user = await prisma.user.upsert({
@@ -517,7 +575,7 @@ router.post('/branch-admin', authMiddleware, requireRole([Role.PLATFORM_ADMIN, R
         role: Role.BRANCH_ADMIN,
         scopedBranchId: branch.id,
         passwordHash,
-        mustChangePassword: false,
+        mustChangePassword: true,
         status: 'ACTIVE',
       },
       create: {
@@ -527,7 +585,7 @@ router.post('/branch-admin', authMiddleware, requireRole([Role.PLATFORM_ADMIN, R
         passwordHash,
         role: Role.BRANCH_ADMIN,
         scopedBranchId: branch.id,
-        mustChangePassword: false,
+        mustChangePassword: true,
         status: 'ACTIVE',
       },
       select: {
