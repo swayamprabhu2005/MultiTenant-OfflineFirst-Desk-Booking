@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 interface DeskItem {
   id: string;
@@ -73,7 +74,7 @@ function formatFloorDisplayName(fl?: { name?: string; code?: string; floorNumber
 }
 
 export const FloorPlansPage: React.FC = () => {
-
+  const { user } = useAuth();
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -92,10 +93,16 @@ export const FloorPlansPage: React.FC = () => {
     try {
       setLoading(true);
       const data = await fetchApi<BranchItem[]>('/workspace/hierarchy');
-      setBranches(data || []);
+      const allBranches = data || [];
+      const scopedBranches =
+        user?.role === 'BRANCH_ADMIN' && user?.scopedBranchId
+          ? allBranches.filter(b => b.id === user.scopedBranchId)
+          : allBranches;
 
-      if (data && data.length > 0) {
-        const firstBranch = data[0];
+      setBranches(scopedBranches);
+
+      if (scopedBranches && scopedBranches.length > 0) {
+        const firstBranch = scopedBranches[0];
         setSelectedBranchId(firstBranch.id);
 
         if (firstBranch.buildings.length > 0) {
@@ -121,7 +128,7 @@ export const FloorPlansPage: React.FC = () => {
 
   useEffect(() => {
     loadHierarchy();
-  }, []);
+  }, [user?.role, user?.scopedBranchId]);
 
   const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
   const currentBuilding = currentBranch?.buildings.find(bld => bld.id === selectedBuildingId) || currentBranch?.buildings[0];
@@ -340,10 +347,11 @@ export const FloorPlansPage: React.FC = () => {
           {/* Branch Dropdown */}
           <div>
             <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">
-              Select Branch
+              {user?.role === 'BRANCH_ADMIN' ? 'Assigned Branch' : 'Select Branch'}
             </label>
             <select
               value={currentBranch?.id}
+              disabled={user?.role === 'BRANCH_ADMIN' && branches.length <= 1}
               onChange={e => {
                 const bId = e.target.value;
                 setSelectedBranchId(bId);
@@ -358,7 +366,7 @@ export const FloorPlansPage: React.FC = () => {
                   }
                 }
               }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:opacity-80 disabled:cursor-not-allowed"
             >
               {branches.map(b => (
                 <option key={b.id} value={b.id}>
@@ -648,7 +656,16 @@ export const FloorPlansPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="space-y-2">
-              {activeDesk.status === 'AVAILABLE' ? (
+              {user?.role === 'ORGANIZATION_ADMIN' ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-center">
+                  <div className="text-[10px] font-black text-slate-700 uppercase tracking-wide">
+                    Administrative Oversight Mode
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Global Organization Administrators have read-only architectural oversight across all branches. Desk booking is managed directly by branch personnel and branch administrators.
+                  </p>
+                </div>
+              ) : activeDesk.status === 'AVAILABLE' ? (
                 <button
                   onClick={() => handleBookDesk(activeDesk.id)}
                   disabled={bookingLoading}

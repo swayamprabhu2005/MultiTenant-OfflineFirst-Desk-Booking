@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import { 
   FileSpreadsheet, Download, Upload, CheckCircle2, AlertTriangle, 
-  ArrowRight, RefreshCw, FileText
+  ArrowRight, RefreshCw, FileText, Clock, Lock
 } from 'lucide-react';
+import { fetchApi } from '../../services/api';
 
 export const WorkspaceSetupPage: React.FC = () => {
   const { user } = useAuth();
@@ -14,6 +15,16 @@ export const WorkspaceSetupPage: React.FC = () => {
 
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingCurrentConfig, setDownloadingCurrentConfig] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<{
+    hasSetup: boolean;
+    workspaceSetupAt: string | null;
+    isLocked: boolean;
+    remainingMs: number;
+    hoursLeft: number;
+    hasConfigurationFile: boolean;
+  } | null>(null);
+
   const [errorResult, setErrorResult] = useState<{
     errorCount: number;
     errorsSummary: string[];
@@ -30,6 +41,19 @@ export const WorkspaceSetupPage: React.FC = () => {
   } | null>(null);
 
   const activeOrg = user?.organization || tenant;
+
+  const loadSetupStatus = async () => {
+    try {
+      const data = await fetchApi<any>('/workspace/setup-status');
+      setSetupStatus(data);
+    } catch (err) {
+      console.error('Failed to load setup status:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadSetupStatus();
+  }, []);
 
   // 1. Download Customized Excel Template
   const handleDownloadTemplate = async () => {
@@ -60,6 +84,38 @@ export const WorkspaceSetupPage: React.FC = () => {
       alert('Error downloading template: ' + (err.message || 'Unknown error'));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  // Download Current Populated Configuration (during 72h window)
+  const handleDownloadCurrentConfig = async () => {
+    try {
+      setDownloadingCurrentConfig(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/workspace/current-configuration', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download current configuration');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Workspace_Current_Config_${activeOrg?.code || 'Active'}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Download current config error:', err);
+      alert('Error downloading configuration: ' + (err.message || 'Unknown error'));
+    } finally {
+      setDownloadingCurrentConfig(false);
     }
   };
 
@@ -138,6 +194,73 @@ export const WorkspaceSetupPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto px-4 sm:px-0 py-4">
+      {/* 72-HOUR GRACE PERIOD MODIFICATION STATUS BANNER */}
+      {setupStatus?.hasSetup && (
+        setupStatus.isLocked ? (
+          <div className="bg-slate-100 border-2 border-slate-300 rounded-2xl p-5 shadow-xs flex items-start space-x-4 animate-fade-in">
+            <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center flex-shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600 bg-slate-200 px-2 py-0.5 rounded">
+                  Configuration Permanent
+                </span>
+                <h3 className="text-sm font-black text-slate-900">
+                  Workspace Setup Window Locked (72-Hour Grace Period Expired)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Initial physical layout was finalized on{' '}
+                <span className="font-semibold text-slate-800">
+                  {setupStatus.workspaceSetupAt ? new Date(setupStatus.workspaceSetupAt).toLocaleString() : 'N/A'}
+                </span>
+                . To safeguard existing branch administrator assignments, staff accounts, and desk allocations, the workspace architecture is permanently locked against further spreadsheet re-uploads.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 border border-amber-300 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded">
+                    Grace Period Active
+                  </span>
+                  <span className="text-xs font-black text-amber-950">
+                    ~{setupStatus.hoursLeft} Hours Remaining to Re-Edit Layout
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed max-w-2xl">
+                  You can update branches, buildings, floors, or desk counts. Download your current populated workbook below, make any corrections, and re-upload before the 72-hour window closes.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleDownloadCurrentConfig}
+              disabled={downloadingCurrentConfig}
+              className="py-2.5 px-4 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+            >
+              {downloadingCurrentConfig ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Preparing File...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Download Current Populated Configuration (.xlsx)</span>
+                </>
+              )}
+            </button>
+          </div>
+        )
+      )}
+
       {/* ERROR BANNER & DOWNLOAD (If Validation Failed - Top Position) */}
       {errorResult && (
         <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 space-y-4 shadow-sm animate-fade-in">
@@ -294,31 +417,43 @@ export const WorkspaceSetupPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/40 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all">
-              <input
-                type="file"
-                accept=".xlsx"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={uploading}
-              />
-              {uploading ? (
-                <div className="flex flex-col items-center space-y-2">
-                  <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
-                  <span className="text-xs font-bold text-slate-700">Verifying and Ingesting 5 Sheets...</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center space-y-1.5 text-center">
-                  <FileText className="w-8 h-8 text-slate-400" />
-                  <span className="text-xs font-bold text-slate-800">
-                    Click to select or drag &amp; drop .xlsx file
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Supports Microsoft Excel &amp; Google Sheets (.xlsx)
-                  </span>
-                </div>
-              )}
-            </label>
+            {setupStatus?.isLocked ? (
+              <div className="border-2 border-dashed border-slate-300 bg-slate-100/70 rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-2 select-none cursor-not-allowed">
+                <Lock className="w-8 h-8 text-slate-400" />
+                <span className="text-xs font-bold text-slate-700">
+                  Spreadsheet Ingestion Locked
+                </span>
+                <span className="text-[10px] text-slate-500 max-w-xs leading-relaxed">
+                  The 72-hour grace period for layout modifications has expired. Existing buildings, floors, and desk counts are permanently locked.
+                </span>
+              </div>
+            ) : (
+              <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/40 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all">
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+                {uploading ? (
+                  <div className="flex flex-col items-center space-y-2">
+                    <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
+                    <span className="text-xs font-bold text-slate-700">Verifying and Ingesting 5 Sheets...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center space-y-1.5 text-center">
+                    <FileText className="w-8 h-8 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Click to select or drag &amp; drop .xlsx file
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Supports Microsoft Excel &amp; Google Sheets (.xlsx)
+                    </span>
+                  </div>
+                )}
+              </label>
+            )}
           </div>
         </div>
 

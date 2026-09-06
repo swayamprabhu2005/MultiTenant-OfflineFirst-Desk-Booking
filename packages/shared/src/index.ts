@@ -15,6 +15,8 @@ export interface OrganizationDTO {
   themeColor: string;
   timezone: string;
   status: string;
+  workspaceSetupAt?: string | null;
+  defaultBranchAdminPassword?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,11 +56,30 @@ export interface UserDTO {
   scopedBranchId?: string | null;
   teamLeadId?: string | null;
   mustChangePassword?: boolean;
+  isActive?: boolean;
   status: string;
   createdAt: string;
   organization?: OrganizationDTO | null;
   scopedBranch?: BranchDTO | null;
   baseBranch?: BranchDTO | null;
+}
+
+export interface BranchEmployeeDTO {
+  id: string;
+  name: string;
+  email: string;
+  department?: string | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface WorkspaceSetupStatusDTO {
+  hasSetup: boolean;
+  workspaceSetupAt?: string | null;
+  isLocked: boolean;
+  remainingMs: number;
+  hoursLeft: number;
 }
 
 export interface AuditLogDTO {

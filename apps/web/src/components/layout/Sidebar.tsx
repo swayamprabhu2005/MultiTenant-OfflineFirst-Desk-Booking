@@ -15,11 +15,18 @@ import {
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
+  const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+      ]
+    : isBranchAdmin
+    ? [
+        { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+        { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
+        { name: 'Employee Directory', to: '/branch/employees', icon: Users },
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -29,6 +36,12 @@ export const Sidebar: React.FC = () => {
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
       ];
+
+  const headerTitle = isPlatformAdmin
+    ? 'Platform Console'
+    : isBranchAdmin
+    ? 'Branch Console'
+    : 'Organization Portal';
 
   return (
     <aside
@@ -41,7 +54,7 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center justify-between px-2 py-1">
           {!isCollapsed && (
             <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider truncate">
-              {isPlatformAdmin ? 'Platform Console' : 'Organization Portal'}
+              {headerTitle}
             </div>
           )}
           <button

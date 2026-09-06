@@ -397,3 +397,183 @@ export async function parseAndValidateWorkspace(
     errorWorkbookBuffer: Buffer.from(annotatedBuffer),
   };
 }
+
+/**
+ * Generates an Option A Formula-Assisted Employee Ingestion Template for a specific branch
+ */
+export async function generateBranchEmployeeTemplate(
+  corporateDomain: string,
+  branchCode: string,
+  branchName: string
+): Promise<Buffer> {
+  const cleanDomain = corporateDomain.replace(/^@/, '').trim() || 'company.com';
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'MultiTenant DeskBooking Platform';
+
+  // 1. Config Sheet (Contains domain & branch metadata)
+  const configSheet = workbook.addWorksheet('Config');
+  configSheet.state = 'hidden';
+  configSheet.getCell('A1').value = 'CorporateDomain';
+  configSheet.getCell('B1').value = cleanDomain;
+  configSheet.getCell('A2').value = 'BranchCode';
+  configSheet.getCell('B2').value = branchCode;
+  configSheet.getCell('A3').value = 'BranchName';
+  configSheet.getCell('B3').value = branchName;
+
+  // 2. Employee Roster Sheet
+  const sheet = workbook.addWorksheet('Employee Roster');
+  sheet.views = [{ showGridLines: true }];
+
+  // Header Row
+  const headerRow = sheet.getRow(1);
+  headerRow.values = [
+    'Branch ID',
+    'Branch Name',
+    'Employee Full Name',
+    'Department',
+    'Corporate Email (Auto-Generated)',
+    'Initial Temporary Password (Auto-Generated)',
+  ];
+  headerRow.font = { name: 'Segoe UI', size: 10, bold: true };
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  headerRow.height = 26;
+
+  // Header Colors
+  // Col A & B: Navy Read-Only
+  headerRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  headerRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  headerRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+
+  // Col C & D: Yellow User-Input
+  for (let c = 3; c <= 4; c++) {
+    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+    headerRow.getCell(c).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF002060' } };
+  }
+
+  // Col E & F: Green Formula-Assisted
+  for (let c = 5; c <= 6; c++) {
+    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+    headerRow.getCell(c).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
+  }
+
+  // Pre-fill 200 rows with formulas and locked branch info
+  for (let r = 2; r <= 201; r++) {
+    const row = sheet.getRow(r);
+    row.height = 20;
+
+    // Col A: Branch ID
+    row.getCell(1).value = branchCode;
+    row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F7' } };
+    row.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true };
+    row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Col B: Branch Name
+    row.getCell(2).value = branchName;
+    row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F7' } };
+    row.getCell(2).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Col C: Employee Full Name (Yellow input)
+    row.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    row.getCell(3).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Col D: Department (Yellow input with dropdown validation)
+    row.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    row.getCell(4).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+    row.getCell(4).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['"Engineering,Product,Operations,Sales,Marketing,Human Resources,Finance,Legal"'],
+      showErrorMessage: true,
+      errorTitle: 'Invalid Department',
+      error: 'Please choose a department from the dropdown list.',
+    };
+
+    // Col E: Corporate Email formula
+    row.getCell(5).value = {
+      formula: `IF(ISBLANK(C${r}), "", LOWER(SUBSTITUTE(TRIM(C${r}), " ", ".")) & "@" & Config!$B$1)`,
+    };
+    row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
+    row.getCell(5).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(5).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Col F: Initial Password formula
+    row.getCell(6).value = {
+      formula: `IF(ISBLANK(C${r}), "", "DeskBook$" & YEAR(TODAY()) & "#" & UPPER(LEFT(TRIM(C${r}), 3)) & "!" & ROW())`,
+    };
+    row.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
+    row.getCell(6).font = { name: 'Segoe UI', size: 10 };
+    row.getCell(6).alignment = { horizontal: 'left', vertical: 'middle' };
+  }
+
+  sheet.getColumn(1).width = 16;
+  sheet.getColumn(2).width = 24;
+  sheet.getColumn(3).width = 30;
+  sheet.getColumn(4).width = 24;
+  sheet.getColumn(5).width = 36;
+  sheet.getColumn(6).width = 36;
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+/**
+ * Generates an Excel export of all employees in a branch
+ */
+export async function exportBranchEmployeesToExcel(
+  branchName: string,
+  employees: Array<{
+    name: string;
+    email: string;
+    department?: string | null;
+    status: string;
+    isActive: boolean;
+    createdAt: string | Date;
+  }>
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Employee Directory');
+  sheet.views = [{ showGridLines: true }];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.values = [
+    'Employee Full Name',
+    'Corporate Email',
+    'Department',
+    'Status',
+    'Enrolled Date',
+  ];
+  headerRow.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  headerRow.height = 24;
+
+  employees.forEach((emp, idx) => {
+    const r = sheet.getRow(idx + 2);
+    r.height = 20;
+    r.getCell(1).value = emp.name;
+    r.getCell(2).value = emp.email;
+    r.getCell(3).value = emp.department || '—';
+    r.getCell(4).value = emp.isActive ? 'Active' : 'Deactivated';
+    r.getCell(5).value = new Date(emp.createdAt).toLocaleDateString();
+
+    const isDeactivated = !emp.isActive || emp.status === 'DEACTIVATED';
+    if (isDeactivated) {
+      r.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FFDC2626' }, bold: true };
+    } else {
+      r.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF16A34A' }, bold: true };
+    }
+  });
+
+  sheet.getColumn(1).width = 30;
+  sheet.getColumn(2).width = 36;
+  sheet.getColumn(3).width = 24;
+  sheet.getColumn(4).width = 18;
+  sheet.getColumn(5).width = 20;
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}

@@ -11,6 +11,7 @@ import branchRoutes from './routes/branches.routes';
 import rosterRoutes from './routes/roster.routes';
 import buildingRoutes from './routes/buildings.routes';
 import workspaceRoutes from './routes/workspace.routes';
+import branchRosterRoutes from './routes/branch-roster.routes';
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ app.use('/api/branches', branchRoutes);
 app.use('/api/roster', rosterRoutes);
 app.use('/api/buildings', buildingRoutes);
 app.use('/api/workspace', workspaceRoutes);
+app.use('/api/branch-roster', branchRosterRoutes);
 
 // Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
