@@ -41,11 +41,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (fullUser.organization?.subdomain) {
           localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
         }
-      } catch (e) {
-        console.warn('Auth token verification failed:', e);
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
+      } catch (e: any) {
+        const msg = e?.message || '';
+        const isAuthRejection = msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized') || msg.includes('Invalid token');
+        if (isAuthRejection) {
+          console.warn('Auth token verification failed:', e);
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
+        } else {
+          console.warn('Backend server initializing, token preserved:', msg);
+        }
       }
     } catch (err) {
       console.error('Auth initialization error:', err);
