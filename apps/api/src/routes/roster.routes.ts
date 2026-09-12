@@ -348,6 +348,79 @@ router.put('/default-password', authMiddleware, requireRole([Role.PLATFORM_ADMIN
 });
 
 /**
+ * GET /api/roster/config
+ * Retrieves the organization's corporate domain and default employee password
+ */
+router.get(
+  '/config',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: {
+          subdomain: true,
+          name: true,
+          defaultDomain: true,
+          defaultEmployeePassword: true,
+        },
+      });
+
+      if (!org) {
+        return res.status(404).json({ error: 'Organization not found.' });
+      }
+
+      const defaultDomain = org.defaultDomain || (org.subdomain ? `${org.subdomain}.com` : 'acme.com');
+      const defaultPassword = org.defaultEmployeePassword || `${org.name.toLowerCase().replace(/[^a-z0-9]/g, '')}2026!`;
+
+      return res.json({
+        domain: defaultDomain,
+        defaultPassword,
+      });
+    } catch (error: any) {
+      console.error('Failed to get roster config:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/roster/config
+ * Saves the organization's corporate domain and default employee password
+ */
+router.post(
+  '/config',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const { domain, defaultPassword } = req.body;
+
+      const updatedOrg = await prisma.organization.update({
+        where: { id: orgId },
+        data: {
+          ...(domain ? { defaultDomain: domain.trim() } : {}),
+          ...(defaultPassword ? { defaultEmployeePassword: defaultPassword.trim() } : {}),
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Roster configuration updated successfully.',
+        domain: updatedOrg.defaultDomain,
+        defaultPassword: updatedOrg.defaultEmployeePassword,
+      });
+    } catch (error: any) {
+      console.error('Failed to save roster config:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
  * GET /api/roster/multi-branch-template
  * Generates dynamic multi-sheet Excel template where each sheet represents a registered branch
  */
@@ -383,12 +456,21 @@ router.get(
         });
       }
 
-      const corporateDomain = `${org.subdomain || 'company'}.com`;
+      const corporateDomain =
+        (req.query.domain as string)?.trim() ||
+        org.defaultDomain ||
+        `${org.subdomain || 'company'}.com`;
+
+      const defaultPassword =
+        (req.query.defaultPassword as string)?.trim() ||
+        org.defaultEmployeePassword ||
+        org.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
       const branchPayload = branches.map((b) => ({
         id: b.id,
         code: b.code,
         name: b.name,
-        defaultEmployeePassword: b.defaultEmployeePassword,
+        defaultEmployeePassword: b.defaultEmployeePassword || defaultPassword,
         employeeCount: b._count.users,
       }));
 
@@ -396,7 +478,7 @@ router.get(
         org.name,
         corporateDomain,
         branchPayload,
-        org.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+        defaultPassword
       );
 
       res.setHeader(
