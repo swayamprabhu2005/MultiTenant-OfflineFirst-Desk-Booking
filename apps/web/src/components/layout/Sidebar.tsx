@@ -38,7 +38,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Workspace Setup', to: '/admin/workspace-setup', icon: FileSpreadsheet },
         { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
-        { name: 'Employee Roster', to: '/admin/roster', icon: Users },
+        { name: 'Branch Admins', to: '/admin/roster', icon: Users },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
       ];
