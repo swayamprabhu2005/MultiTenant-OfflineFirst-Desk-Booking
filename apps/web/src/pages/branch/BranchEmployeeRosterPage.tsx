@@ -489,14 +489,14 @@ export const BranchEmployeeRosterPage: React.FC = () => {
           </div>
 
           {/* Action Hub Buttons: Two-Row Layout */}
-          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2.5 lg:ml-auto">
-            {/* Top Row: Download on left, Upload to its right */}
-            <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2.5">
+          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2 lg:ml-auto">
+            {/* Row 1: Download Ingestion Template & Upload Completed Roster (Side-by-Side) */}
+            <div className="flex flex-row items-center justify-start lg:justify-end gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
               {/* Download Template Button */}
               <button
                 onClick={handleDownloadTemplate}
                 disabled={downloadingTemplate}
-                className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
               >
                 {downloadingTemplate ? (
                   <>
@@ -512,7 +512,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </button>
 
               {/* Upload Completed Roster Button */}
-              <label className="py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer">
+              <label className="py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap">
                 <input
                   type="file"
                   accept=".xlsx"
@@ -534,24 +534,26 @@ export const BranchEmployeeRosterPage: React.FC = () => {
               </label>
             </div>
 
-            {/* Bottom Row: Export Complete Directory Button placed underneath */}
-            <button
-              onClick={handleExportDirectory}
-              disabled={exportingDirectory}
-              className="py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {exportingDirectory ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Exporting...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Export Directory (.xlsx)</span>
-                </>
-              )}
-            </button>
+            {/* Row 2: Export Directory (.xlsx) placed cleanly underneath */}
+            <div className="flex items-center justify-start lg:justify-end w-full sm:w-auto">
+              <button
+                onClick={handleExportDirectory}
+                disabled={exportingDirectory}
+                className="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+              >
+                {exportingDirectory ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-slate-600" />
+                    <span>Export Directory (.xlsx)</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
