@@ -926,19 +926,66 @@ export const FloorPlansPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Conference Table Seating (Curved Buttons) */}
-                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  {Array.from({ length: meetingRoom.capacity }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="h-11 rounded-lg border border-purple-300 bg-purple-50 text-purple-900 font-bold text-[10px] flex flex-col items-center justify-center shadow-xs"
-                    >
-                      <span>M-{String(idx + 1).padStart(2, '0')}</span>
-                      {idx < meetingRoom.hdmiCount && (
-                        <span className="text-[8px] text-purple-700 font-mono">HDMI</span>
-                      )}
-                    </div>
-                  ))}
+                {/* Conference Table Seating (Interactive Clickable Cubicles) */}
+                <div className="grid grid-cols-2 gap-2 bg-purple-50/40 p-2.5 rounded-xl border border-purple-200/80">
+                  {Array.from({ length: meetingRoom.capacity }).map((_, idx) => {
+                    const code = `M-${String(idx + 1).padStart(2, '0')}`;
+                    const foundDesk = desks.find(
+                      (d) => d.deskCode === code || (d.isMeetingRoom && d.deskNumber === 1000 + idx + 1)
+                    );
+                    const seatDesk: DeskItem = foundDesk || {
+                      id: `mr-seat-${currentSection?.id}-${idx + 1}`,
+                      deskCode: code,
+                      deskNumber: 1000 + idx + 1,
+                      hasHdmi: idx < meetingRoom.hdmiCount,
+                      isMeetingRoom: true,
+                      status: 'AVAILABLE',
+                    };
+                    const isAvailable = seatDesk.status === 'AVAILABLE';
+                    const isSelected = activeDesk?.id === seatDesk.id;
+                    const isMassSelected = selectedDeskIds.includes(seatDesk.id);
+
+                    return (
+                      <button
+                        key={seatDesk.id}
+                        type="button"
+                        onClick={() => {
+                          if (isMassBookingMode) {
+                            if (isMassSelected) {
+                              setSelectedDeskIds(selectedDeskIds.filter((id) => id !== seatDesk.id));
+                            } else {
+                              setSelectedDeskIds([...selectedDeskIds, seatDesk.id]);
+                            }
+                          } else {
+                            setActiveDesk(seatDesk);
+                          }
+                        }}
+                        className={`h-11 rounded-lg border-2 font-bold text-[10px] flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-xs ${
+                          isMassSelected
+                            ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
+                            : isSelected
+                            ? 'ring-3 ring-purple-500 scale-105 z-10'
+                            : 'hover:scale-102 hover:shadow-sm'
+                        } ${
+                          isAvailable
+                            ? isMassSelected
+                              ? ''
+                              : 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-900'
+                            : isMassSelected
+                            ? ''
+                            : 'bg-red-100/90 border-red-300 text-red-800'
+                        }`}
+                        title={`Conference Seat ${seatDesk.deskCode} (${isAvailable ? 'Available' : 'Reserved'})`}
+                      >
+                        <span className="font-black">{seatDesk.deskCode}</span>
+                        {seatDesk.hasHdmi ? (
+                          <span className="text-[8px] text-purple-700 font-mono font-bold">HDMI</span>
+                        ) : (
+                          <span className="text-[8px] text-slate-400 font-mono">STD</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -976,7 +1023,9 @@ export const FloorPlansPage: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  WORKSTATION INSPECTOR
+                  {activeDesk.isMeetingRoom || activeDesk.deskCode.startsWith('M-')
+                    ? 'CONFERENCE POD SEAT'
+                    : 'WORKSTATION INSPECTOR'}
                 </span>
                 <button
                   onClick={() => setActiveDesk(null)}
