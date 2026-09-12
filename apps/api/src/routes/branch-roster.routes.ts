@@ -9,6 +9,7 @@ import {
   generateBranchEmployeeTemplate,
   exportBranchEmployeesToExcel,
   generateBranchFloorPlanTemplate,
+  parseAndValidateBranchFloorPlan,
 } from '../services/excel.service';
 
 const router = Router();
@@ -767,6 +768,169 @@ router.get(
       return res.send(buffer);
     } catch (error: any) {
       console.error('Failed to generate branch floor plan template:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/branch-roster/floor-plan-import
+ * Ingests branch-scoped floor plan configuration spreadsheet for active branch
+ */
+router.post(
+  '/floor-plan-import',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  upload.single('file'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const branch = await resolveBranch(req);
+
+      if (!branch) {
+        return res.status(404).json({ error: 'Assigned branch not found.' });
+      }
+
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'Please upload a valid Excel (.xlsx) file.' });
+      }
+
+      const validation = await parseAndValidateBranchFloorPlan(req.file.buffer, branch.code);
+      if (!validation.success || !validation.data) {
+        return res.status(400).json({
+          error: 'Floor plan spreadsheet validation failed.',
+          errors: validation.errorsSummary,
+        });
+      }
+
+      const parsedData = validation.data;
+      let totalBuildings = 0;
+      let totalFloors = 0;
+      let totalSections = 0;
+      let totalDesks = 0;
+      let totalMeetingRooms = 0;
+
+      await prisma.$transaction(async (tx) => {
+        // Cascade delete existing buildings and child entities for this branch
+        await tx.building.deleteMany({
+          where: { branchId: branch.id },
+        });
+
+        // Insert fresh buildings, floors, sections, desks, and meeting rooms
+        for (const bld of parsedData.buildings) {
+          totalBuildings++;
+          const building = await tx.building.create({
+            data: {
+              organizationId: orgId,
+              branchId: branch.id,
+              name: bld.name,
+              code: bld.code,
+              status: 'ACTIVE',
+            },
+          });
+
+          for (const fl of bld.floors) {
+            totalFloors++;
+            const floor = await tx.floor.create({
+              data: {
+                organizationId: orgId,
+                buildingId: building.id,
+                code: fl.code,
+                floorNumber: fl.floorNumber,
+                name: fl.name,
+              },
+            });
+
+            for (const sec of fl.sections) {
+              totalSections++;
+              const section = await tx.section.create({
+                data: {
+                  organizationId: orgId,
+                  floorId: floor.id,
+                  name: sec.name,
+                  direction: sec.direction,
+                  standardDeskCount: sec.standardDeskCount,
+                  hdmiDeskCount: sec.hdmiDeskCount,
+                },
+              });
+
+              // Generate Standard Workstations: C-01, C-02, ...
+              const deskData = [];
+              for (let i = 1; i <= sec.standardDeskCount; i++) {
+                totalDesks++;
+                const hasHdmi = i <= sec.hdmiDeskCount;
+                deskData.push({
+                  organizationId: orgId,
+                  sectionId: section.id,
+                  deskCode: `C-${String(i).padStart(2, '0')}`,
+                  deskNumber: i,
+                  hasHdmi,
+                  isMeetingRoom: false,
+                  status: 'AVAILABLE',
+                });
+              }
+              if (deskData.length > 0) {
+                await tx.desk.createMany({ data: deskData });
+              }
+
+              // Conference / Meeting Room
+              if (sec.hasMeetingRoom && sec.meetingRoomCapacity > 0) {
+                totalMeetingRooms++;
+                await tx.meetingRoom.create({
+                  data: {
+                    organizationId: orgId,
+                    sectionId: section.id,
+                    name: `${sec.name} Meeting Room (${sec.meetingRoomCapacity} Seats)`,
+                    capacity: sec.meetingRoomCapacity,
+                    hasHdmi: sec.meetingRoomHdmi > 0,
+                    hdmiCount: sec.meetingRoomHdmi,
+                  },
+                });
+              }
+            }
+          }
+        }
+
+        // Touch branch record
+        await tx.branch.update({
+          where: { id: branch.id },
+          data: { updatedAt: new Date() },
+        });
+
+        // Audit log
+        await tx.auditLog.create({
+          data: {
+            organizationId: orgId,
+            actorUserId: req.user!.id,
+            action: 'IMPORT_BRANCH_FLOOR_PLAN',
+            entityType: 'Branch',
+            entityId: branch.id,
+            metadata: {
+              branchCode: branch.code,
+              branchName: branch.name,
+              totalBuildings,
+              totalFloors,
+              totalSections,
+              totalDesks,
+              totalMeetingRooms,
+            },
+          },
+        });
+      });
+
+      return res.json({
+        success: true,
+        message: `Successfully configured floor plan for ${branch.name}: ${totalBuildings} building(s), ${totalFloors} floor(s), ${totalSections} section(s), ${totalDesks} desk(s).`,
+        summary: {
+          buildings: totalBuildings,
+          floors: totalFloors,
+          sections: totalSections,
+          desks: totalDesks,
+          meetingRooms: totalMeetingRooms,
+        },
+      });
+    } catch (error: any) {
+      console.error('Failed to import branch floor plan:', error);
       return res.status(500).json({ error: error.message });
     }
   }
