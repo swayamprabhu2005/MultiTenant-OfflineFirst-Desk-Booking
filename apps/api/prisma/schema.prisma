@@ -27,6 +27,8 @@ model Organization {
   workspaceSetupAt            DateTime?
   workspaceSetupExcel         Bytes?
   defaultBranchAdminPassword  String?
+  defaultEmployeePassword     String?
+  defaultDomain               String?
   createdAt                   DateTime     @default(now())
   updatedAt                   DateTime     @updatedAt
   branches                    Branch[]
