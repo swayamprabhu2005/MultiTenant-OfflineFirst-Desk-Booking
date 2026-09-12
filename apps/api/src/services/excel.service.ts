@@ -1219,5 +1219,266 @@ export async function generateBranchFloorPlanTemplate(
   return Buffer.from(buffer);
 }
 
+export interface ParsedBranchFloorPlan {
+  branchCode: string;
+  branchName: string;
+  buildings: Array<{
+    code: string;
+    name: string;
+    floors: Array<{
+      code: string;
+      name: string;
+      floorNumber: number;
+      sections: Array<{
+        name: string;
+        direction: string;
+        standardDeskCount: number;
+        hdmiDeskCount: number;
+        hasMeetingRoom: boolean;
+        meetingRoomCapacity: number;
+        meetingRoomHdmi: number;
+      }>;
+    }>;
+  }>;
+}
+
+export interface BranchFloorPlanValidationResult {
+  success: boolean;
+  errorCount: number;
+  errorsSummary: string[];
+  data?: ParsedBranchFloorPlan;
+}
+
+/**
+ * Validates and parses branch-scoped floor plan Excel template
+ */
+export async function parseAndValidateBranchFloorPlan(
+  fileBuffer: Buffer,
+  expectedBranchCode: string
+): Promise<BranchFloorPlanValidationResult> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(fileBuffer as any);
+
+  const sheetBranch = workbook.getWorksheet('Branch Info');
+  const sheetBuildings = workbook.getWorksheet('Buildings');
+  const sheetFloors = workbook.getWorksheet('Floors');
+  const sheetSections = workbook.getWorksheet('Sections & Cubicles');
+
+  const errors: string[] = [];
+
+  if (!sheetBranch || !sheetBuildings || !sheetFloors || !sheetSections) {
+    return {
+      success: false,
+      errorCount: 1,
+      errorsSummary: [
+        'Invalid template format: Missing one or more required sheets (Branch Info, Buildings, Floors, Sections & Cubicles).',
+      ],
+    };
+  }
+
+  // 1. Branch Info
+  const branchRow = sheetBranch.getRow(2);
+  const branchCode = branchRow.getCell(1).text?.trim();
+  const branchName = branchRow.getCell(2).text?.trim();
+
+  if (!branchCode) {
+    errors.push('Branch Info (Row 2): Branch Code is missing.');
+  } else if (branchCode.toUpperCase() !== expectedBranchCode.toUpperCase()) {
+    errors.push(
+      `Branch Code mismatch: Uploaded spreadsheet is for branch "${branchCode}", but your active branch is "${expectedBranchCode}".`
+    );
+  }
+
+  // 2. Buildings
+  const buildingsMap = new Map<
+    string,
+    {
+      code: string;
+      name: string;
+      floorCount: number;
+      floors: Array<{
+        code: string;
+        name: string;
+        floorNumber: number;
+        sections: Array<{
+          name: string;
+          direction: string;
+          standardDeskCount: number;
+          hdmiDeskCount: number;
+          hasMeetingRoom: boolean;
+          meetingRoomCapacity: number;
+          meetingRoomHdmi: number;
+        }>;
+      }>;
+    }
+  >();
+
+  for (let r = 2; r <= sheetBuildings.rowCount; r++) {
+    const row = sheetBuildings.getRow(r);
+    const bldCode = row.getCell(1).text?.trim();
+    const bldName = row.getCell(2).text?.trim();
+    const floorCountVal = Number(row.getCell(3).value);
+
+    if (!bldCode && !bldName) continue;
+
+    if (!bldCode) {
+      errors.push(`Buildings (Row ${r}): Building Code is required.`);
+    }
+    if (!bldName) {
+      errors.push(`Buildings (Row ${r}): Building Name is required.`);
+    }
+    if (isNaN(floorCountVal) || floorCountVal < 1) {
+      errors.push(`Buildings (Row ${r}): Number of Floors must be at least 1.`);
+    }
+
+    if (bldName) {
+      buildingsMap.set(bldName.toLowerCase(), {
+        code: bldCode || `BLD-${buildingsMap.size + 1}`,
+        name: bldName,
+        floorCount: isNaN(floorCountVal) ? 1 : floorCountVal,
+        floors: [],
+      });
+    }
+  }
+
+  if (buildingsMap.size === 0) {
+    errors.push('Buildings sheet: At least 1 building must be specified.');
+  }
+
+  // 3. Floors
+  const floorsMap = new Map<
+    string,
+    {
+      code: string;
+      name: string;
+      floorNumber: number;
+      sections: Array<{
+        name: string;
+        direction: string;
+        standardDeskCount: number;
+        hdmiDeskCount: number;
+        hasMeetingRoom: boolean;
+        meetingRoomCapacity: number;
+        meetingRoomHdmi: number;
+      }>;
+    }
+  >();
+
+  for (let r = 2; r <= sheetFloors.rowCount; r++) {
+    const row = sheetFloors.getRow(r);
+    const bldName = row.getCell(1).text?.trim();
+    const flCode = row.getCell(2).text?.trim();
+    const flName = row.getCell(3).text?.trim();
+
+    if (!bldName && !flCode && !flName) continue;
+
+    if (!flCode) {
+      errors.push(`Floors (Row ${r}): Floor Code is required.`);
+      continue;
+    }
+
+    let bldEntry = bldName ? buildingsMap.get(bldName.toLowerCase()) : null;
+    if (!bldEntry && buildingsMap.size > 0) {
+      bldEntry = buildingsMap.values().next().value;
+    }
+
+    if (!bldEntry) {
+      errors.push(`Floors (Row ${r}): Building "${bldName}" not found in Buildings sheet.`);
+      continue;
+    }
+
+    const floorNumber = bldEntry.floors.length + 1;
+    const floorObj = {
+      code: flCode,
+      name: flName || `Floor ${floorNumber}`,
+      floorNumber,
+      sections: [],
+    };
+
+    bldEntry.floors.push(floorObj);
+    floorsMap.set(flCode.toLowerCase(), floorObj);
+  }
+
+  // 4. Sections & Cubicles
+  for (let r = 2; r <= sheetSections.rowCount; r++) {
+    const row = sheetSections.getRow(r);
+    const flCode = row.getCell(1).text?.trim();
+    const secName = row.getCell(2).text?.trim();
+    const direction = (row.getCell(3).text?.trim() || 'NORTH').toUpperCase();
+    const standardDeskCount = Number(row.getCell(4).value || 0);
+    const hdmiDeskCount = Number(row.getCell(5).value || 0);
+    const hasMeetingRoomRaw = row.getCell(6).text?.trim()?.toLowerCase();
+    const meetingRoomCapacity = Number(row.getCell(7).value || 0);
+    const meetingRoomHdmi = Number(row.getCell(8).value || 0);
+
+    if (!flCode && !secName) continue;
+
+    if (!secName) {
+      errors.push(`Sections & Cubicles (Row ${r}): Section Name is required.`);
+      continue;
+    }
+
+    let floorEntry = flCode ? floorsMap.get(flCode.toLowerCase()) : null;
+    if (!floorEntry && floorsMap.size > 0) {
+      floorEntry = floorsMap.values().next().value;
+    }
+
+    if (!floorEntry) {
+      errors.push(`Sections & Cubicles (Row ${r}): Floor "${flCode}" not found in Floors sheet.`);
+      continue;
+    }
+
+    if (isNaN(standardDeskCount) || standardDeskCount < 0) {
+      errors.push(`Sections & Cubicles (Row ${r}): Standard Cubicles must be a non-negative number.`);
+    }
+    if (isNaN(hdmiDeskCount) || hdmiDeskCount < 0) {
+      errors.push(`Sections & Cubicles (Row ${r}): HDMI Cubicles must be a non-negative number.`);
+    } else if (hdmiDeskCount > standardDeskCount) {
+      errors.push(
+        `Sections & Cubicles (Row ${r}): HDMI Cubicles (${hdmiDeskCount}) cannot exceed Standard Cubicles (${standardDeskCount}).`
+      );
+    }
+
+    const hasMeetingRoom =
+      hasMeetingRoomRaw === 'yes' || hasMeetingRoomRaw === 'true' || hasMeetingRoomRaw === '1';
+
+    floorEntry.sections.push({
+      name: secName,
+      direction: ['NORTH', 'SOUTH', 'EAST', 'WEST'].includes(direction) ? direction : 'NORTH',
+      standardDeskCount: Math.max(0, isNaN(standardDeskCount) ? 0 : standardDeskCount),
+      hdmiDeskCount: Math.max(0, isNaN(hdmiDeskCount) ? 0 : hdmiDeskCount),
+      hasMeetingRoom,
+      meetingRoomCapacity: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomCapacity) ? 0 : meetingRoomCapacity) : 0,
+      meetingRoomHdmi: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomHdmi) ? 0 : meetingRoomHdmi) : 0,
+    });
+  }
+
+  if (errors.length > 0) {
+    return {
+      success: false,
+      errorCount: errors.length,
+      errorsSummary: errors,
+    };
+  }
+
+  const buildingsResult = Array.from(buildingsMap.values()).map((b) => ({
+    code: b.code,
+    name: b.name,
+    floors: b.floors,
+  }));
+
+  return {
+    success: true,
+    errorCount: 0,
+    errorsSummary: [],
+    data: {
+      branchCode: branchCode || expectedBranchCode,
+      branchName: branchName || '',
+      buildings: buildingsResult,
+    },
+  };
+}
+
+
 
 
