@@ -1118,4 +1118,83 @@ router.get('/my-bookings', authMiddleware, async (req: AuthenticatedRequest, res
   }
 });
 
+/**
+ * POST /api/employee/bulk-cancel
+ * Cancel multiple bookings simultaneously and release all selected desks
+ */
+router.post('/bulk-cancel', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const userId = req.user!.id;
+    const { bookingIds, deskIds } = req.body;
+
+    if ((!bookingIds || !bookingIds.length) && (!deskIds || !deskIds.length)) {
+      return res.status(400).json({ error: 'bookingIds or deskIds array is required' });
+    }
+
+    const where: any = {
+      organizationId: orgId,
+      status: 'CONFIRMED',
+    };
+
+    if (bookingIds && bookingIds.length > 0) {
+      where.id = { in: bookingIds };
+    } else if (deskIds && deskIds.length > 0) {
+      where.deskId = { in: deskIds };
+    }
+
+    const targetBookings = await prisma.booking.findMany({
+      where,
+      include: { desk: true },
+    });
+
+    if (targetBookings.length === 0) {
+      return res.status(404).json({ error: 'No active confirmed bookings found for the selected IDs' });
+    }
+
+    const targetDeskIds = targetBookings.map((b: any) => b.deskId);
+    const targetBookingIds = targetBookings.map((b: any) => b.id);
+
+    await prisma.$transaction(async (tx: any) => {
+      // 1. Mark desks as AVAILABLE
+      await tx.desk.updateMany({
+        where: { id: { in: targetDeskIds } },
+        data: { status: 'AVAILABLE' },
+      });
+
+      // 2. Mark bookings as CANCELLED
+      await tx.booking.updateMany({
+        where: { id: { in: targetBookingIds } },
+        data: { status: 'CANCELLED' },
+      });
+
+      // 3. Create bulk cancellation audit log
+      await tx.auditLog.create({
+        data: {
+          organizationId: orgId,
+          actorUserId: userId,
+          action: 'BULK_CANCEL_BOOKINGS',
+          entityType: 'Booking',
+          entityId: orgId,
+          metadata: {
+            cancelledCount: targetBookingIds.length,
+            deskIds: targetDeskIds,
+            bookingIds: targetBookingIds,
+          },
+        },
+      });
+    });
+
+    return res.json({
+      success: true,
+      message: `Successfully cancelled and released ${targetBookings.length} desk reservation(s).`,
+      count: targetBookings.length,
+      deskIds: targetDeskIds,
+    });
+  } catch (error: any) {
+    console.error('Failed bulk cancel:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

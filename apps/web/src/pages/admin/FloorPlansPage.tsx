@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2 } from 'lucide-react';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap } from 'lucide-react';
 
 interface DeskItem {
   id: string;
@@ -89,6 +89,10 @@ export const FloorPlansPage: React.FC = () => {
   // Selected Desk for Slide Drawer
   const [activeDesk, setActiveDesk] = useState<DeskItem | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+
+  // Branch Admin Mass Booking Mode State
+  const [isMassBookingMode, setIsMassBookingMode] = useState(false);
+  const [selectedDeskIds, setSelectedDeskIds] = useState<string[]>([]);
 
   // In-UI Manual Cubicle State
   const [isAddCubicleOpen, setIsAddCubicleOpen] = useState(false);
@@ -185,6 +189,60 @@ export const FloorPlansPage: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.message || 'Failed to cancel reservation');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  // Mass Booking Actions for Branch Admin
+  const handleConfirmMassBooking = async () => {
+    if (selectedDeskIds.length === 0) return;
+    try {
+      setBookingLoading(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-bookings', {
+        method: 'POST',
+        body: JSON.stringify({ deskIds: selectedDeskIds }),
+      });
+      await loadHierarchy();
+      const bookedCount = selectedDeskIds.length;
+      setSelectedDeskIds([]);
+      setIsMassBookingMode(false);
+      setActionNotice({
+        type: 'success',
+        text: res?.message || `Successfully booked ${bookedCount} workstations!`,
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+    } catch (err: any) {
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to complete mass booking.',
+      });
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  const handleReleaseMassBooking = async () => {
+    if (selectedDeskIds.length === 0) return;
+    try {
+      setBookingLoading(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-cancel', {
+        method: 'POST',
+        body: JSON.stringify({ deskIds: selectedDeskIds }),
+      });
+      await loadHierarchy();
+      setSelectedDeskIds([]);
+      setIsMassBookingMode(false);
+      setActionNotice({
+        type: 'success',
+        text: res?.message || 'Successfully released selected workstations.',
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+    } catch (err: any) {
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to release selected workstations.',
+      });
     } finally {
       setBookingLoading(false);
     }
@@ -444,18 +502,31 @@ export const FloorPlansPage: React.FC = () => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
             const isAvailable = desk.status === 'AVAILABLE';
             const isSelected = activeDesk?.id === desk.id;
+            const isMassSelected = selectedDeskIds.includes(desk.id);
             return (
               <button
                 key={desk.id}
-                onClick={() => setActiveDesk({ ...desk, hasHdmi })}
+                onClick={() => {
+                  if (isMassBookingMode) {
+                    if (isMassSelected) {
+                      setSelectedDeskIds(selectedDeskIds.filter((id) => id !== desk.id));
+                    } else {
+                      setSelectedDeskIds([...selectedDeskIds, desk.id]);
+                    }
+                  } else {
+                    setActiveDesk({ ...desk, hasHdmi });
+                  }
+                }}
                 className={`${deskHeightClass} rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
-                  isSelected
+                  isMassSelected
+                    ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
+                    : isSelected
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
                   isAvailable
-                    ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
-                    : 'bg-red-100/90 border-red-300 text-red-800'
+                    ? isMassSelected ? '' : 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
+                    : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
               >
                 <span className="text-[11px] font-black">{desk.deskCode}</span>
@@ -543,6 +614,30 @@ export const FloorPlansPage: React.FC = () => {
 
             {/* Action Buttons for Admins */}
             <div className="flex items-center gap-2">
+              {user?.role === 'BRANCH_ADMIN' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMassBookingMode(!isMassBookingMode);
+                    setSelectedDeskIds([]);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isMassBookingMode
+                      ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400'
+                      : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'
+                  }`}
+                  title="Toggle mass cubicle selection mode for bulk booking"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>{isMassBookingMode ? 'Exit Mass Mode' : '⚡ Mass Booking Mode'}</span>
+                  {selectedDeskIds.length > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-white text-purple-700 text-[10px] font-black flex items-center justify-center ml-0.5 shadow-xs">
+                      {selectedDeskIds.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleOpenAddCubicle}
@@ -1126,6 +1221,45 @@ export const FloorPlansPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Mass Booking Action Bar for Branch Admin */}
+      {isMassBookingMode && selectedDeskIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[110] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center space-x-6 animate-fade-in">
+          <div className="flex items-center space-x-2">
+            <span className="w-7 h-7 rounded-xl bg-purple-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
+              {selectedDeskIds.length}
+            </span>
+            <span className="text-xs font-bold">Cubicles Selected</span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={handleConfirmMassBooking}
+              disabled={bookingLoading}
+              className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{bookingLoading ? 'Reserving...' : `Mass Reserve (${selectedDeskIds.length})`}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleReleaseMassBooking}
+              disabled={bookingLoading}
+              className="py-2 px-3 bg-red-700 hover:bg-red-600 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+            >
+              Release Desks
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDeskIds([])}
+              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Clear
+            </button>
           </div>
         </div>
       )}
