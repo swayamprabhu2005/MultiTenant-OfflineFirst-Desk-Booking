@@ -33,6 +33,7 @@ model Organization {
   buildings                   Building[]
   users                       User[]
   auditLogs                   AuditLog[]
+  bookings                    Booking[]
 }
 
 model Branch {
@@ -94,6 +95,7 @@ model User {
   updatedAt          DateTime     @updatedAt
   auditLogs          AuditLog[]
   bookings           Booking[]
+  proxyBookingsMade  Booking[]    @relation("BookedByProxy")
 }
 
 model AuditLog {
@@ -174,14 +176,23 @@ model MeetingRoom {
 model Booking {
   id             String       @id @default(uuid())
   organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   deskId         String
   desk           Desk         @relation(fields: [deskId], references: [id], onDelete: Cascade)
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookedByUserId String?
+  bookedByUser   User?        @relation("BookedByProxy", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+  slotType       String       @default("FULL_DAY") // FULL_DAY, MORNING, AFTERNOON
   startTime      DateTime
   endTime        DateTime
-  status         String       @default("CONFIRMED") // CONFIRMED, CANCELLED
+  status         String       @default("CONFIRMED") // CONFIRMED, CANCELLED, RELEASED
+  notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  @@index([deskId, startTime, endTime, status])
+  @@index([userId, status, startTime])
+  @@index([organizationId, createdAt])
 }
 
