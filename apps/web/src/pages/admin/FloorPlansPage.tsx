@@ -102,6 +102,7 @@ export const FloorPlansPage: React.FC = () => {
   const [isImportingPlan, setIsImportingPlan] = useState(false);
   const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const floorPlanInputRef = useRef<HTMLInputElement>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   // Load Hierarchy
   const loadHierarchy = async () => {
@@ -216,6 +217,40 @@ export const FloorPlansPage: React.FC = () => {
           isMeetingRoom: cubicleType === 'MEETING',
         }),
       });
+
+      // Real-time optimistic update of local hierarchy state
+      if (res.desk) {
+        setBranches((prevBranches) =>
+          prevBranches.map((b) => {
+            if (b.id !== selectedBranchId) return b;
+            return {
+              ...b,
+              buildings: b.buildings.map((bld) => {
+                if (bld.id !== selectedBuildingId) return bld;
+                return {
+                  ...bld,
+                  floors: bld.floors.map((fl) => {
+                    if (fl.id !== selectedFloorId) return fl;
+                    return {
+                      ...fl,
+                      sections: fl.sections.map((sec) => {
+                        if (sec.id !== targetSecId) return sec;
+                        return {
+                          ...sec,
+                          standardDeskCount:
+                            cubicleType === 'STANDARD' ? sec.standardDeskCount + 1 : sec.standardDeskCount,
+                          hdmiDeskCount: cubicleHasHdmi ? sec.hdmiDeskCount + 1 : sec.hdmiDeskCount,
+                          desks: [...sec.desks, res.desk],
+                        };
+                      }),
+                    };
+                  }),
+                };
+              }),
+            };
+          })
+        );
+      }
 
       await loadHierarchy();
       setIsAddCubicleOpen(false);
@@ -369,12 +404,23 @@ export const FloorPlansPage: React.FC = () => {
 
   const colGridClass =
     numColumns === 2
-      ? 'grid grid-cols-2 gap-5'
+      ? 'grid grid-cols-2 gap-4 sm:gap-5'
       : numColumns === 3
-      ? 'grid grid-cols-3 gap-3.5'
-      : numColumns >= 4
-      ? 'grid grid-cols-4 gap-2.5'
+      ? 'grid grid-cols-3 gap-3 sm:gap-3.5'
+      : numColumns === 4
+      ? 'grid grid-cols-4 gap-2 sm:gap-2.5'
+      : numColumns === 5
+      ? 'grid grid-cols-5 gap-2'
+      : numColumns >= 6
+      ? 'grid grid-cols-6 gap-1.5'
       : 'grid grid-cols-1 gap-4';
+
+  const deskHeightClass =
+    numColumns >= 5
+      ? 'h-11 sm:h-12'
+      : numColumns >= 3
+      ? 'h-13 sm:h-14'
+      : 'h-15 sm:h-16';
 
   const renderPod = (podIdx: number, title: string) => {
     const podDesks = podClusters[podIdx] || [];
@@ -402,9 +448,7 @@ export const FloorPlansPage: React.FC = () => {
               <button
                 key={desk.id}
                 onClick={() => setActiveDesk({ ...desk, hasHdmi })}
-                className={`${
-                  numColumns >= 3 ? 'h-13 sm:h-14' : 'h-15 sm:h-16'
-                } rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
+                className={`${deskHeightClass} rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
                   isSelected
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
@@ -430,9 +474,7 @@ export const FloorPlansPage: React.FC = () => {
           {Array.from({ length: Math.max(0, 4 - podDesks.length) }).map((_, phIdx) => (
             <div
               key={`ph-${phIdx}`}
-              className={`${
-                numColumns >= 3 ? 'h-13 sm:h-14' : 'h-15 sm:h-16'
-              } rounded-xl border-2 border-dashed border-slate-200 bg-slate-100/50 flex items-center justify-center text-[9px] text-slate-300 font-mono`}
+              className={`${deskHeightClass} rounded-xl border-2 border-dashed border-slate-200 bg-slate-100/50 flex items-center justify-center text-[9px] text-slate-300 font-mono`}
             >
               EMPTY
             </div>
@@ -657,18 +699,56 @@ export const FloorPlansPage: React.FC = () => {
       {/* 2D ARCHITECTURAL FLOOR PLAN CANVAS (PURE HTML & CSS DIVS - ZERO SVG) */}
       <div className="bg-white rounded-3xl border-4 border-slate-900 p-6 shadow-2xl relative overflow-hidden min-h-[580px] flex flex-col justify-between">
         
-        {/* Floor Plan Header Tag */}
-        <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3 mb-6">
+        {/* Floor Plan Header Tag & Zoom Controller */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3 mb-6">
           <div className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
             LEVEL: {formatFloorDisplayName(currentFloor).toUpperCase()} • {currentSection?.name} • COMPASS: {currentSection?.direction}
           </div>
-          <div className="text-[10px] font-mono text-slate-500 font-bold">
-            TOTAL STATIONS: {desks.length} | PODS: {totalPods} | MEETING ROOMS: {meetingRoom ? 1 : 0}
+          <div className="flex items-center gap-4">
+            <div className="text-[10px] font-mono text-slate-500 font-bold">
+              TOTAL STATIONS: {desks.length} | PODS: {totalPods} | ROOMS: {meetingRoom ? 1 : 0}
+            </div>
+            {/* Dynamic Zoom Controller */}
+            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setZoomLevel((prev) => Math.max(70, prev - 10))}
+                disabled={zoomLevel <= 70}
+                title="Zoom Out Floor Plan"
+                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
+              >
+                −
+              </button>
+              <span className="font-mono text-[10px] font-bold text-slate-700 px-1 min-w-[38px] text-center">
+                {zoomLevel}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomLevel((prev) => Math.min(130, prev + 10))}
+                disabled={zoomLevel >= 130}
+                title="Zoom In Floor Plan"
+                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
+              >
+                +
+              </button>
+              {zoomLevel !== 100 && (
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(100)}
+                  className="text-[9px] font-bold text-slate-500 hover:text-slate-900 px-1.5 py-0.5 rounded hover:bg-slate-200 cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Main Floor Geometry Container */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        {/* Main Floor Geometry Container with Dynamic Zoom Scale */}
+        <div
+          className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start transition-transform duration-200 origin-top"
+          style={{ transform: `scale(${zoomLevel / 100})` }}
+        >
           
           {/* Main Open-Plan Desk Clusters Area (Column-Wise Expansion) */}
           <div className="lg:col-span-3">
