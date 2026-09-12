@@ -6,7 +6,6 @@ import {
   Search,
   Download,
   Upload,
-  Building,
   CheckCircle2,
   AlertTriangle,
   X,
@@ -255,14 +254,6 @@ export const WorkforcePage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3 sm:ml-auto">
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
-            <Building className="w-4 h-4 text-indigo-600" />
-            <span>Organization:</span>
-            <span className="font-mono text-indigo-700 font-black">
-              {tenant?.name || 'Active Enterprise'}
-            </span>
-          </div>
-
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700">
             <UserCheck className="w-4 h-4 text-indigo-600" />
             <span>Total Staff:</span>
