@@ -278,4 +278,225 @@ router.get("/branch-metrics", authMiddleware, async (req: AuthenticatedRequest, 
   }
 });
 
+/**
+ * Slot time computer for 3 daily options:
+ * FULL_DAY (9:00 - 18:00)
+ * MORNING (9:00 - 13:30)
+ * AFTERNOON (13:30 - 18:00)
+ */
+function computeSlotTimes(bookingDateStr?: string, slotType: string = 'FULL_DAY') {
+  const dateObj = bookingDateStr ? new Date(bookingDateStr) : new Date();
+  if (isNaN(dateObj.getTime())) {
+    throw new Error('Invalid booking date format. Expected YYYY-MM-DD.');
+  }
+
+  const y = dateObj.getFullYear();
+  const m = dateObj.getMonth();
+  const d = dateObj.getDate();
+
+  let startTime: Date;
+  let endTime: Date;
+
+  switch (slotType.toUpperCase()) {
+    case 'MORNING':
+      startTime = new Date(y, m, d, 9, 0, 0, 0);
+      endTime = new Date(y, m, d, 13, 30, 0, 0);
+      break;
+    case 'AFTERNOON':
+      startTime = new Date(y, m, d, 13, 30, 0, 0);
+      endTime = new Date(y, m, d, 18, 0, 0, 0);
+      break;
+    case 'FULL_DAY':
+    default:
+      startTime = new Date(y, m, d, 9, 0, 0, 0);
+      endTime = new Date(y, m, d, 18, 0, 0, 0);
+      break;
+  }
+
+  return { startTime, endTime, normalizedSlotType: slotType.toUpperCase() };
+}
+
+/**
+ * POST /api/employee/bookings
+ * Atomic desk reservation supporting 3 time-slots and overlap prevention
+ */
+router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const callerUser = req.user!;
+    const { deskId, slotType = 'FULL_DAY', bookingDate, notes, colleagueUserId } = req.body;
+
+    if (!deskId) {
+      return res.status(400).json({ error: 'Workstation deskId is required.' });
+    }
+
+    const { startTime, endTime, normalizedSlotType } = computeSlotTimes(bookingDate, slotType);
+
+    // Verify desk exists within caller's organization
+    const desk = await prisma.desk.findFirst({
+      where: { id: deskId, organizationId: orgId },
+      include: {
+        section: {
+          include: {
+            floor: {
+              include: {
+                building: {
+                  include: {
+                    branch: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!desk) {
+      return res.status(404).json({ error: 'Selected workstation desk not found.' });
+    }
+
+    // Determine target recipient (self vs colleague proxy)
+    let targetUserId = callerUser.id;
+    let bookedByUserId: string | null = null;
+
+    if (colleagueUserId && colleagueUserId !== callerUser.id) {
+      const colleague = await prisma.user.findFirst({
+        where: { id: colleagueUserId, organizationId: orgId, isActive: true },
+      });
+      if (!colleague) {
+        return res.status(404).json({ error: 'Colleague user not found or account is deactivated.' });
+      }
+      targetUserId = colleague.id;
+      bookedByUserId = callerUser.id;
+    }
+
+    // Atomic transaction for double-booking concurrency check and booking creation
+    const booking = await prisma.$transaction(async (tx) => {
+      // 1. Check if desk has conflicting booking in overlapping window
+      const conflictingDeskBooking = await tx.booking.findFirst({
+        where: {
+          organizationId: orgId,
+          deskId,
+          status: 'CONFIRMED',
+          startTime: { lt: endTime },
+          endTime: { gt: startTime },
+        },
+      });
+
+      if (conflictingDeskBooking) {
+        throw new Error(
+          `Desk ${desk.deskCode} is already reserved for the ${normalizedSlotType.replace('_', ' ')} slot.`
+        );
+      }
+
+      // 2. Check if recipient user already has another desk reserved in this time slot
+      const conflictingUserBooking = await tx.booking.findFirst({
+        where: {
+          organizationId: orgId,
+          userId: targetUserId,
+          status: 'CONFIRMED',
+          startTime: { lt: endTime },
+          endTime: { gt: startTime },
+        },
+        include: {
+          desk: true,
+        },
+      });
+
+      if (conflictingUserBooking) {
+        throw new Error(
+          `User already has an active reservation for Desk ${conflictingUserBooking.desk.deskCode} in this time window.`
+        );
+      }
+
+      // 3. Create booking record
+      return await tx.booking.create({
+        data: {
+          organizationId: orgId,
+          deskId,
+          userId: targetUserId,
+          bookedByUserId,
+          slotType: normalizedSlotType,
+          startTime,
+          endTime,
+          status: 'CONFIRMED',
+          notes: notes?.trim() || null,
+        },
+        include: {
+          desk: {
+            include: {
+              section: {
+                include: {
+                  floor: {
+                    include: {
+                      building: {
+                        include: {
+                          branch: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          user: {
+            select: { id: true, name: true, email: true, department: true },
+          },
+          bookedByUser: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      });
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        organizationId: orgId,
+        actorUserId: callerUser.id,
+        action: bookedByUserId ? 'PROXY_BOOK_DESK' : 'BOOK_DESK',
+        entityType: 'Booking',
+        entityId: booking.id,
+        metadata: {
+          deskCode: desk.deskCode,
+          slotType: normalizedSlotType,
+          targetUserId,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        },
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Workstation ${desk.deskCode} confirmed successfully for ${normalizedSlotType.replace('_', ' ')}.`,
+      booking: {
+        id: booking.id,
+        slotType: booking.slotType,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        status: booking.status,
+        notes: booking.notes,
+        desk: {
+          id: desk.id,
+          deskCode: desk.deskCode,
+          hasHdmi: desk.hasHdmi,
+          isMeetingRoom: desk.isMeetingRoom,
+          sectionName: desk.section.name,
+          floorName: desk.section.floor.name,
+          buildingName: desk.section.floor.building.name,
+          branchName: desk.section.floor.building.branch.name,
+        },
+        user: booking.user,
+        bookedByUser: booking.bookedByUser,
+      },
+    });
+  } catch (error: any) {
+    console.error('Failed to create booking:', error);
+    return res.status(400).json({ error: error.message || 'Failed to complete desk reservation.' });
+  }
+});
+
 export default router;
