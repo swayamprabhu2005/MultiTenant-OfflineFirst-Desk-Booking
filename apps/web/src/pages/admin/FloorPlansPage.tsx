@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2 } from 'lucide-react';
 
 interface DeskItem {
   id: string;
   deskCode: string;
   deskNumber: number;
   hasHdmi: boolean;
+  isMeetingRoom?: boolean;
   status: 'AVAILABLE' | 'BOOKED';
 }
 
@@ -87,6 +89,19 @@ export const FloorPlansPage: React.FC = () => {
   // Selected Desk for Slide Drawer
   const [activeDesk, setActiveDesk] = useState<DeskItem | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+
+  // In-UI Manual Cubicle State
+  const [isAddCubicleOpen, setIsAddCubicleOpen] = useState(false);
+  const [cubicleType, setCubicleType] = useState<'STANDARD' | 'MEETING'>('STANDARD');
+  const [cubicleHasHdmi, setCubicleHasHdmi] = useState(false);
+  const [cubicleTargetSectionId, setCubicleTargetSectionId] = useState('');
+  const [isSubmittingCubicle, setIsSubmittingCubicle] = useState(false);
+
+  // Excel Floor Plan Import / Export State
+  const [isExportingPlan, setIsExportingPlan] = useState(false);
+  const [isImportingPlan, setIsImportingPlan] = useState(false);
+  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const floorPlanInputRef = useRef<HTMLInputElement>(null);
 
   // Load Hierarchy
   const loadHierarchy = async () => {
@@ -171,6 +186,127 @@ export const FloorPlansPage: React.FC = () => {
       alert(err.message || 'Failed to cancel reservation');
     } finally {
       setBookingLoading(false);
+    }
+  };
+
+  // Open Add Cubicle modal
+  const handleOpenAddCubicle = () => {
+    setCubicleTargetSectionId(selectedSectionId || currentSection?.id || '');
+    setCubicleType('STANDARD');
+    setCubicleHasHdmi(false);
+    setIsAddCubicleOpen(true);
+  };
+
+  // Submit Add Cubicle
+  const handleCreateCubicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetSecId = cubicleTargetSectionId || currentSection?.id;
+    if (!targetSecId) {
+      setActionNotice({ type: 'error', text: 'Please select a valid floor section.' });
+      return;
+    }
+
+    try {
+      setIsSubmittingCubicle(true);
+      const res = await fetchApi<{ success: boolean; desk: DeskItem; message: string }>('/branch-roster/cubicle', {
+        method: 'POST',
+        body: JSON.stringify({
+          sectionId: targetSecId,
+          hasHdmi: cubicleHasHdmi,
+          isMeetingRoom: cubicleType === 'MEETING',
+        }),
+      });
+
+      await loadHierarchy();
+      setIsAddCubicleOpen(false);
+      setActionNotice({
+        type: 'success',
+        text: res.message || 'Workstation added successfully!',
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+    } catch (err: any) {
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to add cubicle.',
+      });
+    } finally {
+      setIsSubmittingCubicle(false);
+    }
+  };
+
+  // Download Floor Plan Template (.xlsx)
+  const handleDownloadBranchTemplate = async () => {
+    try {
+      setIsExportingPlan(true);
+      const token = localStorage.getItem('token');
+      const activeTenant = localStorage.getItem('activeTenantSubdomain');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (activeTenant) headers['x-tenant-subdomain'] = activeTenant;
+
+      const res = await fetch(`/api/branch-roster/floor-plan-template?branchId=${selectedBranchId}`, { headers });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to generate floor plan template.');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Floor_Plan_Template_${currentBranch?.code || 'Branch'}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setActionNotice({ type: 'success', text: 'Floor plan template downloaded successfully.' });
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err: any) {
+      setActionNotice({ type: 'error', text: err.message || 'Failed to download template.' });
+    } finally {
+      setIsExportingPlan(false);
+    }
+  };
+
+  // Upload Floor Plan Spreadsheet (.xlsx)
+  const handleUploadFloorPlan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsImportingPlan(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedBranchId) formData.append('branchId', selectedBranchId);
+
+      const token = localStorage.getItem('token');
+      const activeTenant = localStorage.getItem('activeTenantSubdomain');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (activeTenant) headers['x-tenant-subdomain'] = activeTenant;
+
+      const res = await fetch('/api/branch-roster/floor-plan-import', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import floor plan spreadsheet.');
+      }
+
+      await loadHierarchy();
+      setActionNotice({
+        type: 'success',
+        text: data.message || 'Floor plan layout successfully updated from spreadsheet!',
+      });
+      setTimeout(() => setActionNotice(null), 6000);
+    } catch (err: any) {
+      setActionNotice({ type: 'error', text: err.message || 'Failed to import floor plan.' });
+    } finally {
+      setIsImportingPlan(false);
+      if (floorPlanInputRef.current) {
+        floorPlanInputRef.current.value = '';
+      }
     }
   };
 
@@ -308,9 +444,29 @@ export const FloorPlansPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-[1600px] w-full mx-auto px-4 sm:px-0 py-4">
+      {/* Notice Banner */}
+      {actionNotice && (
+        <div
+          className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs ${
+            actionNotice.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}
+        >
+          <span>{actionNotice.text}</span>
+          <button
+            type="button"
+            onClick={() => setActionNotice(null)}
+            className="p-1 rounded-lg hover:bg-black/5 cursor-pointer font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Header & Cascade Selector Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               FACILITY EXPLORER • STRICT NO-SVG ENGINE
@@ -323,21 +479,65 @@ export const FloorPlansPage: React.FC = () => {
             </h1>
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-emerald-100 border border-emerald-400 inline-block" />
-              <span>Available</span>
+          {/* Action Buttons & Legend */}
+          <div className="flex flex-wrap items-center gap-3.5">
+            {/* Legend */}
+            <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-emerald-100 border border-emerald-400 inline-block" />
+                <span>Available</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-red-100 border border-red-300 inline-block" />
+                <span>Reserved</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-emerald-400 font-mono font-bold">
+                  HDMI
+                </span>
+                <span>Display</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-red-100 border border-red-300 inline-block" />
-              <span>Reserved</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-900 text-emerald-400 font-mono font-bold">
-                HDMI
-              </span>
-              <span>Display Setup</span>
+
+            {/* Action Buttons for Admins */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenAddCubicle}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Cubicle</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadBranchTemplate}
+                disabled={isExportingPlan}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                title="Download branch floor plan Excel configuration template"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExportingPlan ? 'Exporting...' : 'Export Plan'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => floorPlanInputRef.current?.click()}
+                disabled={isImportingPlan}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                title="Upload and apply branch floor plan layout (.xlsx)"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>{isImportingPlan ? 'Applying...' : 'Import Plan'}</span>
+              </button>
+              <input
+                type="file"
+                ref={floorPlanInputRef}
+                accept=".xlsx"
+                onChange={handleUploadFloorPlan}
+                className="hidden"
+              />
             </div>
           </div>
         </div>
@@ -690,6 +890,157 @@ export const FloorPlansPage: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Glassmorphic Add Cubicle Modal */}
+      {isAddCubicleOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white/95 backdrop-blur-xl border border-white/60 shadow-2xl rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-6">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Add Workstation
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Assign a new cubicle with dynamic cluster allocation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddCubicleOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCubicle} className="space-y-4">
+              {/* Target Section Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Target Section
+                </label>
+                <select
+                  value={cubicleTargetSectionId}
+                  onChange={(e) => setCubicleTargetSectionId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  {currentFloor?.sections.map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.name} ({sec.desks.length} Current Desks)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Workstation Type Selection */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5">
+                  Workstation Category
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCubicleType('STANDARD')}
+                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                      cubicleType === 'STANDARD'
+                        ? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>Standard Desk</span>
+                      {cubicleType === 'STANDARD' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      4-Desk Pod Cluster (C-XX)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCubicleType('MEETING')}
+                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                      cubicleType === 'MEETING'
+                        ? 'border-purple-500 bg-purple-50/50 shadow-xs ring-2 ring-purple-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>Meeting Room Seat</span>
+                      {cubicleType === 'MEETING' && <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Conference Pod Seating (M-XX)
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* HDMI Display Hardware Toggle */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-2 rounded-xl ${cubicleHasHdmi ? 'bg-slate-900 text-emerald-400' : 'bg-slate-200 text-slate-500'}`}>
+                    <Monitor className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-slate-900">HDMI Display Station</div>
+                    <div className="text-[10px] text-slate-500">Equip workstation with external HDMI monitor</div>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cubicleHasHdmi}
+                    onChange={(e) => setCubicleHasHdmi(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {/* Allocation Preview Tag */}
+              <div className="p-3 rounded-xl bg-slate-100/70 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between font-mono">
+                <span>PROJECTED IDENTIFIER:</span>
+                <span className="font-bold text-slate-900">
+                  {cubicleType === 'STANDARD'
+                    ? `C-${String((currentSection?.desks?.filter(d => !d.isMeetingRoom).length || 0) + 1).padStart(2, '0')}`
+                    : `M-${String((currentSection?.desks?.filter(d => d.isMeetingRoom).length || 0) + 1).padStart(2, '0')}`}
+                </span>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCubicleOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCubicle}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  {isSubmittingCubicle ? (
+                    <span>Creating Workstation...</span>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Confirm &amp; Add</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
