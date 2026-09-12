@@ -16,6 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
+  Globe,
+  Key,
 } from 'lucide-react';
 
 interface BranchOption {
@@ -57,6 +59,44 @@ export const WorkforcePage: React.FC = () => {
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('ALL');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Corporate Domain & Default Temporary Password configuration
+  const defaultDomain = tenant?.subdomain ? `${tenant.subdomain}.com` : 'acme.com';
+  const defaultFallbackPassword = tenant?.name ? `${tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}2026!` : 'Welcome2026!';
+  const [domain, setDomain] = useState(defaultDomain);
+  const [defaultPassword, setDefaultPassword] = useState(defaultFallbackPassword);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  // Load organization-wide roster configuration
+  const loadConfig = async () => {
+    try {
+      const config = await fetchApi<{ domain?: string; defaultPassword?: string }>('/roster/config');
+      if (config?.domain) setDomain(config.domain);
+      if (config?.defaultPassword) setDefaultPassword(config.defaultPassword);
+    } catch {
+      // fallback to computed defaults
+    }
+  };
+
+  // Save organization-wide roster configuration
+  const handleSaveConfig = async () => {
+    try {
+      setSavingConfig(true);
+      setErrorMsg(null);
+      await fetchApi('/roster/config', {
+        method: 'POST',
+        body: JSON.stringify({
+          domain: domain.trim() || defaultDomain,
+          defaultPassword: defaultPassword.trim() || defaultFallbackPassword,
+        }),
+      });
+      setStatusMsg('Corporate domain and default temporary password saved successfully.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save workforce roster configuration.');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   // Load available branches for filter dropdown
   const loadBranches = async () => {
@@ -108,6 +148,7 @@ export const WorkforcePage: React.FC = () => {
 
   useEffect(() => {
     loadBranches();
+    loadConfig();
   }, []);
 
   useEffect(() => {
@@ -122,7 +163,9 @@ export const WorkforcePage: React.FC = () => {
       setErrorMsg(null);
 
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/roster/multi-branch-template', {
+      const targetDomain = encodeURIComponent(domain.trim() || defaultDomain);
+      const targetPassword = encodeURIComponent(defaultPassword.trim() || defaultFallbackPassword);
+      const res = await fetch(`/api/roster/multi-branch-template?domain=${targetDomain}&defaultPassword=${targetPassword}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -306,6 +349,67 @@ export const WorkforcePage: React.FC = () => {
               )}
               <span>{uploadingRoster ? 'Ingesting Roster...' : 'Upload Completed Roster'}</span>
             </button>
+          </div>
+        </div>
+
+        {/* Corporate Domain & Default Password Configuration Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
+          {/* Corporate Domain Input */}
+          <div className="lg:col-span-6 space-y-1">
+            <label className="block text-[11px] font-bold text-slate-700">
+              Corporate Email Domain
+            </label>
+            <div className="relative">
+              <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder={defaultDomain}
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Injected into Excel formulas across all branch sheets so typing "Mohit Kumar" auto-generates "mohit.kumar@{domain || defaultDomain}".
+            </p>
+          </div>
+
+          {/* Default Temporary Password */}
+          <div className="lg:col-span-6 space-y-1">
+            <label className="block text-[11px] font-bold text-slate-700">
+              Default Temporary Password
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={defaultPassword}
+                  onChange={(e) => setDefaultPassword(e.target.value)}
+                  placeholder={defaultFallbackPassword}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveConfig}
+                disabled={savingConfig}
+                className="py-2 px-3.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50 flex items-center space-x-1"
+                title="Save Configuration"
+              >
+                {savingConfig ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Configure</span>
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Auto-fills in Column D of every branch sheet upon entering employee name in Excel.
+            </p>
           </div>
         </div>
 
