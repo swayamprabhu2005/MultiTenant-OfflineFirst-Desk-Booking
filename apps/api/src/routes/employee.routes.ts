@@ -378,13 +378,27 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
   try {
     const orgId = req.organizationId!;
     const user = req.user!;
-    const bookingDate = req.query.bookingDate as string | undefined;
+    const startDateQuery = req.query.startDate as string | undefined;
+    const endDateQuery = req.query.endDate as string | undefined;
+    const bookingDate = (req.query.bookingDate as string | undefined) || startDateQuery;
     const slotType = (req.query.slotType as string | undefined) || 'FULL_DAY';
     const reqBranchId = req.query.branchId as string | undefined;
 
     await ensureMeetingRoomDesks(orgId);
 
-    const { startTime, endTime } = computeSlotTimes(bookingDate, slotType);
+    let rangeStart: Date;
+    let rangeEnd: Date;
+
+    if (startDateQuery && endDateQuery) {
+      const sParts = startDateQuery.split('-').map(Number);
+      const eParts = endDateQuery.split('-').map(Number);
+      rangeStart = new Date(sParts[0], sParts[1] - 1, sParts[2], 0, 0, 0, 0);
+      rangeEnd = new Date(eParts[0], eParts[1] - 1, eParts[2], 23, 59, 59, 999);
+    } else {
+      const { startTime, endTime } = computeSlotTimes(bookingDate, slotType);
+      rangeStart = startTime;
+      rangeEnd = endTime;
+    }
 
     const branchWhere: any = { organizationId: orgId };
     const targetBranchId = reqBranchId || user.scopedBranchId || user.baseBranchId;
@@ -409,8 +423,8 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
                         bookings: {
                           where: {
                             status: 'CONFIRMED',
-                            startTime: { lt: endTime },
-                            endTime: { gt: startTime },
+                            startTime: { lte: rangeEnd },
+                            endTime: { gte: rangeStart },
                           },
                           select: {
                             id: true,
@@ -418,6 +432,7 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
                             slotType: true,
                             startTime: true,
                             endTime: true,
+                            notes: true,
                             bookedByUser: {
                               select: { id: true, name: true, email: true },
                             },
@@ -445,8 +460,8 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
         organizationId: orgId,
         userId: user.id,
         status: 'CONFIRMED',
-        startTime: { lt: endTime },
-        endTime: { gt: startTime },
+        startTime: { lte: rangeEnd },
+        endTime: { gte: rangeStart },
       },
       include: {
         desk: {
@@ -466,9 +481,9 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
           sections: fl.sections.map((sec) => ({
             ...sec,
             desks: sec.desks.map((desk) => {
-              const activeBooking = desk.bookings[0] || null;
-              const isMyBooking = desk.bookings.some((bk) => bk.userId === user.id);
-              const isReserved = !!activeBooking;
+              const deskBookings = desk.bookings || [];
+              const isMyBooking = deskBookings.some((bk) => bk.userId === user.id);
+              const isReserved = deskBookings.length > 0;
 
               return {
                 id: desk.id,
@@ -479,16 +494,8 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
                 status: isReserved ? 'BOOKED' : 'AVAILABLE',
                 isReserved,
                 isMyBooking,
-                activeBooking: activeBooking
-                  ? {
-                      id: activeBooking.id,
-                      slotType: activeBooking.slotType,
-                      startTime: activeBooking.startTime,
-                      endTime: activeBooking.endTime,
-                      user: activeBooking.user,
-                      bookedByUser: activeBooking.bookedByUser,
-                    }
-                  : null,
+                bookings: deskBookings,
+                activeBooking: deskBookings[0] || null,
               };
             }),
           })),
@@ -500,9 +507,11 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
       branches: enrichedBranches,
       slotInfo: {
         bookingDate: bookingDate || new Date().toISOString().split('T')[0],
+        startDate: startDateQuery || bookingDate || new Date().toISOString().split('T')[0],
+        endDate: endDateQuery || bookingDate || new Date().toISOString().split('T')[0],
         slotType: slotType.toUpperCase(),
-        startTime,
-        endTime,
+        startTime: rangeStart,
+        endTime: rangeEnd,
       },
       myActiveBooking: myActiveBookingInSlot
         ? {
@@ -523,19 +532,26 @@ router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res
 
 /**
  * POST /api/employee/bookings
- * Atomic desk reservation supporting 3 time-slots and overlap prevention
+ * Atomic desk reservation supporting multi-day date array, 3 time-slots, notes, and proxy bookings
  */
 router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = req.organizationId!;
     const callerUser = req.user!;
-    const { deskId, slotType = 'FULL_DAY', bookingDate, notes, colleagueUserId } = req.body;
+    const { deskId, slotType = 'FULL_DAY', bookingDate, bookingDates, notes, colleagueUserId } = req.body;
 
     if (!deskId) {
       return res.status(400).json({ error: 'Workstation deskId is required.' });
     }
 
-    const { startTime, endTime, normalizedSlotType } = computeSlotTimes(bookingDate, slotType);
+    const rawDates: string[] =
+      Array.isArray(bookingDates) && bookingDates.length > 0
+        ? bookingDates
+        : bookingDate
+        ? [bookingDate]
+        : [new Date().toISOString().split('T')[0]];
+
+    const uniqueDates = Array.from(new Set(rawDates)).sort();
 
     // Verify desk exists within caller's organization
     const desk = await prisma.desk.findFirst({
@@ -576,68 +592,72 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
       bookedByUserId = callerUser.id;
     }
 
-    // Atomic transaction for double-booking concurrency check and booking creation
-    const booking = await prisma.$transaction(async (tx) => {
-      // 1. Check if desk has conflicting booking in overlapping window
-      const conflictingDeskBooking = await tx.booking.findFirst({
-        where: {
-          organizationId: orgId,
-          deskId,
-          status: 'CONFIRMED',
-          startTime: { lt: endTime },
-          endTime: { gt: startTime },
-        },
-      });
+    // Atomic transaction for multi-day reservation creation
+    const createdBookings = await prisma.$transaction(async (tx) => {
+      const bookingsList: any[] = [];
 
-      if (conflictingDeskBooking) {
-        throw new Error(
-          `Desk ${desk.deskCode} is already reserved for the ${normalizedSlotType.replace('_', ' ')} slot.`
-        );
-      }
+      for (const dStr of uniqueDates) {
+        const { startTime, endTime, normalizedSlotType } = computeSlotTimes(dStr, slotType);
 
-      // 2. Check if recipient user already has another desk reserved in this time slot
-      const conflictingUserBooking = await tx.booking.findFirst({
-        where: {
-          organizationId: orgId,
-          userId: targetUserId,
-          status: 'CONFIRMED',
-          startTime: { lt: endTime },
-          endTime: { gt: startTime },
-        },
-        include: {
-          desk: true,
-        },
-      });
+        // 1. Check if desk has conflicting booking in overlapping window
+        const conflictingDeskBooking = await tx.booking.findFirst({
+          where: {
+            organizationId: orgId,
+            deskId,
+            status: 'CONFIRMED',
+            startTime: { lt: endTime },
+            endTime: { gt: startTime },
+          },
+        });
 
-      if (conflictingUserBooking) {
-        throw new Error(
-          `User already has an active reservation for Desk ${conflictingUserBooking.desk.deskCode} in this time window.`
-        );
-      }
+        if (conflictingDeskBooking) {
+          throw new Error(
+            `Desk ${desk.deskCode} is already reserved on ${dStr} for the ${normalizedSlotType.replace('_', ' ')} slot.`
+          );
+        }
 
-      // 3. Create booking record
-      return await tx.booking.create({
-        data: {
-          organizationId: orgId,
-          deskId,
-          userId: targetUserId,
-          bookedByUserId,
-          slotType: normalizedSlotType,
-          startTime,
-          endTime,
-          status: 'CONFIRMED',
-          notes: notes?.trim() || null,
-        },
-        include: {
-          desk: {
-            include: {
-              section: {
-                include: {
-                  floor: {
-                    include: {
-                      building: {
-                        include: {
-                          branch: true,
+        // 2. Check if recipient user already has another desk reserved in this time slot
+        const conflictingUserBooking = await tx.booking.findFirst({
+          where: {
+            organizationId: orgId,
+            userId: targetUserId,
+            status: 'CONFIRMED',
+            startTime: { lt: endTime },
+            endTime: { gt: startTime },
+          },
+          include: { desk: true },
+        });
+
+        if (conflictingUserBooking) {
+          throw new Error(
+            `User already has an active reservation for Desk ${conflictingUserBooking.desk.deskCode} on ${dStr}.`
+          );
+        }
+
+        // 3. Create booking record
+        const bk = await tx.booking.create({
+          data: {
+            organizationId: orgId,
+            deskId,
+            userId: targetUserId,
+            bookedByUserId,
+            slotType: normalizedSlotType,
+            startTime,
+            endTime,
+            status: 'CONFIRMED',
+            notes: notes?.trim() || null,
+          },
+          include: {
+            desk: {
+              include: {
+                section: {
+                  include: {
+                    floor: {
+                      include: {
+                        building: {
+                          include: {
+                            branch: true,
+                          },
                         },
                       },
                     },
@@ -645,15 +665,28 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
                 },
               },
             },
+            user: {
+              select: { id: true, name: true, email: true, department: true },
+            },
+            bookedByUser: {
+              select: { id: true, name: true, email: true },
+            },
           },
-          user: {
-            select: { id: true, name: true, email: true, department: true },
-          },
-          bookedByUser: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      });
+        });
+
+        bookingsList.push(bk);
+      }
+
+      // Update desk status to BOOKED if reservation includes current date
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (uniqueDates.includes(todayStr)) {
+        await tx.desk.update({
+          where: { id: deskId },
+          data: { status: 'BOOKED' },
+        });
+      }
+
+      return bookingsList;
     });
 
     // Audit log
@@ -663,27 +696,28 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
         actorUserId: callerUser.id,
         action: bookedByUserId ? 'PROXY_BOOK_DESK' : 'BOOK_DESK',
         entityType: 'Booking',
-        entityId: booking.id,
+        entityId: createdBookings[0]?.id || desk.id,
         metadata: {
           deskCode: desk.deskCode,
-          slotType: normalizedSlotType,
+          slotType: slotType.toUpperCase(),
           targetUserId,
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
+          dates: uniqueDates,
+          totalDays: uniqueDates.length,
         },
       },
     });
 
+    const firstBooking = createdBookings[0];
     return res.status(201).json({
       success: true,
-      message: `Workstation ${desk.deskCode} confirmed successfully for ${normalizedSlotType.replace('_', ' ')}.`,
-      booking: {
-        id: booking.id,
-        slotType: booking.slotType,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        status: booking.status,
-        notes: booking.notes,
+      message: `Workstation ${desk.deskCode} reserved successfully for ${uniqueDates.length} day(s).`,
+      bookings: createdBookings.map((b) => ({
+        id: b.id,
+        slotType: b.slotType,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        status: b.status,
+        notes: b.notes,
         desk: {
           id: desk.id,
           deskCode: desk.deskCode,
@@ -694,9 +728,31 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
           buildingName: desk.section.floor.building.name,
           branchName: desk.section.floor.building.branch.name,
         },
-        user: booking.user,
-        bookedByUser: booking.bookedByUser,
-      },
+        user: b.user,
+        bookedByUser: b.bookedByUser,
+      })),
+      booking: firstBooking
+        ? {
+            id: firstBooking.id,
+            slotType: firstBooking.slotType,
+            startTime: firstBooking.startTime,
+            endTime: firstBooking.endTime,
+            status: firstBooking.status,
+            notes: firstBooking.notes,
+            desk: {
+              id: desk.id,
+              deskCode: desk.deskCode,
+              hasHdmi: desk.hasHdmi,
+              isMeetingRoom: desk.isMeetingRoom,
+              sectionName: desk.section.name,
+              floorName: desk.section.floor.name,
+              buildingName: desk.section.floor.building.name,
+              branchName: desk.section.floor.building.branch.name,
+            },
+            user: firstBooking.user,
+            bookedByUser: firstBooking.bookedByUser,
+          }
+        : null,
     });
   } catch (error: any) {
     console.error('Failed to create booking:', error);
