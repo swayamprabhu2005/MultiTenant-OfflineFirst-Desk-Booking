@@ -10,6 +10,7 @@ import {
   Contact,
   Palette,
   ShieldCheck,
+  Calendar,
   Menu,
   ChevronLeft,
 } from 'lucide-react';
@@ -22,11 +23,18 @@ export const Sidebar: React.FC = () => {
 
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
   const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
+  const isEmployee = user?.role === 'EMPLOYEE';
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+      ]
+    : isEmployee
+    ? [
+        { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+        { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
+        { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
       ]
     : isBranchAdmin
     ? [
@@ -47,6 +55,8 @@ export const Sidebar: React.FC = () => {
 
   const headerTitle = isPlatformAdmin
     ? 'Platform Console'
+    : isEmployee
+    ? 'Workplace Portal'
     : isBranchAdmin
     ? 'Branch Console'
     : 'Organization Portal';

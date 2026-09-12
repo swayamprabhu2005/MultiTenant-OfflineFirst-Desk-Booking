@@ -12,6 +12,7 @@ import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { PlatformAdminDashboard } from './components/dashboard/PlatformAdminDashboard';
 import { OrganizationAdminDashboard } from './components/dashboard/OrganizationAdminDashboard';
 import { BranchAdminDashboard } from './components/dashboard/BranchAdminDashboard';
+import { EmployeeDashboard } from './components/dashboard/EmployeeDashboard';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
 import { WorkforcePage } from './pages/admin/WorkforcePage';
 import { BranchEmployeeRosterPage } from './pages/branch/BranchEmployeeRosterPage';
@@ -37,6 +38,9 @@ const DashboardRoute: React.FC = () => {
   }
   if (user?.role === 'BRANCH_ADMIN') {
     return <BranchAdminDashboard />;
+  }
+  if (user?.role === 'EMPLOYEE') {
+    return <EmployeeDashboard />;
   }
   return <OrganizationAdminDashboard />;
 };
