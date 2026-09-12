@@ -13,6 +13,7 @@ import { PlatformAdminDashboard } from './components/dashboard/PlatformAdminDash
 import { OrganizationAdminDashboard } from './components/dashboard/OrganizationAdminDashboard';
 import { BranchAdminDashboard } from './components/dashboard/BranchAdminDashboard';
 import { EmployeeRosterPage } from './pages/admin/EmployeeRosterPage';
+import { WorkforcePage } from './pages/admin/WorkforcePage';
 import { BranchEmployeeRosterPage } from './pages/branch/BranchEmployeeRosterPage';
 import { BranchAuditLogsPage } from './pages/branch/BranchAuditLogsPage';
 import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
@@ -90,6 +91,7 @@ export const App: React.FC = () => {
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
+                <Route path="admin/workforce" element={<WorkforcePage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
                 <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
