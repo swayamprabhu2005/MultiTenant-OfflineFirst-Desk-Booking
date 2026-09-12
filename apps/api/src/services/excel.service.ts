@@ -602,3 +602,215 @@ export async function exportBranchEmployeesToExcel(
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }
+
+/**
+ * Generates an Enterprise Multi-Branch Employee Ingestion Template
+ * Sheet 1: Organization Summary & Credentials (lists all branches, codes, domains, default passwords)
+ * Sheets 2..N: Dedicated Branch Sheets (named [BranchCode] - [BranchName]), formula-driven for emails & passwords
+ */
+export async function generateMultiBranchEmployeeTemplate(
+  orgName: string,
+  corporateDomain: string,
+  branches: Array<{
+    id: string;
+    code: string;
+    name: string;
+    defaultEmployeePassword?: string | null;
+    employeeCount: number;
+  }>,
+  defaultOrgPassword?: string
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'MultiTenant DeskBooking Platform';
+
+  const cleanDomain = corporateDomain.replace(/^@/, '').trim() || 'company.com';
+  const orgFallbackPassword =
+    defaultOrgPassword && defaultOrgPassword.trim().length >= 4
+      ? defaultOrgPassword.trim()
+      : orgName
+      ? orgName.toLowerCase().replace(/[^a-z0-9]/g, '')
+      : cleanDomain;
+
+  // 1. Sheet 1: Organization Summary & Credentials
+  const summarySheet = workbook.addWorksheet('Organization Summary');
+  summarySheet.views = [{ showGridLines: true }];
+
+  // Title Block
+  const titleRow = summarySheet.getRow(1);
+  titleRow.values = [`${orgName} — Multi-Branch Workforce Master Roster`];
+  titleRow.height = 30;
+  titleRow.font = { name: 'Segoe UI', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleRow.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  summarySheet.mergeCells('A1:E1');
+
+  // Header Row (Row 2)
+  const headerRow = summarySheet.getRow(2);
+  headerRow.values = [
+    'Branch Code',
+    'Branch Facility Name',
+    'Corporate Email Domain',
+    'Default Temporary Password',
+    'Registered Employees',
+  ];
+  headerRow.height = 26;
+  headerRow.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 1; c <= 5; c++) {
+    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    headerRow.getCell(c).border = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+  }
+
+  // Populate Branches in Summary Sheet
+  branches.forEach((b, idx) => {
+    const rowNum = idx + 3;
+    const r = summarySheet.getRow(rowNum);
+    r.height = 22;
+
+    const branchPassword = b.defaultEmployeePassword || orgFallbackPassword;
+
+    r.getCell(1).value = b.code; // Col A: Branch Code
+    r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1F4E79' } };
+
+    r.getCell(2).value = b.name; // Col B: Branch Facility Name
+    r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1E293B' } };
+
+    r.getCell(3).value = cleanDomain; // Col C: Corporate Email Domain
+    r.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    r.getCell(3).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF002060' } };
+    r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }; // Editable
+
+    r.getCell(4).value = branchPassword; // Col D: Default Temporary Password
+    r.getCell(4).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    r.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF002060' } };
+    r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }; // Editable
+
+    r.getCell(5).value = b.employeeCount || 0; // Col E: Registered Employees
+    r.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+    r.getCell(5).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+
+    for (let c = 1; c <= 5; c++) {
+      r.getCell(c).border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+    }
+  });
+
+  summarySheet.getColumn(1).width = 18;
+  summarySheet.getColumn(2).width = 30;
+  summarySheet.getColumn(3).width = 28;
+  summarySheet.getColumn(4).width = 28;
+  summarySheet.getColumn(5).width = 22;
+
+  // 2. Sheets 2..N: Dedicated Branch Sheets
+  branches.forEach((branch, bIdx) => {
+    // Sanitize sheet name: Max 31 chars, forbidden chars replaced: \ / ? * [ ] :
+    const rawSheetName = `${branch.code} - ${branch.name}`.replace(/[\\/?*[\]:]/g, ' ').trim();
+    const sheetName = rawSheetName.slice(0, 30);
+    const summaryRow = bIdx + 3; // Row in Organization Summary sheet for this branch
+
+    const bSheet = workbook.addWorksheet(sheetName);
+    bSheet.views = [{ showGridLines: true }];
+
+    // Branch Sheet Header
+    const bHeader = bSheet.getRow(1);
+    bHeader.values = [
+      'Employee Code',
+      'Employee Full Name',
+      'Corporate Email',
+      'Temporary Password',
+      'Role',
+    ];
+    bHeader.height = 26;
+    bHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Col A: Code (Light grey)
+    bHeader.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+    bHeader.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1F4E79' } };
+
+    // Col B: Full Name (Yellow user input)
+    bHeader.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+    bHeader.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF002060' } };
+
+    // Col C: Corporate Email (Soft Green formula)
+    bHeader.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+    bHeader.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
+
+    // Col D: Temporary Password (Soft Green formula)
+    bHeader.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+    bHeader.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF375623' } };
+
+    // Col E: Role (Light grey)
+    bHeader.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+    bHeader.getCell(5).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1F4E79' } };
+
+    // Pre-populate 100 rows with formulas referencing 'Organization Summary'
+    for (let r = 2; r <= 101; r++) {
+      const row = bSheet.getRow(r);
+      row.height = 20;
+
+      // Col A: Employee Code (Auto suggested code, e.g. EMP-001)
+      const empNum = String(r - 1).padStart(3, '0');
+      row.getCell(1).value = `EMP-${empNum}`;
+      row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F4F8' } };
+      row.getCell(1).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF475569' } };
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      // Col B: Full Name (Yellow user input)
+      row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+      row.getCell(2).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF0F172A' } };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+
+      // Col C: Corporate Email Formula referencing 'Organization Summary'!$C$[summaryRow]
+      row.getCell(3).value = {
+        formula: `IF(ISBLANK(B${r}), "", LOWER(SUBSTITUTE(TRIM(B${r}), " ", ".")) & "@" & 'Organization Summary'!$C$${summaryRow})`,
+      };
+      row.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
+      row.getCell(3).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF14532D' } };
+      row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+
+      // Col D: Temporary Password Formula referencing 'Organization Summary'!$D$[summaryRow]
+      row.getCell(4).value = {
+        formula: `IF(ISBLANK(B${r}), "", 'Organization Summary'!$D$${summaryRow})`,
+      };
+      row.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8F2' } };
+      row.getCell(4).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF14532D' } };
+      row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+
+      // Col E: Role (Default EMPLOYEE)
+      row.getCell(5).value = 'EMPLOYEE';
+      row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      row.getCell(5).font = { name: 'Segoe UI', size: 10, color: { argb: 'FF334155' } };
+      row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      for (let c = 1; c <= 5; c++) {
+        row.getCell(c).border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+      }
+    }
+
+    bSheet.getColumn(1).width = 16;
+    bSheet.getColumn(2).width = 30;
+    bSheet.getColumn(3).width = 32;
+    bSheet.getColumn(4).width = 24;
+    bSheet.getColumn(5).width = 16;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+

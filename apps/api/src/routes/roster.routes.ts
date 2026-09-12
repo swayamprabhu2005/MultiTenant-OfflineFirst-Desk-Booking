@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../prisma';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@deskbooking/shared';
+import { generateMultiBranchEmployeeTemplate } from '../services/excel.service';
 
 const router = Router();
 const upload = multer({
@@ -328,6 +329,74 @@ router.put('/default-password', authMiddleware, requireRole([Role.PLATFORM_ADMIN
     return res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * GET /api/roster/multi-branch-template
+ * Generates dynamic multi-sheet Excel template where each sheet represents a registered branch
+ */
+router.get(
+  '/multi-branch-template',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      if (!org) {
+        return res.status(404).json({ error: 'Organization not found.' });
+      }
+
+      const branches = await prisma.branch.findMany({
+        where: { organizationId: orgId },
+        include: {
+          _count: {
+            select: {
+              users: {
+                where: { role: Role.EMPLOYEE },
+              },
+            },
+          },
+        },
+        orderBy: { code: 'asc' },
+      });
+
+      if (branches.length === 0) {
+        return res.status(400).json({
+          error: 'No branches found. Please complete Workspace Setup first before generating employee rosters.',
+        });
+      }
+
+      const corporateDomain = `${org.subdomain || 'company'}.com`;
+      const branchPayload = branches.map((b) => ({
+        id: b.id,
+        code: b.code,
+        name: b.name,
+        defaultEmployeePassword: b.defaultEmployeePassword,
+        employeeCount: b._count.users,
+      }));
+
+      const fileBuffer = await generateMultiBranchEmployeeTemplate(
+        org.name,
+        corporateDomain,
+        branchPayload,
+        org.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+      );
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="Multi_Branch_Employee_Roster_${org.code || 'Master'}.xlsx"`
+      );
+      return res.send(fileBuffer);
+    } catch (error: any) {
+      console.error('Failed to generate multi-branch employee template:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
 
 /**
  * GET /api/roster/branch-admin-template
