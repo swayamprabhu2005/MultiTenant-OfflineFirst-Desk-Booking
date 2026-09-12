@@ -551,70 +551,83 @@ router.post(
         branchCodeToBranchMap.set(b.code.toUpperCase(), b);
       });
 
+      // Precompute all password hashes in parallel outside the transaction to prevent transaction timeout
+      const employeesWithHashes = await Promise.all(
+        validation.employees.map(async (emp) => {
+          const passwordHash = await bcrypt.hash(emp.password, 10);
+          return { ...emp, passwordHash };
+        })
+      );
+
       let importedCount = 0;
       let updatedCount = 0;
 
-      await prisma.$transaction(async (tx) => {
-        for (const emp of validation.employees) {
-          const branch = branchCodeToBranchMap.get(emp.branchCode.toUpperCase());
-          if (!branch) continue;
+      await prisma.$transaction(
+        async (tx) => {
+          for (const emp of employeesWithHashes) {
+            const branch = branchCodeToBranchMap.get(emp.branchCode.toUpperCase());
+            if (!branch) continue;
 
-          const passwordHash = await bcrypt.hash(emp.password, 10);
-          const existing = await tx.user.findFirst({
-            where: {
+            const existing = await tx.user.findFirst({
+              where: {
+                organizationId: orgId,
+                email: emp.email,
+              },
+            });
+
+            if (existing) {
+              await tx.user.update({
+                where: { id: existing.id },
+                data: {
+                  name: emp.fullName,
+                  role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
+                  scopedBranchId: branch.id,
+                  baseBranchId: branch.id,
+                  isActive: true,
+                  status: 'ACTIVE',
+                },
+              });
+              updatedCount++;
+            } else {
+              await tx.user.create({
+                data: {
+                  organizationId: orgId,
+                  name: emp.fullName,
+                  email: emp.email,
+                  role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
+                  scopedBranchId: branch.id,
+                  baseBranchId: branch.id,
+                  passwordHash: emp.passwordHash,
+                  mustChangePassword: true,
+                  isActive: true,
+                  status: 'ACTIVE',
+                },
+              });
+              importedCount++;
+            }
+          }
+
+          await tx.auditLog.create({
+            data: {
               organizationId: orgId,
-              email: emp.email,
+              actorUserId: req.user!.id,
+              action: 'GLOBAL_IMPORT_MULTI_BRANCH_EMPLOYEES',
+              entityType: 'Organization',
+              entityId: orgId,
+              metadata: {
+                importedCount,
+                updatedCount,
+                totalProcessed: importedCount + updatedCount,
+                branchStats: validation.branchStats,
+              },
             },
           });
-
-          if (existing) {
-            await tx.user.update({
-              where: { id: existing.id },
-              data: {
-                name: emp.fullName,
-                role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
-                scopedBranchId: branch.id,
-                baseBranchId: branch.id,
-                isActive: true,
-                status: 'ACTIVE',
-              },
-            });
-            updatedCount++;
-          } else {
-            await tx.user.create({
-              data: {
-                organizationId: orgId,
-                name: emp.fullName,
-                email: emp.email,
-                role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
-                scopedBranchId: branch.id,
-                baseBranchId: branch.id,
-                passwordHash,
-                mustChangePassword: true,
-                isActive: true,
-                status: 'ACTIVE',
-              },
-            });
-            importedCount++;
-          }
+        },
+        {
+          timeout: 30000,
+          maxWait: 10000,
         }
-
-        await tx.auditLog.create({
-          data: {
-            organizationId: orgId,
-            actorUserId: req.user!.id,
-            action: 'GLOBAL_IMPORT_MULTI_BRANCH_EMPLOYEES',
-            entityType: 'Organization',
-            entityId: orgId,
-            metadata: {
-              importedCount,
-              updatedCount,
-              totalProcessed: importedCount + updatedCount,
-              branchStats: validation.branchStats,
-            },
-          },
-        });
-      });
+      );
 
       return res.json({
         success: true,
