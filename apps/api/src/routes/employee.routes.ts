@@ -317,6 +317,211 @@ function computeSlotTimes(bookingDateStr?: string, slotType: string = 'FULL_DAY'
 }
 
 /**
+ * Helper to ensure meeting room seats (M-01, M-02, ...) exist as Desk records
+ */
+async function ensureMeetingRoomDesks(orgId: string) {
+  try {
+    const meetingRooms = await prisma.meetingRoom.findMany({
+      where: { organizationId: orgId },
+      include: {
+        section: {
+          include: {
+            desks: true,
+          },
+        },
+      },
+    });
+
+    for (const mr of meetingRooms) {
+      if (mr.capacity <= 0) continue;
+      const existingMeetingDesks = mr.section.desks.filter(
+        (d) => d.isMeetingRoom || d.deskCode.startsWith('M-')
+      );
+
+      if (existingMeetingDesks.length < mr.capacity) {
+        const existingCodes = new Set(existingMeetingDesks.map((d) => d.deskCode));
+        const desksToCreate = [];
+        for (let i = 1; i <= mr.capacity; i++) {
+          const code = `M-${String(i).padStart(2, '0')}`;
+          if (!existingCodes.has(code)) {
+            const hasHdmi = i <= mr.hdmiCount;
+            desksToCreate.push({
+              organizationId: orgId,
+              sectionId: mr.sectionId,
+              deskCode: code,
+              deskNumber: 1000 + i,
+              hasHdmi,
+              isMeetingRoom: true,
+              status: 'AVAILABLE',
+            });
+          }
+        }
+
+        if (desksToCreate.length > 0) {
+          await prisma.desk.createMany({
+            data: desksToCreate,
+            skipDuplicates: true,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring meeting room desks:', err);
+  }
+}
+
+/**
+ * GET /api/employee/floor-plans
+ * Returns 2D floor plans scoped to employee's branch with slot-specific reservation statuses
+ */
+router.get('/floor-plans', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const user = req.user!;
+    const bookingDate = req.query.bookingDate as string | undefined;
+    const slotType = (req.query.slotType as string | undefined) || 'FULL_DAY';
+    const reqBranchId = req.query.branchId as string | undefined;
+
+    await ensureMeetingRoomDesks(orgId);
+
+    const { startTime, endTime } = computeSlotTimes(bookingDate, slotType);
+
+    const branchWhere: any = { organizationId: orgId };
+    const targetBranchId = reqBranchId || user.scopedBranchId || user.baseBranchId;
+    if (targetBranchId) {
+      branchWhere.id = targetBranchId;
+    }
+
+    const branches = await prisma.branch.findMany({
+      where: branchWhere,
+      include: {
+        buildings: {
+          include: {
+            floors: {
+              orderBy: { floorNumber: 'asc' },
+              include: {
+                sections: {
+                  orderBy: { name: 'asc' },
+                  include: {
+                    desks: {
+                      orderBy: { deskNumber: 'asc' },
+                      include: {
+                        bookings: {
+                          where: {
+                            status: 'CONFIRMED',
+                            startTime: { lt: endTime },
+                            endTime: { gt: startTime },
+                          },
+                          select: {
+                            id: true,
+                            userId: true,
+                            slotType: true,
+                            startTime: true,
+                            endTime: true,
+                            bookedByUser: {
+                              select: { id: true, name: true, email: true },
+                            },
+                            user: {
+                              select: { id: true, name: true, email: true, department: true },
+                            },
+                          },
+                        },
+                      },
+                    },
+                    meetingRoom: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { code: 'asc' },
+    });
+
+    // Check if current user already has an active reservation in this time slot
+    const myActiveBookingInSlot = await prisma.booking.findFirst({
+      where: {
+        organizationId: orgId,
+        userId: user.id,
+        status: 'CONFIRMED',
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+      include: {
+        desk: {
+          include: {
+            section: true,
+          },
+        },
+      },
+    });
+
+    const enrichedBranches = branches.map((b) => ({
+      ...b,
+      buildings: b.buildings.map((bld) => ({
+        ...bld,
+        floors: bld.floors.map((fl) => ({
+          ...fl,
+          sections: fl.sections.map((sec) => ({
+            ...sec,
+            desks: sec.desks.map((desk) => {
+              const activeBooking = desk.bookings[0] || null;
+              const isMyBooking = desk.bookings.some((bk) => bk.userId === user.id);
+              const isReserved = !!activeBooking;
+
+              return {
+                id: desk.id,
+                deskCode: desk.deskCode,
+                deskNumber: desk.deskNumber,
+                hasHdmi: desk.hasHdmi,
+                isMeetingRoom: desk.isMeetingRoom,
+                status: isReserved ? 'BOOKED' : 'AVAILABLE',
+                isReserved,
+                isMyBooking,
+                activeBooking: activeBooking
+                  ? {
+                      id: activeBooking.id,
+                      slotType: activeBooking.slotType,
+                      startTime: activeBooking.startTime,
+                      endTime: activeBooking.endTime,
+                      user: activeBooking.user,
+                      bookedByUser: activeBooking.bookedByUser,
+                    }
+                  : null,
+              };
+            }),
+          })),
+        })),
+      })),
+    }));
+
+    return res.json({
+      branches: enrichedBranches,
+      slotInfo: {
+        bookingDate: bookingDate || new Date().toISOString().split('T')[0],
+        slotType: slotType.toUpperCase(),
+        startTime,
+        endTime,
+      },
+      myActiveBooking: myActiveBookingInSlot
+        ? {
+            id: myActiveBookingInSlot.id,
+            deskCode: myActiveBookingInSlot.desk.deskCode,
+            deskId: myActiveBookingInSlot.deskId,
+            slotType: myActiveBookingInSlot.slotType,
+            startTime: myActiveBookingInSlot.startTime,
+            endTime: myActiveBookingInSlot.endTime,
+          }
+        : null,
+    });
+  } catch (error: any) {
+    console.error('Failed to get employee floor plans:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/employee/bookings
  * Atomic desk reservation supporting 3 time-slots and overlap prevention
  */
