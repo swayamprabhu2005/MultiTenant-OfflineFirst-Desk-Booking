@@ -1,6 +1,15 @@
-# Multi-Tenant Offline-First Desk Booking & Facility SaaS Control Plane
+# 🏢 Multi-Tenant Offline-First Desk Booking
 
-An enterprise-grade, multi-tenant desk booking, facility administration, and workspace orchestration platform engineered with strict subdomain isolation, a 5-sheet automated Excel ingestion engine with a 72-hour grace modification window, an interactive 2D architectural floor plan explorer built using Pure React 18, semantic HTML5, and Tailwind CSS, and a complete employee workplace portal.
+> An enterprise-grade, multi-tenant SaaS platform for desk booking, facility administration, and workspace orchestration — engineered with strict subdomain isolation, a 5-sheet automated Excel ingestion engine, an interactive 2D architectural floor plan explorer, and a complete employee self-service workplace portal.
+
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![Express](https://img.shields.io/badge/Express.js-4.x-000000?style=flat-square&logo=express&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat-square&logo=prisma&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-Offline--First-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![pnpm](https://img.shields.io/badge/pnpm-Monorepo-F69220?style=flat-square&logo=pnpm&logoColor=white)
 
 ---
 
@@ -14,39 +23,41 @@ flowchart TD
     classDef employee fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#ffffff;
     classDef database fill:#0f172a,stroke:#6366f1,stroke-width:2px,color:#ffffff;
 
-    subgraph Tier1["Tier 1: Platform Superadmin Control Plane (subdomain: system)"]
+    subgraph Tier1["Tier 1 - Platform Superadmin Control Plane (subdomain: system)"]
         SA["Platform Superadmin\n(admin@deskbooking.com)"]:::platform
         SA -->|"Tenant Provisioning &\nSubdomain Management"| OP["Organization Creation"]:::platform
-        SA -->|"Atomic Cascade Purge\n(DELETE /api/organizations/:id)"| CP["Tenant Cascade Deletion"]:::platform
+        SA -->|"Atomic Cascade Purge"| CP["Tenant Cascade Deletion"]:::platform
         SA -->|"Global SaaS Stream"| AL1["Platform Audit Logs"]:::platform
     end
 
-    subgraph Tier2["Tier 2: Organization Administrator (e.g. acme.deskbooking.com)"]
-        OA["Global Organization Admin\n(Configured via /signup)"]:::org
-        OA -->|"5-Sheet Excel Engine\n(72h Grace Window)"| WS["Workspace Ingestion\n(Branches, Campuses, Floors, Sections)"]:::org
-        OA -->|"Branch Admin Assignment"| BA_Prov["Branch Admin Management\n(/admin/roster)"]:::org
-        OA -->|"Multi-Sheet Workforce Hub"| WF["Workforce Directory\n(/admin/workforce)"]:::org
-        OA -->|"Global Architectural View"| FP_Oversight["Floor Plan Oversight\n(Booking Disabled for Org Admin)"]:::org
+    subgraph Tier2["Tier 2 - Global Organization Admin (e.g. acme.deskbooking.com)"]
+        OA["Global Organization Admin"]:::org
+        OA -->|"5-Sheet Excel Engine"| WS["Workspace Ingestion"]:::org
+        OA -->|"Branch Admin Assignment"| BA_Prov["Branch Admin Management"]:::org
+        OA -->|"Multi-Sheet Workforce Hub"| WF["Workforce Directory"]:::org
+        OA -->|"Global Architectural View"| FP_Oversight["Floor Plan Oversight (Read-only)"]:::org
     end
 
-    subgraph Tier3["Tier 3: Branch Administrator (e.g. Goa HQ / Pune HQ)"]
+    subgraph Tier3["Tier 3 - Branch Administrator (e.g. Goa HQ / Pune HQ)"]
         BA["Branch Administrator\n(Scoped via scopedBranchId)"]:::branch
-        BA -->|"Floor Plan Re-Ingestion"| FP_EXP["Export & Import Floor Plan\n(/api/branch-roster/floor-plan-*)"]:::branch
-        BA -->|"In-UI Workstation Creation"| ADD_CUB["+ Add Cubicle Modal\n(Pod Recalculation & HDMI)"]:::branch
-        BA -->|"Direct Inline Hub"| PWD_HUB["Default Temporary Password Hub\n(Branch.defaultEmployeePassword)"]:::branch
-        BA -->|"3-Column Dynamic Template"| BATCH["Formula Excel Ingestion\n(Auto Email & Password)"]:::branch
-        BA -->|"Facility-Scoped Access"| BA_AUDIT["Branch Audit Logs\n(/branch/audit)"]:::branch
+        BA -->|"Floor Plan Re-Ingestion"| FP_EXP["Export & Import Floor Plan"]:::branch
+        BA -->|"In-UI Workstation Creation"| ADD_CUB["+ Add Cubicle Modal"]:::branch
+        BA -->|"Direct Inline Hub"| PWD_HUB["Default Temporary Password Hub"]:::branch
+        BA -->|"3-Column Dynamic Template"| BATCH["Formula Excel Ingestion"]:::branch
+        BA -->|"Facility-Scoped Access"| BA_AUDIT["Branch Audit Logs"]:::branch
     end
 
-    subgraph Tier4["Tier 4: End Users (Employees & Tech Leads)"]
+    subgraph Tier4["Tier 4 - End Users (Employees)"]
         EMP["Staff / Employees"]:::employee
-        EMP -->|"Workplace Portal"| DASH["Employee Dashboard\n(Greeting, Stats & Active Booking)"]:::employee
-        EMP -->|"Interactive 2D Canvas"| BOOKING["Floor Plan Explorer\n(Self & Proxy Booking, 3 Slots)"]:::employee
-        EMP -->|"Team Pod Mode"| BULK["Bulk Pod Reservations\n(Up to 8 Desks / 1-Click Pod)"]:::employee
-        EMP -->|"Reservation History"| MY_BK["My Bookings History\n(Status Filter & Release Actions)"]:::employee
+        EMP -->|"Workplace Portal"| DASH["Employee Dashboard"]:::employee
+        EMP -->|"Interactive 2D Canvas"| BOOKING["Floor Plan Explorer"]:::employee
+        EMP -->|"Team Pod Mode"| BULK["Bulk Pod Reservations"]:::employee
+        EMP -->|"Reservation History"| MY_BK["My Bookings History"]:::employee
+        EMP -->|"Multi-Day Booking"| MULTIDAY["Multi-Day Availability Matrix"]:::employee
+        EMP -->|"Booking Management"| CANCEL["Cancel Selected / Bulk Cancel"]:::employee
     end
 
-    subgraph Storage["PostgreSQL Multi-Tenant Storage Layer"]
+    subgraph Storage["SQLite Offline-First Storage Layer"]
         DB[("Multi-Tenant Relational Schema\n- Organization, Branch, Building\n- Floor, Section, Desk, MeetingRoom\n- User, Booking, AuditLog")]:::database
     end
 
@@ -62,123 +73,174 @@ flowchart TD
 
 ## 💎 Core Feature Modules
 
-### 1. Multi-Tenant Aurora Spectrum Platform Admin Console
-* **Unified Superadmin Hub (`system` subdomain):** Dedicated control plane for the Platform Superadmin (`admin@deskbooking.com`) with an iridescent **Multi-Tenant Aurora Spectrum** gradient.
-* **Tenant Lifecycle & Cascade Purge (`DELETE /api/organizations/:id`):**
-  * One-click decommissioning of tenant organizations.
-  * **Atomic Database Purge:** Executes an atomic transaction that purges child bookings, meeting rooms, workstation desks, floor sections, floors, buildings, branches, employees, and tenant audit logs.
-  * **Root System Safeguard:** The root `system` organization is permanently immutable and protected against deletion to prevent platform lockout.
+### 1. 🌐 Multi-Tenant Platform Superadmin Console
+- **Unified Superadmin Hub** (`system` subdomain): Aurora Spectrum gradient control plane for `admin@deskbooking.com`.
+- **Tenant Lifecycle & Cascade Purge** (`DELETE /api/organizations/:id`): Atomic transaction that purges all child bookings, desks, floors, buildings, branches, employees, and audit logs in one operation.
+- **Root System Safeguard**: The `system` organization is permanently immutable — protected against accidental deletion to prevent platform lockout.
 
 ---
 
-### 2. Global Workforce Directory & Multi-Branch Excel Roster Engine
-* **Separation of Concerns:**
-  * `/admin/roster` is dedicated strictly to **Branch Admins** with assigned branch badges and credential management.
-  * `/admin/workforce` is the dedicated **Workforce Directory** providing cross-branch visibility, department filtering, employee search, and pagination.
-* **Dynamic Multi-Sheet Excel Roster Generator (`GET /api/roster/template/multi-branch`):**
-  * **Sheet 1 (`Branches & Counts`):** Auto-lists all active organization branches with current employee counts and allocation limits.
-  * **Sheets 2..N (Per Branch):** Pre-formatted individual sheets named after each branch (e.g., `Branch_GOA`, `Branch_PUN`) with validation formulas for First Name, Last Name, Department, and Corporate Email.
-* **Bulk Multi-Branch Parser & Upsert Service (`POST /api/roster/import/multi-branch`):**
-  * Parses multi-sheet workbooks in an atomic transaction.
-  * Automatically assigns default branch passwords and validates unique corporate emails.
+### 2. 📋 Global Workforce Directory & Multi-Branch Excel Roster Engine
+- **Separation of Concerns**: `/admin/roster` manages Branch Admins exclusively; `/admin/workforce` is the cross-branch staff visibility hub with total staff count, search, and pagination.
+- **Dynamic Multi-Sheet Excel Generator** (`GET /api/roster/multi-branch-template`):
+  - **Sheet 1 (Branches & Counts)**: Auto-lists all active branches with employee counts.
+  - **Sheets 2..N (Per Branch)**: Pre-formatted sheets with live email and password column formulas.
+- **Bulk Multi-Branch Parser & Upsert** (`POST /api/roster/multi-branch-import`): Atomic transaction parsing across all branch sheets — auto-assigns domain passwords and validates unique corporate emails.
+- **Corporate Domain & Password Config**: Configurable per-organization domain and temporary password injected into every branch Excel sheet formula automatically.
 
 ---
 
-### 3. Branch Admin Floor Plan Spreadsheet Ingestion & In-UI Cubicle Creation
-* **Branch-Scoped Floor Plan Export & Re-Ingest:**
-  * `GET /api/branch-roster/floor-plan-template`: Generates a branch-specific workbook pre-populated with active buildings, floors, sections, and workstations.
-  * `POST /api/branch-roster/floor-plan-import`: Validates and synchronizes workstation additions and modifications directly from spreadsheet uploads.
-* **In-UI Manual `+ Add Cubicle` Modal:**
-  * Direct workstation creation modal within `FloorPlansPage.tsx`.
-  * Options for Standard Cubicle or Meeting Room seat.
-  * Real-time pod recalculation (reorganizes desks into 4-desk ergonomic clusters) with dynamic zoom adjustment and symmetrical HDMI redistribution.
+### 3. 🏗️ Branch Admin Floor Plan Tools & In-UI Cubicle Creation
+- **Branch-Scoped Floor Plan Export & Re-Ingest**:
+  - `GET /api/branch-roster/floor-plan-template`: Branch-specific workbook pre-populated with buildings, floors, sections, and workstations.
+  - `POST /api/branch-roster/floor-plan-import`: Validates and synchronizes workstation data from spreadsheet uploads.
+- **In-UI `+ Add Cubicle` Modal**: Direct workstation creation from the Branch Floor Plans UI with real-time pod recalculation, dynamic zoom adjustment, and symmetrical HDMI redistribution.
+- **Clickable Conference Pod Seats**: Meeting room seats (M-01 to M-10) are independently bookable from the employee floor plan explorer.
 
 ---
 
-### 4. Interactive 2D Floor Plan Explorer (Strict NO-SVG Mandate)
-* **Zero-SVG Architecture:** Built exclusively with semantic HTML5 `<div>` containers, CSS Grid, Flexbox, and CSS curvature (`rounded-xl`, `rounded-3xl`)—strictly no `<svg>`, `<canvas>`, or vector graphics.
-* **Sanitized Selectors:** Dropdowns for Branch, Building, Floor, and Section display human-readable names.
-* **Ergonomic 4-Desk Pod Clusters:** Workstations render in facing 2x2 clusters with central circulation aisles.
-* **Symmetrical HDMI Distribution:** Displays HDMI badges diagonally across pods rather than clustered in the first pod.
-* **Dynamic Zoom Controls:** Smooth scale zoom transforms (70% to 140%) with responsive layout recalculation.
+### 4. 🗺️ Interactive 2D Floor Plan Explorer (Zero-SVG Architecture)
+- **Strict No-SVG Mandate**: Built exclusively with semantic HTML5 `<div>` containers, CSS Grid, Flexbox, and Tailwind CSS border-radius — no `<svg>`, `<canvas>`, or vector graphics.
+- **Ergonomic 4-Desk Pod Clusters**: Workstations render in facing 2x2 clusters with central circulation aisles and colour-coded availability states.
+- **Symmetrical HDMI Distribution**: HDMI badges distributed diagonally across pods.
+- **Dynamic Zoom Controls**: Smooth scale zoom transforms (70% to 140%) with responsive recalculation.
+- **Colour-Coded Desk States**:
+  - 🟢 **Green** — Available for booking
+  - 🔵 **Blue** — Booked by the current user
+  - 🔴 **Red** — Booked by someone else
 
 ---
 
-### 5. Employee Self-Service Workplace Portal
-* **Employee Dashboard (`/` for Role `EMPLOYEE`):**
-  * Personalized greeting and facility metrics overview (Total Desks, Available Desks, HDMI Monitors, Meeting Rooms).
-  * Active Booking Hero Card with desk code, slot window, location hierarchy, and instant **Release Workstation** action.
-  * Quick-launch cards for Workstation Explorer and Reservation History.
-* **Interactive Workstation Reservation (`/employee/floor-plan`):**
-  * **3 Time Window Slots:** Full Day (09:00 - 18:00), Morning (09:00 - 13:30), Afternoon (13:30 - 18:00).
-  * **Date Picker:** Live reservation date selector with instant occupancy recalculation.
-  * **Workstation Inspector Drawer:**
-    * Book for Myself or Book on Behalf of Colleague (Proxy Booking).
-    * Colleague auto-suggest search with live `hasActiveBookingToday` indicator.
-    * Atomic double-booking conflict prevention in database transactions.
-* **Team Pod Mode (Bulk Multi-Desk Booking):**
-  * Quick toggle to select up to 8 workstations simultaneously.
-  * One-click **"Select Pod"** action to reserve entire 4-desk pod clusters with a single click.
-  * Atomic bulk reservation modal with sprint notes and batch confirmation.
-* **My Bookings History (`/employee/my-bookings`):**
-  * Tabbed status filtering: `ALL`, `CONFIRMED` (Upcoming/Active), `PAST` (Completed), `CANCELLED`.
-  * Search by desk code, branch name, building, section, or notes.
-  * Cancellation modal with reason capture and instant status update.
+### 5. 👨‍💼 Employee Self-Service Workplace Portal
+- **Employee Dashboard** (`/` for Role `EMPLOYEE`):
+  - Personalized greeting with facility metrics (Total Desks, Available Desks, HDMI Monitors, Meeting Rooms).
+  - Active Booking Hero Card with desk code, slot window, location hierarchy, and instant **Release Workstation** action.
+- **Workstation Reservation** (`/employee/floor-plan`):
+  - **3 Time Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
+  - **Multi-Day Availability Matrix**: View and select booking dates across a weekly grid.
+  - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live `hasActiveBookingToday` indicator.
+- **Team Pod Mode (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click with an atomic sprint batch confirmation.
+- **My Bookings History** (`/employee/my-bookings`):
+  - Tabbed filtering: `ALL`, `CONFIRMED`, `PAST`, `CANCELLED`.
+  - **Cancel Selected**: Checkbox-based multi-select for selective cancellation.
+  - **Bulk Cancel**: One-click cancellation of all future confirmed bookings.
 
 ---
 
-### 6. Audit Logs & Security Governance
-* Complete audit trail covering:
-  * `BOOK_DESK` & `PROXY_BOOK_DESK`: Desk reservation events with slot type and target recipient.
-  * `BULK_BOOK_POD`: Multi-workstation team sprint reservations.
-  * `CANCEL_BOOKING`: Workstation releases with optional cancellation reasons.
-  * `ADD_CUBICLE`: Manual workstation additions by branch administrators.
-  * `IMPORT_WORKFORCE_ROSTER`: Multi-branch bulk employee onboarding.
+### 6. 📝 Audit Logs & Security Governance
+
+| Audit Event | Description |
+|---|---|
+| `BOOK_DESK` | Self-booking a workstation with slot type |
+| `PROXY_BOOK_DESK` | Proxy reservation on behalf of a colleague |
+| `BULK_BOOK_POD` | Multi-workstation team sprint reservation |
+| `CANCEL_BOOKING` | Workstation release with optional cancellation reason |
+| `ADD_CUBICLE` | Manual workstation addition by a branch admin |
+| `IMPORT_WORKFORCE_ROSTER` | Multi-branch bulk employee onboarding event |
 
 ---
 
 ## 📦 Project Structure
 
 ```
+MultiTenant-OfflineFirst-DeskBooking/
 ├── apps/
-│   ├── api/                     # Express.js + Prisma ORM Backend
+│   ├── api/                          # Express.js + Prisma ORM Backend
 │   │   ├── prisma/
-│   │   │   └── schema.prisma    # Multi-tenant schema (Org, Branch, Desk, Booking, Audit)
+│   │   │   └── schema.prisma         # Multi-tenant schema
 │   │   └── src/
-│   │       ├── routes/          # Modular API endpoints
+│   │       ├── routes/               # Modular API endpoints
 │   │       │   ├── auth.routes.ts
 │   │       │   ├── audit.routes.ts
 │   │       │   ├── employee.routes.ts
 │   │       │   ├── roster.routes.ts
 │   │       │   ├── branch-roster.routes.ts
 │   │       │   └── workspace.routes.ts
-│   │       └── services/        # Excel engines, hashing, auth services
-│   └── web/                     # React 18 + Vite + Tailwind CSS Frontend
+│   │       └── services/             # Excel engines, hashing, auth services
+│   └── web/                          # React 18 + Vite + Tailwind CSS Frontend
 │       └── src/
 │           ├── components/
-│           │   ├── dashboard/   # Dashboards by role (Platform, Org, Branch, Employee)
-│           │   └── layout/      # Navbar, Sidebar, ProtectedRoute, AppLayout
+│           │   ├── dashboard/        # Role-specific dashboards
+│           │   └── layout/           # Navbar, Sidebar, ProtectedRoute
 │           ├── pages/
-│           │   ├── admin/       # FloorPlans, Workforce, BranchAdmins, AuditLogs
-│           │   ├── branch/      # BranchEmployeeRoster, BranchAuditLogs
-│           │   └── employee/    # EmployeeFloorPlanPage, MyBookingsPage
-│           └── services/        # Centralized fetchApi client
+│           │   ├── admin/            # FloorPlans, Workforce, BranchAdmins, AuditLogs
+│           │   ├── branch/           # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
+│           │   └── employee/         # EmployeeFloorPlanPage, MyBookingsPage, Dashboard
+│           └── services/             # Centralized fetchApi client
 └── packages/
-    └── shared/                  # Shared TypeScript interfaces, Role & Slot enums
+    └── shared/                       # Shared TypeScript interfaces, Role & Slot enums
 ```
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 18, Vite 5, TypeScript 5, Tailwind CSS 3 |
+| **Backend** | Express.js 4, TypeScript, Node.js |
+| **ORM & Database** | Prisma ORM, SQLite (offline-first) |
+| **Auth** | JWT Bearer tokens, bcrypt password hashing |
+| **Excel Engine** | ExcelJS — multi-sheet generation with live column formulas |
+| **Monorepo** | pnpm Workspaces |
+| **Build Tooling** | Vite (web), ts-node / tsx (API), pnpm |
 
 ---
 
 ## 🚀 Running the Application
 
-1. **Database Setup:**
-   Ensure PostgreSQL is running locally on port `5432` or configure `.env`.
+### Prerequisites
+- Node.js `>= 18.x`
+- pnpm `>= 8.x` (`npm install -g pnpm`)
 
-2. **One-Click Startup:**
-   ```powershell
-   .\run.bat
-   ```
-   * Verifies port allocations (3000 & 4000).
-   * Generates Prisma client and runs database migrations.
-   * Starts API on `http://localhost:4000` and Web on `http://localhost:3000`.
-   * Automatically launches the web console in the default browser.
+### One-Click Startup (Windows)
+```powershell
+.\run.bat
+```
+The `run.bat` script will:
+1. Verify port availability on `3000` and `4000`.
+2. Generate the Prisma client and run database migrations automatically.
+3. Start the API server on `http://localhost:4000`.
+4. Start the web frontend on `http://localhost:3000`.
+5. Auto-launch the web console in your default browser.
+
+### Manual Startup
+```bash
+# Install all dependencies
+pnpm install
+
+# Run both API and web concurrently
+pnpm dev
+```
+
+### Environment Configuration
+Copy `.env.example` to `.env` and configure:
+```env
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="your-secret-key"
+```
+
+---
+
+## 📋 API Endpoints Overview
+
+| Method | Route | Description |
+|---|---|---|
+| `POST` | `/api/auth/login` | Authenticate and receive JWT |
+| `GET` | `/api/roster/multi-branch-template` | Download multi-branch Excel roster |
+| `POST` | `/api/roster/multi-branch-import` | Bulk import employee roster |
+| `GET` | `/api/branch-roster/floor-plan-template` | Download branch floor plan workbook |
+| `POST` | `/api/branch-roster/floor-plan-import` | Import branch floor plan changes |
+| `POST` | `/api/branch-roster/cubicle` | Add a new workstation in-UI |
+| `GET` | `/api/employee/dashboard-summary` | Employee dashboard stats |
+| `POST` | `/api/employee/bookings` | Create a desk reservation |
+| `POST` | `/api/employee/bulk-bookings` | Bulk pod reservation |
+| `POST` | `/api/employee/cancel-booking` | Cancel a single booking |
+| `POST` | `/api/employee/cancel-selected` | Cancel selected bookings |
+| `POST` | `/api/employee/bulk-cancel` | Bulk cancel all future bookings |
+| `GET` | `/api/audit` | Fetch organization audit logs |
+| `GET` | `/api/health` | API health check |
+
+---
+
+*Built with care — Multi-Tenant Offline-First Desk Booking Platform*
