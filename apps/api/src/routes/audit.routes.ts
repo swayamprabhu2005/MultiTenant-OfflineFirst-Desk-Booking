@@ -10,15 +10,6 @@ router.get('/', authMiddleware, requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZAT
     let where: any = {};
     if (req.user?.role === Role.PLATFORM_ADMIN) {
       where = { action: 'CREATE_ORGANIZATION' };
-    } else if (req.user?.role === Role.BRANCH_ADMIN) {
-      const branchId = req.user.scopedBranchId || req.user.baseBranchId;
-      where = {
-        organizationId: req.organizationId!,
-        OR: [
-          { actorUserId: req.user.id },
-          ...(branchId ? [{ entityId: branchId }] : []),
-        ],
-      };
     } else {
       where = { organizationId: req.organizationId! };
     }
