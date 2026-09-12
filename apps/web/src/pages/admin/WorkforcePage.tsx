@@ -270,7 +270,7 @@ export const WorkforcePage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-row items-center gap-3 shrink-0">
             <input
               type="file"
               ref={fileInputRef}
@@ -283,7 +283,7 @@ export const WorkforcePage: React.FC = () => {
               type="button"
               onClick={handleDownloadTemplate}
               disabled={downloadingTemplate || uploadingRoster}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             >
               {downloadingTemplate ? (
                 <Loader2 className="w-4 h-4 animate-spin text-emerald-200" />
@@ -297,7 +297,7 @@ export const WorkforcePage: React.FC = () => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingRoster || downloadingTemplate}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             >
               {uploadingRoster ? (
                 <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
