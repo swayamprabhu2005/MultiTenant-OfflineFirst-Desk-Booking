@@ -23,6 +23,10 @@ import {
   AlertCircle,
   Loader2,
   Trash2,
+  Zap,
+  CheckSquare,
+  Square,
+  ArrowRight,
 } from 'lucide-react';
 
 export interface DeskBookingInfo {
@@ -147,7 +151,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   const [activeDesk, setActiveDesk] = useState<EmployeeDeskItem | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
-  // Inspector Booking Form State
+  // Bulk Selection Mode
+  const [isBulkMode, setIsBulkMode] = useState<boolean>(false);
+  const [bulkSelectedDesks, setBulkSelectedDesks] = useState<EmployeeDeskItem[]>([]);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(false);
+  const [bulkNotes, setBulkNotes] = useState<string>('');
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState<boolean>(false);
+
+  // Inspector Single Booking Form State
   const [bookingForMode, setBookingForMode] = useState<'SELF' | 'COLLEAGUE'>('SELF');
   const [colleagueSearch, setColleagueSearch] = useState<string>('');
   const [colleaguesList, setColleaguesList] = useState<ColleagueItem[]>([]);
@@ -240,7 +251,83 @@ export const EmployeeFloorPlanPage: React.FC = () => {
     };
   }, [bookingForMode, colleagueSearch, selectedBranchId]);
 
-  // Handle Workstation Reservation Submission
+  // Toggle desk in bulk selection mode
+  const toggleBulkDesk = (desk: EmployeeDeskItem) => {
+    if (desk.isReserved) return;
+
+    setBulkSelectedDesks((prev) => {
+      const exists = prev.some((d) => d.id === desk.id);
+      if (exists) {
+        return prev.filter((d) => d.id !== desk.id);
+      } else {
+        if (prev.length >= 8) {
+          setErrorNotice('Bulk reservation is capped at a maximum of 8 workstations per request.');
+          return prev;
+        }
+        return [...prev, desk];
+      }
+    });
+  };
+
+  // Select all available desks in a specific pod
+  const selectEntirePod = (podDesks: EmployeeDeskItem[]) => {
+    const availablePodDesks = podDesks.filter((d) => !d.isReserved);
+    if (availablePodDesks.length === 0) return;
+
+    setBulkSelectedDesks((prev) => {
+      const allSelected = availablePodDesks.every((d) => prev.some((p) => p.id === d.id));
+      if (allSelected) {
+        return prev.filter((p) => !availablePodDesks.some((d) => d.id === p.id));
+      } else {
+        const newDesks = availablePodDesks.filter((d) => !prev.some((p) => p.id === d.id));
+        const combined = [...prev, ...newDesks];
+        if (combined.length > 8) {
+          setErrorNotice('Bulk reservation is capped at a maximum of 8 workstations per request.');
+          return combined.slice(0, 8);
+        }
+        return combined;
+      }
+    });
+  };
+
+  // Handle Bulk Pod Reservation Submission
+  const handleConfirmBulkReservation = async () => {
+    if (bulkSelectedDesks.length === 0) return;
+
+    try {
+      setIsSubmittingBulk(true);
+      setErrorNotice(null);
+
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          deskIds: bulkSelectedDesks.map((d) => d.id),
+          bookingDate,
+          slotType,
+          notes: bulkNotes.trim() || 'Team Pod Sprint Reservation',
+        }),
+      });
+
+      setSuccessNotice(
+        res?.message || `Successfully reserved ${bulkSelectedDesks.length} workstations for your team!`
+      );
+      setTimeout(() => setSuccessNotice(null), 6000);
+
+      setBulkSelectedDesks([]);
+      setIsBulkModalOpen(false);
+      setIsBulkMode(false);
+      setBulkNotes('');
+
+      await loadFloorPlans();
+    } catch (err: any) {
+      console.error('Failed to create bulk booking:', err);
+      setErrorNotice(err.message || 'Failed to complete bulk pod reservation.');
+    } finally {
+      setIsSubmittingBulk(false);
+    }
+  };
+
+  // Handle Single Workstation Reservation Submission
   const handleConfirmReservation = async () => {
     if (!activeDesk) return;
 
@@ -275,13 +362,11 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       );
       setTimeout(() => setSuccessNotice(null), 6000);
 
-      // Reset selection state
       setSelectedColleague(null);
       setColleagueSearch('');
       setBookingNotes('');
       setActiveDesk(null);
 
-      // Refresh floor plan
       await loadFloorPlans();
     } catch (err: any) {
       console.error('Failed to reserve desk:', err);
@@ -384,24 +469,50 @@ export const EmployeeFloorPlanPage: React.FC = () => {
     const podDesks = podClusters[podIdx] || [];
     if (podDesks.length === 0) return null;
 
+    const availablePodDesks = podDesks.filter((d) => !d.isReserved);
+    const allPodSelected =
+      availablePodDesks.length > 0 &&
+      availablePodDesks.every((d) => bulkSelectedDesks.some((b) => b.id === d.id));
+
     return (
       <div
         key={podIdx}
-        className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between transition-all"
+        className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between transition-all relative group"
       >
         <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-500 mb-2.5">
-          <span className="flex items-center space-x-1">
+          <span className="flex items-center space-x-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>{title}</span>
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold">{podDesks.length}/4 DESKS</span>
+
+          {isBulkMode ? (
+            <button
+              type="button"
+              disabled={availablePodDesks.length === 0}
+              onClick={() => selectEntirePod(podDesks)}
+              className={`text-[9px] px-2 py-0.5 rounded-md font-sans font-bold flex items-center space-x-1 transition-all cursor-pointer ${
+                allPodSelected
+                  ? 'bg-purple-600 text-white shadow-2xs'
+                  : availablePodDesks.length > 0
+                  ? 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              {allPodSelected ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+              <span>{allPodSelected ? 'Deselect Pod' : 'Select Pod'}</span>
+            </button>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-semibold">{podDesks.length}/4 DESKS</span>
+          )}
         </div>
 
         {/* 2x2 facing desk pod */}
         <div className="grid grid-cols-2 gap-2">
           {podDesks.map((desk, slotIdx) => {
             const hasHdmi = desk.hasHdmi || isDeskHdmi(podIdx, slotIdx);
-            const isSelected = activeDesk?.id === desk.id;
+            const isSelected = isBulkMode
+              ? bulkSelectedDesks.some((b) => b.id === desk.id)
+              : activeDesk?.id === desk.id;
             const isAvailable = !desk.isReserved;
             const isMine = desk.isMyBooking;
 
@@ -410,10 +521,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 key={desk.id}
                 type="button"
                 onClick={() => {
-                  setActiveDesk({ ...desk, hasHdmi });
-                  setBookingForMode('SELF');
-                  setSelectedColleague(null);
-                  setColleagueSearch('');
+                  if (isBulkMode) {
+                    toggleBulkDesk({ ...desk, hasHdmi });
+                  } else {
+                    setActiveDesk({ ...desk, hasHdmi });
+                    setBookingForMode('SELF');
+                    setSelectedColleague(null);
+                    setColleagueSearch('');
+                  }
                 }}
                 className={`group relative rounded-xl border-2 p-2 flex flex-col justify-between transition-all cursor-pointer text-left ${deskHeightClass} ${
                   isSelected
@@ -439,14 +554,22 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   >
                     {desk.deskCode}
                   </span>
-                  {hasHdmi && (
-                    <span
-                      title="HDMI Equipped Monitor"
-                      className="p-0.5 rounded bg-white/80 border border-slate-200 text-slate-700 flex-shrink-0"
-                    >
-                      <Monitor className="w-3 h-3 text-emerald-600" />
-                    </span>
-                  )}
+
+                  <div className="flex items-center space-x-1">
+                    {hasHdmi && (
+                      <span
+                        title="HDMI Equipped Monitor"
+                        className="p-0.5 rounded bg-white/80 border border-slate-200 text-slate-700 flex-shrink-0"
+                      >
+                        <Monitor className="w-3 h-3 text-emerald-600" />
+                      </span>
+                    )}
+                    {isBulkMode && isAvailable && (
+                      <span className="text-purple-600">
+                        {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between mt-1 text-[10px] font-semibold">
@@ -480,7 +603,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -737,35 +860,58 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Zoom Controls */}
-            <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 p-1 rounded-xl">
+            <div className="flex items-center space-x-3">
+              {/* Bulk Pod Mode Toggle Button */}
               <button
                 type="button"
-                title="Zoom Out"
-                onClick={() => setZoomLevel((prev) => Math.max(70, prev - 10))}
-                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsBulkMode(!isBulkMode);
+                  if (isBulkMode) {
+                    setBulkSelectedDesks([]);
+                  } else {
+                    setActiveDesk(null);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  isBulkMode
+                    ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                }`}
               >
-                <ZoomOut className="w-4 h-4" />
+                <Zap className="w-3.5 h-3.5" />
+                <span>{isBulkMode ? 'Exit Pod Mode' : 'Team Pod Mode'}</span>
               </button>
-              <span className="text-[11px] font-mono font-bold text-slate-700 px-2">
-                {zoomLevel}%
-              </span>
-              <button
-                type="button"
-                title="Zoom In"
-                onClick={() => setZoomLevel((prev) => Math.min(140, prev + 10))}
-                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors cursor-pointer"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                title="Reset Zoom"
-                onClick={() => setZoomLevel(100)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-white rounded-lg transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+
+              {/* Zoom Controls */}
+              <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 p-1 rounded-xl">
+                <button
+                  type="button"
+                  title="Zoom Out"
+                  onClick={() => setZoomLevel((prev) => Math.max(70, prev - 10))}
+                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-[11px] font-mono font-bold text-slate-700 px-2">
+                  {zoomLevel}%
+                </span>
+                <button
+                  type="button"
+                  title="Zoom In"
+                  onClick={() => setZoomLevel((prev) => Math.min(140, prev + 10))}
+                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  title="Reset Zoom"
+                  onClick={() => setZoomLevel(100)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -837,7 +983,9 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                       {desks
                         .filter((d) => d.isMeetingRoom)
                         .map((seat) => {
-                          const isSelected = activeDesk?.id === seat.id;
+                          const isSelected = isBulkMode
+                            ? bulkSelectedDesks.some((b) => b.id === seat.id)
+                            : activeDesk?.id === seat.id;
                           const isAvailable = !seat.isReserved;
                           const isMine = seat.isMyBooking;
 
@@ -846,9 +994,13 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                               key={seat.id}
                               type="button"
                               onClick={() => {
-                                setActiveDesk(seat);
-                                setBookingForMode('SELF');
-                                setSelectedColleague(null);
+                                if (isBulkMode) {
+                                  toggleBulkDesk(seat);
+                                } else {
+                                  setActiveDesk(seat);
+                                  setBookingForMode('SELF');
+                                  setSelectedColleague(null);
+                                }
                               }}
                               className={`px-2.5 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
                                 isSelected
@@ -902,306 +1054,482 @@ export const EmployeeFloorPlanPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Workstation Inspector Slide Panel */}
+        {/* Workstation Inspector Slide Panel / Bulk Pod Reservation Drawer */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <h3 className="text-sm font-black text-slate-900 flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Workstation Inspector</span>
-            </h3>
-            {activeDesk && (
-              <button
-                type="button"
-                onClick={() => setActiveDesk(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {!activeDesk ? (
-            <div className="text-center py-12 text-slate-400 space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center font-bold">
-                <MapPin className="w-6 h-6" />
-              </div>
-              <p className="text-xs font-bold text-slate-700">No Workstation Selected</p>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Click any workstation on the floor plan canvas to inspect specifications, reservation status, and book for yourself or a colleague.
-              </p>
-            </div>
-          ) : (
+          {isBulkMode ? (
             <div className="space-y-4">
-              {/* Desk Identity Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-black font-mono text-slate-900">{activeDesk.deskCode}</span>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      activeDesk.isMyBooking
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                        : !activeDesk.isReserved
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        : 'bg-rose-100 text-rose-800 border border-rose-200'
-                    }`}
-                  >
-                    {activeDesk.isMyBooking ? 'Your Desk' : !activeDesk.isReserved ? 'Available' : 'Reserved'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-white p-2 rounded-xl border border-slate-200/80">
-                    <span className="text-slate-400 font-bold block text-[9px] uppercase">Type</span>
-                    <span className="font-extrabold text-slate-700">
-                      {activeDesk.isMeetingRoom ? 'Conference Seat' : 'Individual Pod'}
-                    </span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-slate-200/80">
-                    <span className="text-slate-400 font-bold block text-[9px] uppercase">HDMI Display</span>
-                    <span className="font-extrabold text-slate-700 flex items-center space-x-1">
-                      {activeDesk.hasHdmi ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Equipped</span>
-                        </>
-                      ) : (
-                        <span>Standard Desk</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-[11px] text-slate-500 space-y-1 pt-1 border-t border-slate-200/60">
-                  <div className="flex justify-between">
-                    <span>Floor:</span>
-                    <span className="font-bold text-slate-700">{formatFloorDisplayName(currentFloor)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Section:</span>
-                    <span className="font-bold text-slate-700">{currentSection?.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Slot:</span>
-                    <span className="font-bold text-slate-700">{slotType.replace('_', ' ')}</span>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="text-sm font-black text-purple-900 flex items-center space-x-2">
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span>Team Pod Selection</span>
+                </h3>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                  {bulkSelectedDesks.length} / 8 Desks
+                </span>
               </div>
 
-              {/* View 1: If it is MY booking -> Allow instant cancellation/release */}
-              {activeDesk.isMyBooking && activeDesk.activeBooking ? (
-                <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 space-y-3">
-                  <div className="flex items-center space-x-2 font-bold text-blue-800">
-                    <UserCheck className="w-4 h-4 text-blue-600" />
-                    <span>Your Confirmed Reservation</span>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Click individual workstations or use <span className="font-bold text-slate-700">"Select Pod"</span> on any pod cluster to reserve seats together for your team sprint.
+              </p>
+
+              {/* Selected Desks Badges */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Selected Workstations ({bulkSelectedDesks.length})
+                </label>
+                {bulkSelectedDesks.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                    No desks selected yet. Click any available green desk.
                   </div>
-                  <p className="text-[11px] text-blue-800/90 leading-relaxed">
-                    You have reserved Desk <span className="font-bold">{activeDesk.deskCode}</span> for {bookingDate} (
-                    {activeDesk.activeBooking.slotType.replace('_', ' ')}).
-                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1">
+                    {bulkSelectedDesks.map((d) => (
+                      <span
+                        key={d.id}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-900 font-mono text-xs font-bold"
+                      >
+                        <span>{d.deskCode}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleBulkDesk(d)}
+                          className="hover:text-rose-600 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Clear / Reserve Pod Actions */}
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  disabled={bulkSelectedDesks.length === 0}
+                  onClick={() => setIsBulkModalOpen(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Configure Pod Booking ({bulkSelectedDesks.length})</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+
+                {bulkSelectedDesks.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => handleReleaseReservation(activeDesk.activeBooking!.id)}
-                    disabled={isCancellingBooking}
-                    className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                    onClick={() => setBulkSelectedDesks([])}
+                    className="w-full py-2 text-xs font-bold text-slate-500 hover:text-rose-600 transition-colors cursor-pointer"
                   >
-                    {isCancellingBooking ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Releasing Desk...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Release Workstation</span>
-                      </>
-                    )}
+                    Clear All Selected Desks
                   </button>
-                </div>
-              ) : activeDesk.isReserved && activeDesk.activeBooking ? (
-                /* View 2: If it is reserved by someone else */
-                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 space-y-2">
-                  <div className="font-bold flex items-center space-x-1.5 text-amber-800">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Active Reservation</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <h3 className="text-sm font-black text-slate-900 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>Workstation Inspector</span>
+                </h3>
+                {activeDesk && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveDesk(null)}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {!activeDesk ? (
+                <div className="text-center py-12 text-slate-400 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center font-bold">
+                    <MapPin className="w-6 h-6" />
                   </div>
-                  <p className="text-[11px] leading-relaxed">
-                    Reserved for{' '}
-                    <span className="font-bold text-amber-950">
-                      {activeDesk.activeBooking.user?.name || 'A Colleague'}
-                    </span>{' '}
-                    ({activeDesk.activeBooking.user?.department || 'Staff'}).
-                  </p>
-                  <p className="text-[10px] text-amber-700 font-medium">
-                    This desk cannot be reserved during this time slot. Please pick another available desk on the floor plan.
+                  <p className="text-xs font-bold text-slate-700">No Workstation Selected</p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Click any workstation on the floor plan canvas to inspect specifications, reservation status, and book for yourself or a colleague.
                   </p>
                 </div>
               ) : (
-                /* View 3: Workstation is AVAILABLE -> Reservation Form */
-                <div className="space-y-3.5 pt-1">
-                  {/* Reservation Target Mode (Self vs Colleague Proxy) */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                      Reserve On Behalf Of
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBookingForMode('SELF');
-                          setSelectedColleague(null);
-                        }}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          bookingForMode === 'SELF'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-500 hover:text-slate-800'
+                <div className="space-y-4">
+                  {/* Desk Identity Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl font-black font-mono text-slate-900">{activeDesk.deskCode}</span>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          activeDesk.isMyBooking
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : !activeDesk.isReserved
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200'
                         }`}
                       >
-                        Myself ({user?.name ? user.name.split(' ')[0] : 'Me'})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBookingForMode('COLLEAGUE')}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          bookingForMode === 'COLLEAGUE'
-                            ? 'bg-white text-emerald-800 shadow-xs'
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                      >
-                        Colleague (Proxy)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Colleague Search Input & Auto-Suggest */}
-                  {bookingForMode === 'COLLEAGUE' && (
-                    <div className="space-y-2">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Search Colleague
-                      </label>
-                      {selectedColleague ? (
-                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-                          <div>
-                            <span className="font-bold text-emerald-950 block">{selectedColleague.name}</span>
-                            <span className="text-[10px] text-emerald-700">
-                              {selectedColleague.email} &bull; {selectedColleague.department}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedColleague(null)}
-                            className="p-1 text-emerald-700 hover:text-rose-600 cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                            <input
-                              type="text"
-                              placeholder="Search by name, email, department..."
-                              value={colleagueSearch}
-                              onChange={(e) => setColleagueSearch(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                            />
-                            {isLoadingColleagues && (
-                              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin absolute right-3 top-2.5" />
-                            )}
-                          </div>
-
-                          {/* Search Results Dropdown */}
-                          <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm divide-y divide-slate-100">
-                            {colleaguesList.length === 0 ? (
-                              <div className="p-3 text-[11px] text-slate-400 text-center">
-                                {isLoadingColleagues ? 'Searching staff...' : 'No colleagues found.'}
-                              </div>
-                            ) : (
-                              colleaguesList.map((c) => (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => setSelectedColleague(c)}
-                                  className="w-full p-2 text-left hover:bg-slate-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
-                                >
-                                  <div>
-                                    <span className="font-bold text-slate-800 block text-[11px]">{c.name}</span>
-                                    <span className="text-[10px] text-slate-400">
-                                      {c.department} &bull; {c.email}
-                                    </span>
-                                  </div>
-                                  {c.hasActiveBookingToday ? (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
-                                      Booked: {c.reservedDeskCode}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
-                                      Available
-                                    </span>
-                                  )}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Notes / Special Requests */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Notes / Purpose (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Client meeting, sprint planning..."
-                      value={bookingNotes}
-                      onChange={(e) => setBookingNotes(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Warning if colleague already has booking today */}
-                  {bookingForMode === 'COLLEAGUE' && selectedColleague?.hasActiveBookingToday && (
-                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] flex items-start space-x-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600" />
-                      <span>
-                        Note: {selectedColleague.name} already has Desk {selectedColleague.reservedDeskCode} booked today.
-                        Creating this booking will require conflicting slot clearance.
+                        {activeDesk.isMyBooking ? 'Your Desk' : !activeDesk.isReserved ? 'Available' : 'Reserved'}
                       </span>
                     </div>
-                  )}
 
-                  {/* Confirm Booking Action Button */}
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleConfirmReservation}
-                      disabled={isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
-                      className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSubmittingBooking ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Securing Workstation...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-4 h-4" />
-                          <span>
-                            Confirm Reservation ({activeDesk.deskCode})
-                          </span>
-                        </>
-                      )}
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="bg-white p-2 rounded-xl border border-slate-200/80">
+                        <span className="text-slate-400 font-bold block text-[9px] uppercase">Type</span>
+                        <span className="font-extrabold text-slate-700">
+                          {activeDesk.isMeetingRoom ? 'Conference Seat' : 'Individual Pod'}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2 rounded-xl border border-slate-200/80">
+                        <span className="text-slate-400 font-bold block text-[9px] uppercase">HDMI Display</span>
+                        <span className="font-extrabold text-slate-700 flex items-center space-x-1">
+                          {activeDesk.hasHdmi ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Equipped</span>
+                            </>
+                          ) : (
+                            <span>Standard Desk</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 space-y-1 pt-1 border-t border-slate-200/60">
+                      <div className="flex justify-between">
+                        <span>Floor:</span>
+                        <span className="font-bold text-slate-700">{formatFloorDisplayName(currentFloor)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Section:</span>
+                        <span className="font-bold text-slate-700">{currentSection?.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Slot:</span>
+                        <span className="font-bold text-slate-700">{slotType.replace('_', ' ')}</span>
+                      </div>
+                    </div>
                   </div>
+
+                  {/* View 1: If it is MY booking -> Allow instant cancellation/release */}
+                  {activeDesk.isMyBooking && activeDesk.activeBooking ? (
+                    <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 space-y-3">
+                      <div className="flex items-center space-x-2 font-bold text-blue-800">
+                        <UserCheck className="w-4 h-4 text-blue-600" />
+                        <span>Your Confirmed Reservation</span>
+                      </div>
+                      <p className="text-[11px] text-blue-800/90 leading-relaxed">
+                        You have reserved Desk <span className="font-bold">{activeDesk.deskCode}</span> for {bookingDate} (
+                        {activeDesk.activeBooking.slotType.replace('_', ' ')}).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleReleaseReservation(activeDesk.activeBooking!.id)}
+                        disabled={isCancellingBooking}
+                        className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isCancellingBooking ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Releasing Desk...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Release Workstation</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : activeDesk.isReserved && activeDesk.activeBooking ? (
+                    /* View 2: If it is reserved by someone else */
+                    <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 space-y-2">
+                      <div className="font-bold flex items-center space-x-1.5 text-amber-800">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Active Reservation</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        Reserved for{' '}
+                        <span className="font-bold text-amber-950">
+                          {activeDesk.activeBooking.user?.name || 'A Colleague'}
+                        </span>{' '}
+                        ({activeDesk.activeBooking.user?.department || 'Staff'}).
+                      </p>
+                      <p className="text-[10px] text-amber-700 font-medium">
+                        This desk cannot be reserved during this time slot. Please pick another available desk on the floor plan.
+                      </p>
+                    </div>
+                  ) : (
+                    /* View 3: Workstation is AVAILABLE -> Reservation Form */
+                    <div className="space-y-3.5 pt-1">
+                      {/* Reservation Target Mode (Self vs Colleague Proxy) */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Reserve On Behalf Of
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBookingForMode('SELF');
+                              setSelectedColleague(null);
+                            }}
+                            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              bookingForMode === 'SELF'
+                                ? 'bg-white text-slate-900 shadow-xs'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            Myself ({user?.name ? user.name.split(' ')[0] : 'Me'})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBookingForMode('COLLEAGUE')}
+                            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              bookingForMode === 'COLLEAGUE'
+                                ? 'bg-white text-emerald-800 shadow-xs'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            Colleague (Proxy)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Colleague Search Input & Auto-Suggest */}
+                      {bookingForMode === 'COLLEAGUE' && (
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            Search Colleague
+                          </label>
+                          {selectedColleague ? (
+                            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+                              <div>
+                                <span className="font-bold text-emerald-950 block">{selectedColleague.name}</span>
+                                <span className="text-[10px] text-emerald-700">
+                                  {selectedColleague.email} &bull; {selectedColleague.department}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedColleague(null)}
+                                className="p-1 text-emerald-700 hover:text-rose-600 cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                                <input
+                                  type="text"
+                                  placeholder="Search by name, email, department..."
+                                  value={colleagueSearch}
+                                  onChange={(e) => setColleagueSearch(e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                                />
+                                {isLoadingColleagues && (
+                                  <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin absolute right-3 top-2.5" />
+                                )}
+                              </div>
+
+                              {/* Search Results Dropdown */}
+                              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm divide-y divide-slate-100">
+                                {colleaguesList.length === 0 ? (
+                                  <div className="p-3 text-[11px] text-slate-400 text-center">
+                                    {isLoadingColleagues ? 'Searching staff...' : 'No colleagues found.'}
+                                  </div>
+                                ) : (
+                                  colleaguesList.map((c) => (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => setSelectedColleague(c)}
+                                      className="w-full p-2 text-left hover:bg-slate-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                                    >
+                                      <div>
+                                        <span className="font-bold text-slate-800 block text-[11px]">{c.name}</span>
+                                        <span className="text-[10px] text-slate-400">
+                                          {c.department} &bull; {c.email}
+                                        </span>
+                                      </div>
+                                      {c.hasActiveBookingToday ? (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
+                                          Booked: {c.reservedDeskCode}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                                          Available
+                                        </span>
+                                      )}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Notes / Special Requests */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Notes / Purpose (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g., Client meeting, sprint planning..."
+                          value={bookingNotes}
+                          onChange={(e) => setBookingNotes(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Warning if colleague already has booking today */}
+                      {bookingForMode === 'COLLEAGUE' && selectedColleague?.hasActiveBookingToday && (
+                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] flex items-start space-x-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600" />
+                          <span>
+                            Note: {selectedColleague.name} already has Desk {selectedColleague.reservedDeskCode} booked today.
+                            Creating this booking will require conflicting slot clearance.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Confirm Booking Action Button */}
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleConfirmReservation}
+                          disabled={isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
+                          className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSubmittingBooking ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Securing Workstation...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>
+                                Confirm Reservation ({activeDesk.deskCode})
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
+
+      {/* Bulk Pod Reservation Confirmation Modal */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 rounded-xl bg-purple-100 text-purple-700">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Confirm Team Pod Reservation</h3>
+                  <p className="text-xs text-slate-400">Atomic group reservation for sprint collaboration</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Summary details */}
+            <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-100 space-y-3">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-semibold">Reservation Date:</span>
+                <span className="font-extrabold text-slate-800">{bookingDate}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-semibold">Slot Type:</span>
+                <span className="font-extrabold text-slate-800">{slotType.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-semibold">Branch &amp; Section:</span>
+                <span className="font-extrabold text-slate-800">
+                  {currentBranch?.code} &bull; {currentSection?.name}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-purple-200/60">
+                <span className="text-[11px] font-bold text-slate-500 block mb-1.5 uppercase tracking-wider">
+                  Workstations to Reserve ({bulkSelectedDesks.length}):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {bulkSelectedDesks.map((d) => (
+                    <span
+                      key={d.id}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-purple-200 text-purple-900 font-mono text-xs font-bold shadow-2xs"
+                    >
+                      {d.deskCode}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Purpose / Team Sprint Note */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Team Booking Note / Sprint Title
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., Q3 Mobile App Sprint, Client Demo Room..."
+                value={bulkNotes}
+                onChange={(e) => setBulkNotes(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkReservation}
+                disabled={isSubmittingBulk}
+                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingBulk ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Securing {bulkSelectedDesks.length} Pod Desks...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Confirm {bulkSelectedDesks.length} Workstation Bookings</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
