@@ -21,6 +21,7 @@ import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
 import { FloorPlansPage } from './pages/admin/FloorPlansPage';
+import { EmployeeFloorPlanPage } from './pages/employee/EmployeeFloorPlanPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +101,7 @@ export const App: React.FC = () => {
                 <Route path="admin/audit" element={<AuditLogsPage />} />
                 <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
                 <Route path="branch/audit" element={<BranchAuditLogsPage />} />
+                <Route path="employee/floor-plan" element={<EmployeeFloorPlanPage />} />
               </Route>
 
               {/* Catch-all fallback */}
