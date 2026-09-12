@@ -54,6 +54,10 @@ Workspace_Errors_*.xlsx
 Workspace_Config_*.xlsx
 Branch_Employees_Template_*.xlsx
 Branch_Employee_Directory_*.xlsx
+Branch_FloorPlan_*.xlsx
+Multi_Branch_*.xlsx
+Multi_Branch_Employee_Roster_*.xlsx
+Workspace_FloorPlan_*.xlsx
 
 # Database Dumps & Cache
 *.sql
