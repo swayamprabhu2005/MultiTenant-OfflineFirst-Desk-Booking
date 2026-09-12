@@ -81,6 +81,10 @@ export const MyBookingsPage: React.FC = () => {
   const [cancellationReason, setCancellationReason] = useState<string>('');
   const [isSubmittingCancel, setIsSubmittingCancel] = useState<boolean>(false);
 
+  // Bulk Multi-Select Cancellation State
+  const [selectedBookingIds, setSelectedBookingIds] = useState<string[]>([]);
+  const [isBulkCancelling, setIsBulkCancelling] = useState<boolean>(false);
+
   // Notices
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
@@ -109,8 +113,42 @@ export const MyBookingsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    setSelectedBookingIds([]);
     loadBookings();
   }, [statusFilter, page]);
+
+  // Handle Bulk Multi-Select Cancellation
+  const handleBulkCancel = async () => {
+    if (selectedBookingIds.length === 0) return;
+
+    try {
+      setIsBulkCancelling(true);
+      setErrorNotice(null);
+
+      const res = await fetchApi<{ success: boolean; message: string; cancelledCount: number }>(
+        '/employee/bulk-cancel',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            bookingIds: selectedBookingIds,
+          }),
+        }
+      );
+
+      setSuccessNotice(
+        res?.message || `Successfully released ${selectedBookingIds.length} desk reservation(s).`
+      );
+      setTimeout(() => setSuccessNotice(null), 5000);
+
+      setSelectedBookingIds([]);
+      await loadBookings();
+    } catch (err: any) {
+      console.error('Failed to cancel selected bookings:', err);
+      setErrorNotice(err.message || 'Failed to cancel selected bookings.');
+    } finally {
+      setIsBulkCancelling(false);
+    }
+  };
 
   // Handle Cancellation
   const handleConfirmCancel = async () => {
@@ -339,6 +377,25 @@ export const MyBookingsPage: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/75 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      title="Select All Active on Page"
+                      checked={
+                        filteredBookings.filter(isBookingActive).length > 0 &&
+                        filteredBookings.filter(isBookingActive).every((b) => selectedBookingIds.includes(b.id))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const activeIds = filteredBookings.filter(isBookingActive).map((b) => b.id);
+                          setSelectedBookingIds(activeIds);
+                        } else {
+                          setSelectedBookingIds([]);
+                        }
+                      }}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3.5 px-5">Workstation</th>
                   <th className="py-3.5 px-5">Location Hierarchy</th>
                   <th className="py-3.5 px-5">Date &amp; Time Slot</th>
@@ -362,6 +419,24 @@ export const MyBookingsPage: React.FC = () => {
 
                   return (
                     <tr key={b.id} className="hover:bg-slate-50/60 transition-colors">
+                      {/* Selection Checkbox */}
+                      <td className="py-4 px-4 text-center">
+                        {active ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedBookingIds.includes(b.id)}
+                            onChange={() => {
+                              setSelectedBookingIds((prev) =>
+                                prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id]
+                              );
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-slate-300">&bull;</span>
+                        )}
+                      </td>
+
                       {/* Workstation Desk Code */}
                       <td className="py-4 px-5">
                         <div className="flex items-center space-x-2">
@@ -599,6 +674,46 @@ export const MyBookingsPage: React.FC = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Multi-Select Cancellation Action Bar */}
+      {selectedBookingIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[110] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center space-x-6 animate-fade-in">
+          <div className="flex items-center space-x-2">
+            <span className="w-7 h-7 rounded-xl bg-rose-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
+              {selectedBookingIds.length}
+            </span>
+            <span className="text-xs font-bold">Bookings Selected</span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={handleBulkCancel}
+              disabled={isBulkCancelling}
+              className="py-2 px-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              {isBulkCancelling ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Releasing...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Cancel Selected ({selectedBookingIds.length})</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedBookingIds([])}
+              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Clear
+            </button>
           </div>
         </div>
       )}
