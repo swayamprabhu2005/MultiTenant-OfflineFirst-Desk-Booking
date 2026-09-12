@@ -596,8 +596,8 @@ export const FloorPlansPage: React.FC = () => {
             </h1>
           </div>
 
-          {/* Action Buttons & Legend */}
-          <div className="flex flex-wrap items-center gap-3.5">
+          {/* Action Buttons & Legend (Aligned Right) */}
+          <div className="flex flex-wrap items-center justify-end gap-3.5 lg:ml-auto">
             {/* Legend */}
             <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <div className="flex items-center gap-1.5">
@@ -617,7 +617,7 @@ export const FloorPlansPage: React.FC = () => {
             </div>
 
             {/* Action Buttons for Admins */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {user?.role === 'BRANCH_ADMIN' && (
                 <button
                   type="button"
@@ -655,10 +655,10 @@ export const FloorPlansPage: React.FC = () => {
                 type="button"
                 onClick={handleDownloadBranchTemplate}
                 disabled={isExportingPlan}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold border border-sky-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                 title="Download branch floor plan Excel configuration template"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-sky-600" />
                 <span>{isExportingPlan ? 'Exporting...' : 'Export Plan'}</span>
               </button>
 
@@ -666,10 +666,10 @@ export const FloorPlansPage: React.FC = () => {
                 type="button"
                 onClick={() => floorPlanInputRef.current?.click()}
                 disabled={isImportingPlan}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                 title="Upload and apply branch floor plan layout (.xlsx)"
               >
-                <Upload className="w-3.5 h-3.5" />
+                <Upload className="w-3.5 h-3.5 text-indigo-600" />
                 <span>{isImportingPlan ? 'Applying...' : 'Import Plan'}</span>
               </button>
               <input
