@@ -730,4 +730,187 @@ router.post('/bulk-bookings', authMiddleware, async (req: AuthenticatedRequest, 
   }
 });
 
+/**
+ * POST /api/employee/cancel-booking
+ * Releases reserved workstation and marks reservation as CANCELLED
+ */
+router.post('/cancel-booking', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const user = req.user!;
+    const { bookingId, reason } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({ error: 'bookingId is required to release reservation.' });
+    }
+
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, organizationId: orgId },
+      include: {
+        desk: true,
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking reservation record not found.' });
+    }
+
+    // Permission check
+    const isOwner = booking.userId === user.id;
+    const isProxyCreator = booking.bookedByUserId === user.id;
+    const isAdmin = ['PLATFORM_ADMIN', 'ORGANIZATION_ADMIN', 'BRANCH_ADMIN'].includes(user.role);
+
+    if (!isOwner && !isProxyCreator && !isAdmin) {
+      return res.status(403).json({ error: 'Unauthorized: You can only cancel your own desk bookings.' });
+    }
+
+    if (booking.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'This booking has already been cancelled.' });
+    }
+
+    const cancellationNote = reason?.trim() ? `Cancelled: ${reason.trim()}` : 'Cancelled by user';
+    const updatedNotes = booking.notes ? `${booking.notes} | ${cancellationNote}` : cancellationNote;
+
+    const cancelledBooking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: 'CANCELLED',
+        notes: updatedNotes,
+      },
+      include: {
+        desk: true,
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        organizationId: orgId,
+        actorUserId: user.id,
+        action: 'CANCEL_BOOKING',
+        entityType: 'Booking',
+        entityId: booking.id,
+        metadata: {
+          deskCode: booking.desk.deskCode,
+          slotType: booking.slotType,
+          startTime: booking.startTime.toISOString(),
+          endTime: booking.endTime.toISOString(),
+          reason: reason || null,
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Reservation for Desk ${booking.desk.deskCode} successfully released.`,
+      booking: cancelledBooking,
+    });
+  } catch (error: any) {
+    console.error('Failed to cancel booking:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/employee/my-bookings
+ * Retrieves employee reservation history with pagination and status filtering
+ */
+router.get('/my-bookings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const user = req.user!;
+    const statusFilter = (req.query.status as string)?.trim().toUpperCase() || 'ALL';
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 15));
+    const skip = (page - 1) * limit;
+    const now = new Date();
+
+    const whereClause: any = {
+      organizationId: orgId,
+      OR: [
+        { userId: user.id },
+        { bookedByUserId: user.id },
+      ],
+    };
+
+    if (statusFilter === 'CONFIRMED') {
+      whereClause.status = 'CONFIRMED';
+      whereClause.endTime = { gte: now };
+    } else if (statusFilter === 'CANCELLED') {
+      whereClause.status = 'CANCELLED';
+    } else if (statusFilter === 'PAST') {
+      whereClause.status = 'CONFIRMED';
+      whereClause.endTime = { lt: now };
+    }
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where: whereClause,
+        include: {
+          desk: {
+            include: {
+              section: {
+                include: {
+                  floor: {
+                    include: {
+                      building: {
+                        include: {
+                          branch: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          user: { select: { id: true, name: true, email: true } },
+          bookedByUser: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { startTime: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.booking.count({ where: whereClause }),
+    ]);
+
+    const formattedBookings = bookings.map((b) => ({
+      id: b.id,
+      slotType: b.slotType,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      status: b.status,
+      notes: b.notes,
+      createdAt: b.createdAt,
+      desk: {
+        id: b.desk.id,
+        deskCode: b.desk.deskCode,
+        hasHdmi: b.desk.hasHdmi,
+        isMeetingRoom: b.desk.isMeetingRoom,
+        sectionName: b.desk.section.name,
+        floorCode: b.desk.section.floor.code,
+        floorName: b.desk.section.floor.name,
+        buildingName: b.desk.section.floor.building.name,
+        branchName: b.desk.section.floor.building.branch.name,
+      },
+      isProxyBooking: !!b.bookedByUserId && b.bookedByUserId !== b.userId,
+      user: b.user,
+      bookedByUser: b.bookedByUser,
+    }));
+
+    return res.json({
+      bookings: formattedBookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error: any) {
+    console.error('Failed to load my bookings:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
