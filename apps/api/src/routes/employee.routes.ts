@@ -597,4 +597,137 @@ router.get('/colleagues', authMiddleware, async (req: AuthenticatedRequest, res:
   }
 });
 
+/**
+ * POST /api/employee/bulk-bookings
+ * Atomic multi-desk pod reservation for agile team collaboration
+ */
+router.post('/bulk-bookings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const callerUser = req.user!;
+    const { deskIds, slotType = 'FULL_DAY', bookingDate, notes, allocations = [] } = req.body;
+
+    if (!Array.isArray(deskIds) || deskIds.length === 0) {
+      return res.status(400).json({ error: 'At least one workstation deskId must be provided for bulk booking.' });
+    }
+
+    if (deskIds.length > 8) {
+      return res.status(400).json({ error: 'Bulk pod booking is limited to a maximum of 8 workstations per reservation.' });
+    }
+
+    const uniqueDeskIds = Array.from(new Set(deskIds));
+    const { startTime, endTime, normalizedSlotType } = computeSlotTimes(bookingDate, slotType);
+
+    // Verify all desks exist within the organization
+    const desks = await prisma.desk.findMany({
+      where: {
+        id: { in: uniqueDeskIds },
+        organizationId: orgId,
+      },
+      include: {
+        section: true,
+      },
+    });
+
+    if (desks.length !== uniqueDeskIds.length) {
+      return res.status(404).json({ error: 'One or more selected workstation desks could not be found.' });
+    }
+
+    // Build allocation map: deskId -> targetUserId
+    const allocationMap = new Map<string, { targetUserId: string; bookedByUserId: string | null }>();
+
+    for (const alloc of allocations) {
+      if (alloc.deskId && alloc.colleagueUserId) {
+        allocationMap.set(alloc.deskId, {
+          targetUserId: alloc.colleagueUserId,
+          bookedByUserId: alloc.colleagueUserId !== callerUser.id ? callerUser.id : null,
+        });
+      }
+    }
+
+    // For any desk not explicitly mapped, assign to caller or unmapped
+    for (const d of desks) {
+      if (!allocationMap.has(d.id)) {
+        allocationMap.set(d.id, {
+          targetUserId: callerUser.id,
+          bookedByUserId: null,
+        });
+      }
+    }
+
+    // Execute atomic reservation
+    const createdBookings = await prisma.$transaction(async (tx) => {
+      // 1. Concurrency check: Ensure none of the desks have conflicting active bookings
+      const conflicts = await tx.booking.findMany({
+        where: {
+          organizationId: orgId,
+          deskId: { in: uniqueDeskIds },
+          status: 'CONFIRMED',
+          startTime: { lt: endTime },
+          endTime: { gt: startTime },
+        },
+        include: {
+          desk: true,
+        },
+      });
+
+      if (conflicts.length > 0) {
+        const conflictCodes = conflicts.map((c) => c.desk.deskCode).join(', ');
+        throw new Error(`The following workstation(s) are already reserved: ${conflictCodes}`);
+      }
+
+      // 2. Create bookings
+      const results = [];
+      for (const d of desks) {
+        const alloc = allocationMap.get(d.id)!;
+        const b = await tx.booking.create({
+          data: {
+            organizationId: orgId,
+            deskId: d.id,
+            userId: alloc.targetUserId,
+            bookedByUserId: alloc.bookedByUserId,
+            slotType: normalizedSlotType,
+            startTime,
+            endTime,
+            status: 'CONFIRMED',
+            notes: notes?.trim() || 'Pod Group Reservation',
+          },
+          include: {
+            desk: true,
+            user: { select: { id: true, name: true, email: true } },
+          },
+        });
+        results.push(b);
+      }
+      return results;
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        organizationId: orgId,
+        actorUserId: callerUser.id,
+        action: 'BULK_BOOK_POD',
+        entityType: 'Booking',
+        entityId: createdBookings[0]?.id || 'bulk',
+        metadata: {
+          totalDesksBooked: createdBookings.length,
+          deskCodes: desks.map((d) => d.deskCode),
+          slotType: normalizedSlotType,
+        },
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Successfully booked ${createdBookings.length} pod workstation(s) for ${normalizedSlotType.replace('_', ' ')}.`,
+      bookings: createdBookings,
+      count: createdBookings.length,
+    });
+  } catch (error: any) {
+    console.error('Failed to create bulk pod booking:', error);
+    return res.status(400).json({ error: error.message || 'Failed to complete bulk pod reservation.' });
+  }
+});
+
 export default router;
