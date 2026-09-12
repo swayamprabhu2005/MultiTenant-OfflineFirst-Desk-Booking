@@ -8,6 +8,7 @@ import { Role } from '@deskbooking/shared';
 import {
   generateBranchEmployeeTemplate,
   exportBranchEmployeesToExcel,
+  generateBranchFloorPlanTemplate,
 } from '../services/excel.service';
 
 const router = Router();
@@ -679,6 +680,93 @@ router.get(
       return res.send(buffer);
     } catch (error: any) {
       console.error('Failed to export employee directory:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/branch-roster/floor-plan-template
+ * Download branch-scoped floor plan configuration Excel template
+ */
+router.get(
+  '/floor-plan-template',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const branch = await resolveBranch(req);
+
+      if (!branch) {
+        return res.status(404).json({ error: 'Assigned branch not found.' });
+      }
+
+      const branchWithHierarchy = await prisma.branch.findFirst({
+        where: { id: branch.id, organizationId: orgId },
+        include: {
+          buildings: {
+            include: {
+              floors: {
+                include: {
+                  sections: {
+                    include: {
+                      meetingRoom: true,
+                    },
+                    orderBy: { name: 'asc' },
+                  },
+                },
+                orderBy: { floorNumber: 'asc' },
+              },
+            },
+            orderBy: { code: 'asc' },
+          },
+        },
+      });
+
+      if (!branchWithHierarchy) {
+        return res.status(404).json({ error: 'Branch data not found.' });
+      }
+
+      const formattedBranch = {
+        code: branchWithHierarchy.code,
+        name: branchWithHierarchy.name,
+        buildings: branchWithHierarchy.buildings.map((bld) => ({
+          code: bld.code,
+          name: bld.name,
+          floors: bld.floors.map((fl) => ({
+            code: fl.code,
+            name: fl.name,
+            floorNumber: fl.floorNumber,
+            sections: fl.sections.map((sec) => ({
+              name: sec.name,
+              direction: sec.direction,
+              standardDeskCount: sec.standardDeskCount,
+              hdmiDeskCount: sec.hdmiDeskCount,
+              hasMeetingRoom: !!sec.meetingRoom,
+              meetingRoomCapacity: sec.meetingRoom?.capacity || 0,
+              meetingRoomHdmi: sec.meetingRoom?.hdmiCount || 0,
+            })),
+          })),
+        })),
+      };
+
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      const orgName = org?.name || 'Enterprise Organization';
+
+      const buffer = await generateBranchFloorPlanTemplate(orgName, formattedBranch);
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="Floor_Plan_Template_${branch.code}.xlsx"`
+      );
+      return res.send(buffer);
+    } catch (error: any) {
+      console.error('Failed to generate branch floor plan template:', error);
       return res.status(500).json({ error: error.message });
     }
   }
