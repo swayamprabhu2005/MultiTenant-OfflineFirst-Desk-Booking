@@ -869,26 +869,31 @@ export const FloorPlansPage: React.FC = () => {
 
       </div>
 
-      {/* Interactive Desk Booking Drawer / Modal */}
+      {/* Interactive Central Glassmorphic Desk Inspector Modal */}
       {activeDesk && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex justify-end z-50 animate-fade-in">
-          <div className="w-full max-w-sm bg-white h-full shadow-2xl p-6 flex flex-col justify-between space-y-6">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActiveDesk(null);
+          }}
+          className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/80 p-6 flex flex-col justify-between space-y-6 relative animate-scale-up">
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                   WORKSTATION INSPECTOR
                 </span>
                 <button
                   onClick={() => setActiveDesk(null)}
-                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 font-bold text-sm cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
                 >
                   ✕
                 </button>
               </div>
 
               {/* Station Badge */}
-              <div className="flex items-center space-x-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm ${
+              <div className="flex items-center space-x-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shadow-xs ${
                   activeDesk.status === 'AVAILABLE'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : 'bg-red-100 text-red-800 border border-red-300'
@@ -966,7 +971,7 @@ export const FloorPlansPage: React.FC = () => {
                 onClick={() => setActiveDesk(null)}
                 className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                Close Drawer
+                Close Window
               </button>
             </div>
 
