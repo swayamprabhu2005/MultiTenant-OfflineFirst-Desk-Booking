@@ -6,7 +6,10 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../prisma';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@deskbooking/shared';
-import { generateMultiBranchEmployeeTemplate } from '../services/excel.service';
+import {
+  generateMultiBranchEmployeeTemplate,
+  parseAndValidateMultiBranchRoster,
+} from '../services/excel.service';
 
 const router = Router();
 const upload = multer({
@@ -16,10 +19,10 @@ const upload = multer({
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
-// GET list of users in organization (with search & pagination)
+// GET list of users in organization (with search, branch filter & pagination)
 router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { page = 1, limit = 25, q } = req.query;
+    const { page = 1, limit = 25, q, branchId, role } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
@@ -31,14 +34,28 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     // Scoped branch admin check
     if (currentUser.role === Role.BRANCH_ADMIN && currentUser.scopedBranchId) {
       where.baseBranchId = currentUser.scopedBranchId;
+    } else if (branchId && branchId !== 'ALL') {
+      where.OR = [
+        { baseBranchId: String(branchId) },
+        { scopedBranchId: String(branchId) },
+      ];
+    }
+
+    if (role) {
+      where.role = role;
     }
 
     if (q) {
       const searchStr = String(q).toLowerCase();
-      where.OR = [
-        { name: { contains: searchStr, mode: 'insensitive' } },
-        { email: { contains: searchStr, mode: 'insensitive' } },
-        { department: { contains: searchStr, mode: 'insensitive' } },
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { name: { contains: searchStr, mode: 'insensitive' } },
+            { email: { contains: searchStr, mode: 'insensitive' } },
+            { department: { contains: searchStr, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
@@ -393,6 +410,143 @@ router.get(
       return res.send(fileBuffer);
     } catch (error: any) {
       console.error('Failed to generate multi-branch employee template:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/roster/multi-branch-import
+ * Batch uploads multi-sheet employee Excel spreadsheet across all branches in the organization
+ */
+router.post(
+  '/multi-branch-import',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN]),
+  upload.single('file'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'Please upload a valid Excel (.xlsx) file.' });
+      }
+
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      if (!org) {
+        return res.status(404).json({ error: 'Organization not found.' });
+      }
+
+      const branches = await prisma.branch.findMany({
+        where: { organizationId: orgId },
+      });
+
+      if (branches.length === 0) {
+        return res.status(400).json({
+          error: 'No branches found. Please complete Workspace Setup before importing employees.',
+        });
+      }
+
+      const defaultDomain = `${org.subdomain || 'company'}.com`;
+      const validation = await parseAndValidateMultiBranchRoster(
+        req.file.buffer,
+        orgId,
+        defaultDomain,
+        branches
+      );
+
+      if (validation.employees.length === 0) {
+        return res.status(400).json({
+          error:
+            validation.errors.length > 0
+              ? `Validation failed: ${validation.errors.slice(0, 3).join('; ')}`
+              : 'No valid employee records were found in the uploaded workbook.',
+          errors: validation.errors,
+        });
+      }
+
+      const branchCodeToBranchMap = new Map<string, (typeof branches)[0]>();
+      branches.forEach((b) => {
+        branchCodeToBranchMap.set(b.code.toUpperCase(), b);
+      });
+
+      let importedCount = 0;
+      let updatedCount = 0;
+
+      await prisma.$transaction(async (tx) => {
+        for (const emp of validation.employees) {
+          const branch = branchCodeToBranchMap.get(emp.branchCode.toUpperCase());
+          if (!branch) continue;
+
+          const passwordHash = await bcrypt.hash(emp.password, 10);
+          const existing = await tx.user.findFirst({
+            where: {
+              organizationId: orgId,
+              email: emp.email,
+            },
+          });
+
+          if (existing) {
+            await tx.user.update({
+              where: { id: existing.id },
+              data: {
+                name: emp.fullName,
+                role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
+                scopedBranchId: branch.id,
+                baseBranchId: branch.id,
+                isActive: true,
+                status: 'ACTIVE',
+              },
+            });
+            updatedCount++;
+          } else {
+            await tx.user.create({
+              data: {
+                organizationId: orgId,
+                name: emp.fullName,
+                email: emp.email,
+                role: emp.role === 'TECH_LEAD' ? Role.TECH_LEAD : Role.EMPLOYEE,
+                scopedBranchId: branch.id,
+                baseBranchId: branch.id,
+                passwordHash,
+                mustChangePassword: true,
+                isActive: true,
+                status: 'ACTIVE',
+              },
+            });
+            importedCount++;
+          }
+        }
+
+        await tx.auditLog.create({
+          data: {
+            organizationId: orgId,
+            actorUserId: req.user!.id,
+            action: 'GLOBAL_IMPORT_MULTI_BRANCH_EMPLOYEES',
+            entityType: 'Organization',
+            entityId: orgId,
+            metadata: {
+              importedCount,
+              updatedCount,
+              totalProcessed: importedCount + updatedCount,
+              branchStats: validation.branchStats,
+            },
+          },
+        });
+      });
+
+      return res.json({
+        success: true,
+        importedCount,
+        updatedCount,
+        totalProcessed: importedCount + updatedCount,
+        branchStats: validation.branchStats,
+        errors: validation.errors.length > 0 ? validation.errors : undefined,
+        message: `Successfully processed ${importedCount + updatedCount} employees across ${
+          validation.branchStats.length
+        } branch(es) (${importedCount} new, ${updatedCount} synchronized).`,
+      });
+    } catch (error: any) {
+      console.error('Failed to import multi-branch employees:', error);
       return res.status(500).json({ error: error.message });
     }
   }

@@ -814,3 +814,177 @@ export async function generateMultiBranchEmployeeTemplate(
   return Buffer.from(buffer);
 }
 
+export interface ParsedMultiBranchEmployee {
+  branchCode: string;
+  branchName?: string;
+  empCode: string;
+  fullName: string;
+  email: string;
+  password: string;
+  role: 'EMPLOYEE' | 'TECH_LEAD';
+}
+
+export interface MultiBranchRosterValidationResult {
+  success: boolean;
+  employees: ParsedMultiBranchEmployee[];
+  branchStats: Array<{
+    branchCode: string;
+    branchName: string;
+    count: number;
+  }>;
+  errors: string[];
+}
+
+/**
+ * Parses and validates an uploaded Multi-Branch Employee Excel Workbook
+ */
+export async function parseAndValidateMultiBranchRoster(
+  fileBuffer: Buffer,
+  orgId: string,
+  defaultDomain: string,
+  branchesInDb: Array<{ id: string; code: string; name: string; defaultEmployeePassword?: string | null }>
+): Promise<MultiBranchRosterValidationResult> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(fileBuffer as any);
+
+  const errors: string[] = [];
+  const employees: ParsedMultiBranchEmployee[] = [];
+  const branchMapByCode = new Map<string, typeof branchesInDb[0]>();
+  branchesInDb.forEach((b) => {
+    branchMapByCode.set(b.code.toUpperCase(), b);
+  });
+
+  // Extract branch overrides from "Organization Summary" sheet if present
+  const summarySheet = workbook.getWorksheet('Organization Summary');
+  const branchConfigFromSummary = new Map<string, { domain: string; defaultPassword?: string }>();
+  if (summarySheet) {
+    summarySheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 2) {
+        const bCode = row.getCell(1).text?.trim().toUpperCase();
+        const bDomain = row.getCell(3).text?.trim();
+        const bPass = row.getCell(4).text?.trim();
+        if (bCode) {
+          branchConfigFromSummary.set(bCode, {
+            domain: bDomain || defaultDomain,
+            defaultPassword: bPass,
+          });
+        }
+      }
+    });
+  }
+
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  const branchCounts = new Map<string, number>();
+
+  // Iterate across all sheets other than "Organization Summary"
+  for (const sheet of workbook.worksheets) {
+    if (sheet.name.toLowerCase() === 'organization summary' || sheet.name.toLowerCase() === 'config') {
+      continue;
+    }
+
+    // Match sheet to branch:
+    let matchedBranch: typeof branchesInDb[0] | undefined;
+    const sheetPrefix = sheet.name.split('-')[0].trim().toUpperCase();
+    if (branchMapByCode.has(sheetPrefix)) {
+      matchedBranch = branchMapByCode.get(sheetPrefix);
+    } else {
+      for (const b of branchesInDb) {
+        if (
+          sheet.name.toUpperCase().includes(b.code.toUpperCase()) ||
+          sheet.name.toUpperCase().includes(b.name.toUpperCase())
+        ) {
+          matchedBranch = b;
+          break;
+        }
+      }
+    }
+
+    if (!matchedBranch) {
+      if (branchesInDb.length === 1) {
+        matchedBranch = branchesInDb[0];
+      } else {
+        errors.push(`Sheet "${sheet.name}" could not be matched to any registered branch in the organization.`);
+        continue;
+      }
+    }
+
+    const branchSummaryConfig = branchConfigFromSummary.get(matchedBranch.code.toUpperCase());
+    const effectiveDomain = branchSummaryConfig?.domain || defaultDomain;
+    const effectivePassword =
+      branchSummaryConfig?.defaultPassword ||
+      matchedBranch.defaultEmployeePassword ||
+      effectiveDomain;
+
+    let sheetCount = 0;
+
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header
+
+      const getVal = (col: number) => {
+        const cell = row.getCell(col);
+        if (!cell || cell.value === null || cell.value === undefined) return '';
+        if (typeof cell.value === 'object' && 'result' in cell.value) {
+          return String(cell.value.result ?? '').trim();
+        }
+        return cell.text?.trim() || String(cell.value ?? '').trim();
+      };
+
+      const empCode = getVal(1) || `EMP-${String(rowNumber - 1).padStart(3, '0')}`;
+      const fullName = getVal(2);
+
+      // Skip row if full name is blank or template filler
+      if (!fullName || fullName.toLowerCase().startsWith('employee') || fullName.startsWith('=')) {
+        return;
+      }
+
+      let email = getVal(3);
+      if (!email || email.startsWith('=')) {
+        const safeName = fullName.toLowerCase().replace(/[^a-z0-9]/g, '.').replace(/\.+/g, '.');
+        email = `${safeName}@${effectiveDomain}`;
+      }
+      email = email.toLowerCase().trim();
+
+      let password = getVal(4);
+      if (!password || password.startsWith('=') || password.length < 4) {
+        password = effectivePassword;
+      }
+
+      const rawRole = getVal(5).toUpperCase();
+      const role: 'EMPLOYEE' | 'TECH_LEAD' = rawRole === 'TECH_LEAD' ? 'TECH_LEAD' : 'EMPLOYEE';
+
+      if (!EMAIL_REGEX.test(email)) {
+        errors.push(`Sheet "${sheet.name}" Row ${rowNumber}: Invalid email address "${email}" for employee "${fullName}".`);
+        return;
+      }
+
+      employees.push({
+        branchCode: matchedBranch.code,
+        branchName: matchedBranch.name,
+        empCode,
+        fullName,
+        email,
+        password,
+        role,
+      });
+
+      sheetCount++;
+    });
+
+    branchCounts.set(matchedBranch.code, (branchCounts.get(matchedBranch.code) || 0) + sheetCount);
+  }
+
+  const branchStats = branchesInDb.map((b) => ({
+    branchCode: b.code,
+    branchName: b.name,
+    count: branchCounts.get(b.code) || 0,
+  }));
+
+  return {
+    success: errors.length === 0 && employees.length > 0,
+    employees,
+    branchStats,
+    errors,
+  };
+}
+
+
