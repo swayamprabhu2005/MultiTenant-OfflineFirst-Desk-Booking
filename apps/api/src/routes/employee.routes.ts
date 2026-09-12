@@ -499,4 +499,102 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
   }
 });
 
+/**
+ * GET /api/employee/colleagues
+ * Search and list active colleagues for proxy desk reservations
+ */
+router.get('/colleagues', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const user = req.user!;
+    const search = (req.query.search as string)?.trim().toLowerCase();
+    const branchId = (req.query.branchId as string) || user.scopedBranchId || user.baseBranchId;
+    const now = new Date();
+
+    const whereClause: any = {
+      organizationId: orgId,
+      id: { not: user.id },
+      isActive: true,
+      status: 'ACTIVE',
+    };
+
+    if (branchId) {
+      whereClause.OR = [
+        { scopedBranchId: branchId },
+        { baseBranchId: branchId },
+      ];
+    }
+
+    if (search) {
+      whereClause.AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+            { department: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    const colleagues = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        department: true,
+        role: true,
+        scopedBranchId: true,
+        baseBranchId: true,
+      },
+      orderBy: { name: 'asc' },
+      take: 50,
+    });
+
+    // Check who already has an active or confirmed booking today
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const activeBookingsToday = await prisma.booking.findMany({
+      where: {
+        organizationId: orgId,
+        userId: { in: colleagues.map((c) => c.id) },
+        status: 'CONFIRMED',
+        startTime: { lte: endOfToday },
+        endTime: { gte: startOfToday },
+      },
+      select: {
+        userId: true,
+        desk: {
+          select: { deskCode: true },
+        },
+      },
+    });
+
+    const bookedUserMap = new Map<string, string>();
+    for (const b of activeBookingsToday) {
+      bookedUserMap.set(b.userId, b.desk.deskCode);
+    }
+
+    const formattedColleagues = colleagues.map((c) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      department: c.department || 'General Staff',
+      role: c.role,
+      hasActiveBookingToday: bookedUserMap.has(c.id),
+      reservedDeskCode: bookedUserMap.get(c.id) || null,
+    }));
+
+    return res.json({
+      colleagues: formattedColleagues,
+      total: formattedColleagues.length,
+    });
+  } catch (error: any) {
+    console.error('Failed to search colleagues:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
