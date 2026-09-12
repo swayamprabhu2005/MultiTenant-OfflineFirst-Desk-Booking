@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   Calendar,
   Clock,
@@ -14,10 +15,14 @@ import {
   CheckCircle2,
   XCircle,
   X,
-  ChevronRight,
   ShieldCheck,
   Building2,
   Layers,
+  Search,
+  UserCheck,
+  AlertCircle,
+  Loader2,
+  Trash2,
 } from 'lucide-react';
 
 export interface DeskBookingInfo {
@@ -90,6 +95,16 @@ export interface BranchItem {
   buildings: BuildingItem[];
 }
 
+export interface ColleagueItem {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+  hasActiveBookingToday: boolean;
+  reservedDeskCode: string | null;
+}
+
 export interface FloorPlanResponse {
   branches: BranchItem[];
   slotInfo: {
@@ -109,10 +124,13 @@ export interface FloorPlanResponse {
 }
 
 export const EmployeeFloorPlanPage: React.FC = () => {
+  const { user } = useAuth();
+
   // Hierarchy Data
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
   // Time & Slot Selection
   const todayStr = new Date().toISOString().split('T')[0];
@@ -128,6 +146,16 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   // Workstation selection & drawer
   const [activeDesk, setActiveDesk] = useState<EmployeeDeskItem | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  // Inspector Booking Form State
+  const [bookingForMode, setBookingForMode] = useState<'SELF' | 'COLLEAGUE'>('SELF');
+  const [colleagueSearch, setColleagueSearch] = useState<string>('');
+  const [colleaguesList, setColleaguesList] = useState<ColleagueItem[]>([]);
+  const [selectedColleague, setSelectedColleague] = useState<ColleagueItem | null>(null);
+  const [isLoadingColleagues, setIsLoadingColleagues] = useState<boolean>(false);
+  const [bookingNotes, setBookingNotes] = useState<string>('');
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState<boolean>(false);
+  const [isCancellingBooking, setIsCancellingBooking] = useState<boolean>(false);
 
   // Load floor plan layout with date & slot availability
   const loadFloorPlans = async () => {
@@ -148,7 +176,6 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       setBranches(branchList);
 
       if (branchList.length > 0) {
-        // Retain or select first branch
         const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
         setSelectedBranchId(currBranch.id);
 
@@ -178,6 +205,118 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   useEffect(() => {
     loadFloorPlans();
   }, [bookingDate, slotType]);
+
+  // Search colleagues for proxy booking
+  useEffect(() => {
+    if (bookingForMode !== 'COLLEAGUE') return;
+
+    let isMounted = true;
+    const searchColleagues = async () => {
+      try {
+        setIsLoadingColleagues(true);
+        const params = new URLSearchParams();
+        if (colleagueSearch.trim()) {
+          params.append('search', colleagueSearch.trim());
+        }
+        if (selectedBranchId) {
+          params.append('branchId', selectedBranchId);
+        }
+
+        const res = await fetchApi<{ colleagues: ColleagueItem[] }>(`/employee/colleagues?${params.toString()}`);
+        if (isMounted) {
+          setColleaguesList(res?.colleagues || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch colleagues:', err);
+      } finally {
+        if (isMounted) setIsLoadingColleagues(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(searchColleagues, 300);
+    return () => {
+      isMounted = false;
+      clearTimeout(debounceTimer);
+    };
+  }, [bookingForMode, colleagueSearch, selectedBranchId]);
+
+  // Handle Workstation Reservation Submission
+  const handleConfirmReservation = async () => {
+    if (!activeDesk) return;
+
+    try {
+      setIsSubmittingBooking(true);
+      setErrorNotice(null);
+
+      const payload: any = {
+        deskId: activeDesk.id,
+        bookingDate,
+        slotType,
+        notes: bookingNotes.trim() || undefined,
+      };
+
+      if (bookingForMode === 'COLLEAGUE') {
+        if (!selectedColleague) {
+          throw new Error('Please search and select a colleague to complete proxy reservation.');
+        }
+        payload.colleagueUserId = selectedColleague.id;
+      }
+
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bookings', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      setSuccessNotice(
+        res?.message ||
+          `Workstation ${activeDesk.deskCode} reserved successfully for ${
+            bookingForMode === 'COLLEAGUE' ? selectedColleague?.name : 'you'
+          }!`
+      );
+      setTimeout(() => setSuccessNotice(null), 6000);
+
+      // Reset selection state
+      setSelectedColleague(null);
+      setColleagueSearch('');
+      setBookingNotes('');
+      setActiveDesk(null);
+
+      // Refresh floor plan
+      await loadFloorPlans();
+    } catch (err: any) {
+      console.error('Failed to reserve desk:', err);
+      setErrorNotice(err.message || 'Failed to complete desk reservation.');
+    } finally {
+      setIsSubmittingBooking(false);
+    }
+  };
+
+  // Handle Cancellation / Release of My Reservation
+  const handleReleaseReservation = async (bookingId: string) => {
+    try {
+      setIsCancellingBooking(true);
+      setErrorNotice(null);
+
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/cancel-booking', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookingId,
+          reason: 'Released from workstation inspector',
+        }),
+      });
+
+      setSuccessNotice(res?.message || 'Workstation reservation successfully released.');
+      setTimeout(() => setSuccessNotice(null), 5000);
+
+      setActiveDesk(null);
+      await loadFloorPlans();
+    } catch (err: any) {
+      console.error('Failed to cancel booking:', err);
+      setErrorNotice(err.message || 'Failed to cancel workstation reservation.');
+    } finally {
+      setIsCancellingBooking(false);
+    }
+  };
 
   // Current entity lookups
   const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
@@ -270,7 +409,12 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               <button
                 key={desk.id}
                 type="button"
-                onClick={() => setActiveDesk({ ...desk, hasHdmi })}
+                onClick={() => {
+                  setActiveDesk({ ...desk, hasHdmi });
+                  setBookingForMode('SELF');
+                  setSelectedColleague(null);
+                  setColleagueSearch('');
+                }}
                 className={`group relative rounded-xl border-2 p-2 flex flex-col justify-between transition-all cursor-pointer text-left ${deskHeightClass} ${
                   isSelected
                     ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-400 shadow-sm'
@@ -316,9 +460,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                       <span>Available</span>
                     </span>
                   ) : (
-                    <span className="text-rose-700 flex items-center space-x-0.5 truncate max-w-[90px]" title={desk.activeBooking?.user?.name || 'Reserved'}>
+                    <span
+                      className="text-rose-700 flex items-center space-x-0.5 truncate max-w-[90px]"
+                      title={desk.activeBooking?.user?.name || 'Reserved'}
+                    >
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                      <span className="truncate">{desk.activeBooking?.user?.name ? desk.activeBooking.user.name.split(' ')[0] : 'Booked'}</span>
+                      <span className="truncate">
+                        {desk.activeBooking?.user?.name ? desk.activeBooking.user.name.split(' ')[0] : 'Booked'}
+                      </span>
                     </span>
                   )}
                 </div>
@@ -410,6 +559,19 @@ export const EmployeeFloorPlanPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Success Alert */}
+      {successNotice && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-between text-xs font-medium animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{successNotice}</span>
+          </div>
+          <button onClick={() => setSuccessNotice(null)} className="p-1 text-emerald-500 hover:text-emerald-700 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Error / Feedback Alert */}
       {errorNotice && (
         <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center justify-between text-xs font-medium">
@@ -417,10 +579,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
             <XCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
             <span>{errorNotice}</span>
           </div>
-          <button
-            onClick={() => setErrorNotice(null)}
-            className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
-          >
+          <button onClick={() => setErrorNotice(null)} className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -574,7 +733,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 </span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {currentBuilding?.name} &bull; {formatFloorDisplayName(currentFloor)} &bull; {slotType.replace('_', ' ')}
+                {currentBranch?.name} &bull; {currentBuilding?.name} &bull; {formatFloorDisplayName(currentFloor)} &bull; {slotType.replace('_', ' ')}
               </p>
             </div>
 
@@ -686,7 +845,11 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                             <button
                               key={seat.id}
                               type="button"
-                              onClick={() => setActiveDesk(seat)}
+                              onClick={() => {
+                                setActiveDesk(seat);
+                                setBookingForMode('SELF');
+                                setSelectedColleague(null);
+                              }}
                               className={`px-2.5 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
                                 isSelected
                                   ? 'border-purple-600 bg-purple-100 text-purple-900 ring-2 ring-purple-400'
@@ -740,7 +903,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
         </div>
 
         {/* Workstation Inspector Slide Panel */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <h3 className="text-sm font-black text-slate-900 flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-emerald-600" />
@@ -768,7 +931,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {/* Desk Identity Card */}
               <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
@@ -786,7 +949,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="bg-white p-2 rounded-xl border border-slate-200/80">
                     <span className="text-slate-400 font-bold block text-[9px] uppercase">Type</span>
                     <span className="font-extrabold text-slate-700">
@@ -818,65 +981,223 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                     <span className="font-bold text-slate-700">{currentSection?.name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Building:</span>
-                    <span className="font-bold text-slate-700">{currentBuilding?.name}</span>
+                    <span>Slot:</span>
+                    <span className="font-bold text-slate-700">{slotType.replace('_', ' ')}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Existing Reservation Detail if booked */}
-              {activeDesk.isReserved && activeDesk.activeBooking && (
-                <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 space-y-2">
+              {/* View 1: If it is MY booking -> Allow instant cancellation/release */}
+              {activeDesk.isMyBooking && activeDesk.activeBooking ? (
+                <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 space-y-3">
+                  <div className="flex items-center space-x-2 font-bold text-blue-800">
+                    <UserCheck className="w-4 h-4 text-blue-600" />
+                    <span>Your Confirmed Reservation</span>
+                  </div>
+                  <p className="text-[11px] text-blue-800/90 leading-relaxed">
+                    You have reserved Desk <span className="font-bold">{activeDesk.deskCode}</span> for {bookingDate} (
+                    {activeDesk.activeBooking.slotType.replace('_', ' ')}).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleReleaseReservation(activeDesk.activeBooking!.id)}
+                    disabled={isCancellingBooking}
+                    className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isCancellingBooking ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Releasing Desk...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Release Workstation</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : activeDesk.isReserved && activeDesk.activeBooking ? (
+                /* View 2: If it is reserved by someone else */
+                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 space-y-2">
                   <div className="font-bold flex items-center space-x-1.5 text-amber-800">
-                    <Clock className="w-3.5 h-3.5" />
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
                     <span>Active Reservation</span>
                   </div>
-                  <p className="text-[11px] leading-tight">
-                    Reserved for <span className="font-bold">{activeDesk.activeBooking.user?.name || 'A Colleague'}</span> (
-                    {activeDesk.activeBooking.user?.department || 'Staff'})
+                  <p className="text-[11px] leading-relaxed">
+                    Reserved for{' '}
+                    <span className="font-bold text-amber-950">
+                      {activeDesk.activeBooking.user?.name || 'A Colleague'}
+                    </span>{' '}
+                    ({activeDesk.activeBooking.user?.department || 'Staff'}).
                   </p>
-                  <p className="text-[10px] text-amber-700">
-                    Slot: {activeDesk.activeBooking.slotType.replace('_', ' ')}
+                  <p className="text-[10px] text-amber-700 font-medium">
+                    This desk cannot be reserved during this time slot. Please pick another available desk on the floor plan.
                   </p>
+                </div>
+              ) : (
+                /* View 3: Workstation is AVAILABLE -> Reservation Form */
+                <div className="space-y-3.5 pt-1">
+                  {/* Reservation Target Mode (Self vs Colleague Proxy) */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Reserve On Behalf Of
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBookingForMode('SELF');
+                          setSelectedColleague(null);
+                        }}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingForMode === 'SELF'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Myself ({user?.name ? user.name.split(' ')[0] : 'Me'})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBookingForMode('COLLEAGUE')}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingForMode === 'COLLEAGUE'
+                            ? 'bg-white text-emerald-800 shadow-xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Colleague (Proxy)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Colleague Search Input & Auto-Suggest */}
+                  {bookingForMode === 'COLLEAGUE' && (
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Search Colleague
+                      </label>
+                      {selectedColleague ? (
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="font-bold text-emerald-950 block">{selectedColleague.name}</span>
+                            <span className="text-[10px] text-emerald-700">
+                              {selectedColleague.email} &bull; {selectedColleague.department}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedColleague(null)}
+                            className="p-1 text-emerald-700 hover:text-rose-600 cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                            <input
+                              type="text"
+                              placeholder="Search by name, email, department..."
+                              value={colleagueSearch}
+                              onChange={(e) => setColleagueSearch(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                            />
+                            {isLoadingColleagues && (
+                              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin absolute right-3 top-2.5" />
+                            )}
+                          </div>
+
+                          {/* Search Results Dropdown */}
+                          <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm divide-y divide-slate-100">
+                            {colleaguesList.length === 0 ? (
+                              <div className="p-3 text-[11px] text-slate-400 text-center">
+                                {isLoadingColleagues ? 'Searching staff...' : 'No colleagues found.'}
+                              </div>
+                            ) : (
+                              colleaguesList.map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => setSelectedColleague(c)}
+                                  className="w-full p-2 text-left hover:bg-slate-50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                                >
+                                  <div>
+                                    <span className="font-bold text-slate-800 block text-[11px]">{c.name}</span>
+                                    <span className="text-[10px] text-slate-400">
+                                      {c.department} &bull; {c.email}
+                                    </span>
+                                  </div>
+                                  {c.hasActiveBookingToday ? (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
+                                      Booked: {c.reservedDeskCode}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                                      Available
+                                    </span>
+                                  )}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Notes / Special Requests */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Notes / Purpose (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Client meeting, sprint planning..."
+                      value={bookingNotes}
+                      onChange={(e) => setBookingNotes(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Warning if colleague already has booking today */}
+                  {bookingForMode === 'COLLEAGUE' && selectedColleague?.hasActiveBookingToday && (
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] flex items-start space-x-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600" />
+                      <span>
+                        Note: {selectedColleague.name} already has Desk {selectedColleague.reservedDeskCode} booked today.
+                        Creating this booking will require conflicting slot clearance.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Confirm Booking Action Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmReservation}
+                      disabled={isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
+                      className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingBooking ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Securing Workstation...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>
+                            Confirm Reservation ({activeDesk.deskCode})
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
-
-              {/* Reservation Prompt Info */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-                <div className="font-bold text-slate-800 flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Reservation Window:</span>
-                </div>
-                <p className="text-[11px]">
-                  Date: <span className="font-bold text-slate-700">{bookingDate}</span> &bull; Slot:{' '}
-                  <span className="font-bold text-slate-700">{slotType.replace('_', ' ')}</span>
-                </p>
-              </div>
-
-              {/* Action notice for Step 20 inspector integration */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  disabled={activeDesk.isReserved && !activeDesk.isMyBooking}
-                  className={`w-full py-3 px-4 rounded-xl text-xs font-black shadow-sm flex items-center justify-center space-x-2 transition-all ${
-                    !activeDesk.isReserved
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
-                      : activeDesk.isMyBooking
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>
-                    {activeDesk.isMyBooking
-                      ? 'Your Confirmed Desk'
-                      : !activeDesk.isReserved
-                      ? 'Select for Reservation'
-                      : 'Workstation Unavailable'}
-                  </span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
         </div>
