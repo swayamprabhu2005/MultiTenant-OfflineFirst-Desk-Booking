@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TenantProvider } from './context/TenantContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
+import { RoleGuard, getHomeRouteForRole } from './components/auth/RoleGuard';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
@@ -14,6 +15,9 @@ import { BrandSettingsPage } from './pages/admin/BrandSettingsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
 import { FloorPlansPage } from './pages/admin/FloorPlansPage';
+import { EmployeeDashboard } from './pages/employee/EmployeeDashboard';
+import { EmployeeFloorPlansPage } from './pages/employee/EmployeeFloorPlansPage';
+import { EmployeeBookingsPage } from './pages/employee/EmployeeBookingsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +27,25 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const RootRedirect: React.FC = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-xs font-semibold">
+        Loading SaaS Control Plane...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const target = getHomeRouteForRole(user.role);
+  return <Navigate to={target} replace />;
+};
 
 const DashboardRoute: React.FC = () => {
   const { user } = useAuth();
@@ -66,7 +89,7 @@ export const App: React.FC = () => {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/change-password" element={<ChangePasswordPage />} />
 
-              {/* Protected Administration Routes */}
+              {/* Protected Administration Shell */}
               <Route
                 path="/"
                 element={
@@ -75,13 +98,25 @@ export const App: React.FC = () => {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<DashboardRoute />} />
+                {/* Dynamic Root Index Redirect to Role Dashboard */}
+                <Route index element={<RootRedirect />} />
+
+                {/* Organization & Platform Admin Routes */}
+                <Route path="admin/dashboard" element={<DashboardRoute />} />
                 <Route path="admin/organizations" element={<Navigate to="/" replace />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
+
+                {/* Employee Protected Routes */}
+                <Route element={<RoleGuard allowedRoles={['EMPLOYEE', 'TECH_LEAD', 'ORGANIZATION_ADMIN', 'PLATFORM_ADMIN', 'BRANCH_ADMIN']} />}>
+                  <Route path="employee/dashboard" element={<EmployeeDashboard />} />
+                  <Route path="employee/floor-plans" element={<EmployeeFloorPlansPage />} />
+                  <Route path="employee/bookings" element={<EmployeeBookingsPage />} />
+                  <Route path="employee" element={<Navigate to="/employee/dashboard" replace />} />
+                </Route>
               </Route>
 
               {/* Catch-all fallback */}

@@ -116,3 +116,37 @@ export interface MeetingRoomDTO {
   hdmiCount: number;
 }
 
+export interface BookingDTO {
+  id: string;
+  organizationId: string;
+  deskId: string;
+  userId: string;
+  startTime: string;
+  endTime: string;
+  status: 'CONFIRMED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+  desk?: DeskDTO & {
+    section?: SectionDTO & {
+      floor?: FloorDTO & {
+        building?: BuildingDTO & {
+          branch?: BranchDTO;
+        };
+      };
+    };
+  };
+  user?: UserDTO;
+}
+
+export interface EmployeeDashboardSummaryDTO {
+  activeBooking: BookingDTO | null;
+  totalBookings: number;
+  assignedBranch: BranchDTO | null;
+  branchStats: {
+    totalDesks: number;
+    availableDesks: number;
+    occupiedDesks: number;
+    meetingRoomCount: number;
+  };
+  recentBookings: BookingDTO[];
+}
