@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -1137,13 +1138,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       </div>
 
       {/* CENTRAL GLASSMORPHIC DESK INSPECTOR MODAL */}
-      {activeDesk && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setActiveDesk(null);
-          }}
-          className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-        >
+      {activeDesk &&
+        createPortal(
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setActiveDesk(null);
+            }}
+            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          >
           <div className="w-full max-w-xl bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/80 p-6 flex flex-col space-y-5 relative animate-scale-up max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1517,7 +1519,8 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Floating Team Pod Booking Action Bar */}
@@ -1551,71 +1554,73 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       )}
 
       {/* Team Pod Bulk Confirmation Modal */}
-      {isBulkModalOpen && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-purple-600" />
-                <span>Confirm Team Pod Reservation</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsBulkModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              You are about to reserve <span className="font-bold text-slate-800">{bulkSelectedDesks.length} workstations</span> for your team sprint on <span className="font-bold text-slate-800">{startDate}</span>.
-            </p>
-
-            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
-              {bulkSelectedDesks.map((d) => (
-                <span
-                  key={d.id}
-                  className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-mono text-xs font-bold"
+      {isBulkModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
+                  <Zap className="w-4 h-4 text-purple-600" />
+                  <span>Confirm Team Pod Reservation</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
                 >
-                  {d.deskCode}
-                </span>
-              ))}
-            </div>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                Team Sprint Notes / Project
-              </label>
-              <input
-                type="text"
-                value={bulkNotes}
-                onChange={(e) => setBulkNotes(e.target.value)}
-                placeholder="e.g. Backend Architecture Sprint"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-              />
-            </div>
+              <p className="text-xs text-slate-500">
+                You are about to reserve <span className="font-bold text-slate-800">{bulkSelectedDesks.length} workstations</span> for your team sprint on <span className="font-bold text-slate-800">{startDate}</span>.
+              </p>
 
-            <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsBulkModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingBulk}
-                onClick={handleConfirmBulkReservation}
-                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1.5"
-              >
-                {isSubmittingBulk ? <span>Reserving...</span> : <span>Confirm Pod Booking</span>}
-              </button>
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
+                {bulkSelectedDesks.map((d) => (
+                  <span
+                    key={d.id}
+                    className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-mono text-xs font-bold"
+                  >
+                    {d.deskCode}
+                  </span>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Team Sprint Notes / Project
+                </label>
+                <input
+                  type="text"
+                  value={bulkNotes}
+                  onChange={(e) => setBulkNotes(e.target.value)}
+                  placeholder="e.g. Backend Architecture Sprint"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingBulk}
+                  onClick={handleConfirmBulkReservation}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1.5"
+                >
+                  {isSubmittingBulk ? <span>Reserving...</span> : <span>Confirm Pod Booking</span>}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
