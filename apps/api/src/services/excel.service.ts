@@ -987,4 +987,237 @@ export async function parseAndValidateMultiBranchRoster(
   };
 }
 
+/**
+ * Generates an Excel Floor Plan Template scoped strictly to a single branch
+ */
+export async function generateBranchFloorPlanTemplate(
+  orgName: string,
+  branch: {
+    code: string;
+    name: string;
+    buildings: Array<{
+      code: string;
+      name: string;
+      floors: Array<{
+        code: string;
+        name: string;
+        floorNumber: number;
+        sections: Array<{
+          name: string;
+          direction: string;
+          standardDeskCount: number;
+          hdmiDeskCount: number;
+          hasMeetingRoom: boolean;
+          meetingRoomCapacity: number;
+          meetingRoomHdmi: number;
+        }>;
+      }>;
+    }>;
+  }
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'MultiTenant DeskBooking Platform';
+
+  // 1. Sheet: Branch Info
+  const sheetBranch = workbook.addWorksheet('Branch Info');
+  sheetBranch.views = [{ showGridLines: true }];
+
+  const bHeader = sheetBranch.getRow(1);
+  bHeader.values = ['Branch Code', 'Branch Name', 'Number of Buildings'];
+  bHeader.height = 26;
+  bHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  bHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 1; c <= 3; c++) {
+    bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  }
+
+  const bRow = sheetBranch.getRow(2);
+  bRow.height = 22;
+  bRow.getCell(1).value = branch.code;
+  bRow.getCell(2).value = branch.name;
+  bRow.getCell(3).value = Math.max(1, branch.buildings.length);
+  for (let c = 1; c <= 3; c++) {
+    bRow.getCell(c).font = { name: 'Segoe UI', size: 10 };
+    bRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+    bRow.getCell(c).border = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+  }
+  sheetBranch.getColumn(1).width = 20;
+  sheetBranch.getColumn(2).width = 30;
+  sheetBranch.getColumn(3).width = 24;
+
+  // 2. Sheet: Buildings
+  const sheetBuildings = workbook.addWorksheet('Buildings');
+  sheetBuildings.views = [{ showGridLines: true }];
+
+  const bldHeader = sheetBuildings.getRow(1);
+  bldHeader.values = ['Building Code', 'Building Name', 'Number of Floors'];
+  bldHeader.height = 26;
+  bldHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  bldHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 1; c <= 3; c++) {
+    bldHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+  }
+
+  const buildingsData =
+    branch.buildings.length > 0
+      ? branch.buildings
+      : [{ code: 'BLD001', name: 'Main Tower', floors: [] }];
+
+  buildingsData.forEach((bld, idx) => {
+    const r = sheetBuildings.getRow(idx + 2);
+    r.height = 22;
+    r.getCell(1).value = bld.code;
+    r.getCell(2).value = bld.name;
+    r.getCell(3).value = Math.max(1, bld.floors.length);
+    for (let c = 1; c <= 3; c++) {
+      r.getCell(c).font = { name: 'Segoe UI', size: 10 };
+      r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+      r.getCell(c).border = {
+        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      };
+    }
+  });
+  sheetBuildings.getColumn(1).width = 20;
+  sheetBuildings.getColumn(2).width = 30;
+  sheetBuildings.getColumn(3).width = 22;
+
+  // 3. Sheet: Floors
+  const sheetFloors = workbook.addWorksheet('Floors');
+  sheetFloors.views = [{ showGridLines: true }];
+
+  const flHeader = sheetFloors.getRow(1);
+  flHeader.values = ['Building Name', 'Floor Code', 'Floor Name', 'Number of Sections'];
+  flHeader.height = 26;
+  flHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  flHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 1; c <= 4; c++) {
+    flHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+  }
+
+  let flRowIdx = 2;
+  buildingsData.forEach((bld) => {
+    const floorsData =
+      bld.floors.length > 0
+        ? bld.floors
+        : [
+            {
+              code: '1-FL01',
+              name: 'Floor 1',
+              floorNumber: 1,
+              sections: [],
+            },
+          ];
+
+    floorsData.forEach((fl) => {
+      const r = sheetFloors.getRow(flRowIdx++);
+      r.height = 22;
+      r.getCell(1).value = bld.name;
+      r.getCell(2).value = fl.code;
+      r.getCell(3).value = fl.name;
+      r.getCell(4).value = Math.max(1, fl.sections.length);
+      for (let c = 1; c <= 4; c++) {
+        r.getCell(c).font = { name: 'Segoe UI', size: 10 };
+        r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+        r.getCell(c).border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        };
+      }
+    });
+  });
+  sheetFloors.getColumn(1).width = 26;
+  sheetFloors.getColumn(2).width = 20;
+  sheetFloors.getColumn(3).width = 24;
+  sheetFloors.getColumn(4).width = 22;
+
+  // 4. Sheet: Sections & Cubicles
+  const sheetSections = workbook.addWorksheet('Sections & Cubicles');
+  sheetSections.views = [{ showGridLines: true }];
+
+  const secHeader = sheetSections.getRow(1);
+  secHeader.values = [
+    'Floor Code',
+    'Section Name',
+    'Direction',
+    'Standard Cubicles',
+    'HDMI Cubicles',
+    'Has Meeting Room',
+    'Meeting Room Capacity',
+    'Meeting Room HDMI',
+  ];
+  secHeader.height = 26;
+  secHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  secHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 1; c <= 8; c++) {
+    secHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+  }
+
+  let secRowIdx = 2;
+  buildingsData.forEach((bld) => {
+    bld.floors.forEach((fl) => {
+      const sectionsData =
+        fl.sections.length > 0
+          ? fl.sections
+          : [
+              {
+                name: 'First North',
+                direction: 'NORTH',
+                standardDeskCount: 16,
+                hdmiDeskCount: 8,
+                hasMeetingRoom: true,
+                meetingRoomCapacity: 8,
+                meetingRoomHdmi: 4,
+              },
+            ];
+
+      sectionsData.forEach((sec) => {
+        const r = sheetSections.getRow(secRowIdx++);
+        r.height = 22;
+        r.getCell(1).value = fl.code;
+        r.getCell(2).value = sec.name;
+        r.getCell(3).value = sec.direction || 'NORTH';
+        r.getCell(4).value = sec.standardDeskCount || 16;
+        r.getCell(5).value = sec.hdmiDeskCount || 8;
+        r.getCell(6).value = sec.hasMeetingRoom ? 'Yes' : 'No';
+        r.getCell(7).value = sec.meetingRoomCapacity || 0;
+        r.getCell(8).value = sec.meetingRoomHdmi || 0;
+
+        for (let c = 1; c <= 8; c++) {
+          r.getCell(c).font = { name: 'Segoe UI', size: 10 };
+          r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+          r.getCell(c).border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          };
+        }
+      });
+    });
+  });
+
+  sheetSections.getColumn(1).width = 18;
+  sheetSections.getColumn(2).width = 24;
+  sheetSections.getColumn(3).width = 18;
+  sheetSections.getColumn(4).width = 20;
+  sheetSections.getColumn(5).width = 18;
+  sheetSections.getColumn(6).width = 20;
+  sheetSections.getColumn(7).width = 24;
+  sheetSections.getColumn(8).width = 22;
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+
 
