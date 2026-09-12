@@ -352,10 +352,10 @@ export const EmployeeRosterPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2.5">
             <Users className="w-6 h-6 text-emerald-600" />
-            <span>Employee Roster &amp; Branch Administration</span>
+            <span>Branch Administrators &amp; Access Control</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage local branch administrators and orchestrate automated access control across your corporate network.
+            Assign and orchestrate local branch administrators across your corporate facility network.
           </p>
         </div>
 
