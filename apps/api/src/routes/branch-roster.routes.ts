@@ -936,4 +936,174 @@ router.post(
   }
 );
 
+/**
+ * POST /api/branch-roster/cubicle
+ * In-UI manual workstation creation for branch admin
+ */
+router.post(
+  '/cubicle',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const user = req.user!;
+      const { sectionId, hasHdmi = false, isMeetingRoom = false } = req.body;
+
+      if (!sectionId || typeof sectionId !== 'string') {
+        return res.status(400).json({ error: 'Valid sectionId is required.' });
+      }
+
+      // Fetch section with its floor, building, and branch
+      const section = await prisma.section.findFirst({
+        where: { id: sectionId, organizationId: orgId },
+        include: {
+          floor: {
+            include: {
+              building: true,
+            },
+          },
+          meetingRoom: true,
+          desks: true,
+        },
+      });
+
+      if (!section) {
+        return res.status(404).json({ error: 'Target section not found.' });
+      }
+
+      // Scoping check for branch admin
+      if (user.role === Role.BRANCH_ADMIN && user.scopedBranchId) {
+        if (section.floor.building.branchId !== user.scopedBranchId) {
+          return res.status(403).json({
+            error: 'Unauthorized: You can only add cubicles within your assigned branch.',
+          });
+        }
+      }
+
+      if (isMeetingRoom) {
+        // Find existing meeting room desks or meeting room record
+        const existingMeetingDesks = section.desks.filter((d) => d.isMeetingRoom);
+        const deskNumber = existingMeetingDesks.length + 1;
+        const deskCode = `M-${String(deskNumber).padStart(2, '0')}`;
+
+        const [desk] = await prisma.$transaction([
+          prisma.desk.create({
+            data: {
+              organizationId: orgId,
+              sectionId,
+              deskCode,
+              deskNumber,
+              hasHdmi: !!hasHdmi,
+              isMeetingRoom: true,
+              status: 'AVAILABLE',
+            },
+          }),
+          ...(section.meetingRoom
+            ? [
+                prisma.meetingRoom.update({
+                  where: { id: section.meetingRoom.id },
+                  data: {
+                    capacity: { increment: 1 },
+                    ...(hasHdmi
+                      ? {
+                          hasHdmi: true,
+                          hdmiCount: { increment: 1 },
+                        }
+                      : {}),
+                  },
+                }),
+              ]
+            : [
+                prisma.meetingRoom.create({
+                  data: {
+                    organizationId: orgId,
+                    sectionId,
+                    name: `${section.name} Meeting Room (1 Seat)`,
+                    capacity: 1,
+                    hasHdmi: !!hasHdmi,
+                    hdmiCount: hasHdmi ? 1 : 0,
+                  },
+                }),
+              ]),
+        ]);
+
+        await prisma.auditLog.create({
+          data: {
+            organizationId: orgId,
+            actorUserId: user.id,
+            action: 'ADD_MEETING_CUBICLE',
+            entityType: 'Desk',
+            entityId: desk.id,
+            metadata: {
+              sectionId,
+              deskCode: desk.deskCode,
+              hasHdmi: desk.hasHdmi,
+              isMeetingRoom: true,
+            },
+          },
+        });
+
+        return res.status(201).json({
+          success: true,
+          desk,
+          message: `Meeting room seat ${deskCode} added successfully.`,
+        });
+      }
+
+      // Standard cubicle addition
+      const existingStandardDesks = section.desks.filter((d) => !d.isMeetingRoom);
+      const deskNumber = existingStandardDesks.length + 1;
+      const deskCode = `C-${String(deskNumber).padStart(2, '0')}`;
+
+      const [desk, updatedSection] = await prisma.$transaction([
+        prisma.desk.create({
+          data: {
+            organizationId: orgId,
+            sectionId,
+            deskCode,
+            deskNumber,
+            hasHdmi: !!hasHdmi,
+            isMeetingRoom: false,
+            status: 'AVAILABLE',
+          },
+        }),
+        prisma.section.update({
+          where: { id: sectionId },
+          data: {
+            standardDeskCount: { increment: 1 },
+            ...(hasHdmi ? { hdmiDeskCount: { increment: 1 } } : {}),
+          },
+        }),
+      ]);
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: orgId,
+          actorUserId: user.id,
+          action: 'ADD_CUBICLE',
+          entityType: 'Desk',
+          entityId: desk.id,
+          metadata: {
+            sectionId,
+            deskCode: desk.deskCode,
+            hasHdmi: desk.hasHdmi,
+            standardDeskCount: updatedSection.standardDeskCount,
+          },
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        desk,
+        section: updatedSection,
+        message: `Workstation ${deskCode} created successfully (${hasHdmi ? 'HDMI Enabled' : 'Standard'}).`,
+      });
+    } catch (error: any) {
+      console.error('Failed to create cubicle:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
 export default router;
