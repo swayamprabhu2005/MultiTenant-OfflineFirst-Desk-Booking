@@ -136,9 +136,9 @@ echo   - Default Platform Admin: admin@deskbooking.com
 echo   - Default Password:       DeskBook$2026#SecureOps!X9
 echo ========================================================
 echo Press Ctrl+C in this terminal to terminate all processes.
-echo Opening the browser in 3 seconds...
-ping 127.0.0.1 -n 4 >nul
-start http://localhost:3000
+echo Web console will automatically open in default browser when ready...
+start /b "" node -e "const http = require('http'); const { exec } = require('child_process'); let attempts = 0; function check() { attempts++; http.get('http://localhost:3000', (res) => { exec('start http://localhost:3000'); process.exit(0); }).on('error', () => { if (attempts < 60) setTimeout(check, 1000); else process.exit(1); }); } setTimeout(check, 2000);"
 call pnpm dev
 
 pause
+
