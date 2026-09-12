@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTenant } from '../../context/TenantContext';
 import {
   Users,
@@ -12,16 +12,102 @@ import {
   FileSpreadsheet,
   Filter,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
 
 export const WorkforcePage: React.FC = () => {
   const { tenant } = useTenant();
 
   const [loading, setLoading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [uploadingRoster, setUploadingRoster] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('ALL');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // 1. Download Multi-Branch Excel Template
+  const handleDownloadTemplate = async () => {
+    try {
+      setDownloadingTemplate(true);
+      setStatusMsg(null);
+      setErrorMsg(null);
+
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/roster/multi-branch-template', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to download multi-branch employee template.');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const orgSlug = tenant?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Enterprise';
+      a.download = `Multi_Branch_Employee_Roster_${orgSlug}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setStatusMsg('Multi-branch employee template downloaded. Fill in the branch sheets and upload below.');
+    } catch (err: any) {
+      console.error('Download template error:', err);
+      setErrorMsg(err.message || 'Failed to download template.');
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  // 2. Upload Multi-Branch Excel Roster
+  const handleUploadRoster = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingRoster(true);
+      setStatusMsg(null);
+      setErrorMsg(null);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/roster/multi-branch-import', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import multi-branch roster.');
+      }
+
+      setStatusMsg(
+        data.message ||
+          `Successfully processed ${data.totalProcessed} employees across registered branches.`
+      );
+    } catch (err: any) {
+      console.error('Upload roster error:', err);
+      setErrorMsg(err.message || 'An error occurred during multi-branch roster ingestion.');
+    } finally {
+      setUploadingRoster(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-0 py-2 animate-fade-in">
@@ -91,22 +177,40 @@ export const WorkforcePage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleUploadRoster}
+              accept=".xlsx"
+              className="hidden"
+            />
+
             <button
               type="button"
-              disabled={loading}
+              onClick={handleDownloadTemplate}
+              disabled={downloadingTemplate || uploadingRoster}
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-4 h-4" />
-              <span>Download Multi-Branch Template</span>
+              {downloadingTemplate ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-200" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{downloadingTemplate ? 'Generating Template...' : 'Download Multi-Branch Template'}</span>
             </button>
 
             <button
               type="button"
-              disabled={loading}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingRoster || downloadingTemplate}
               className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-50"
             >
-              <Upload className="w-4 h-4" />
-              <span>Upload Completed Roster</span>
+              {uploadingRoster ? (
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              <span>{uploadingRoster ? 'Ingesting Roster...' : 'Upload Completed Roster'}</span>
             </button>
           </div>
         </div>
