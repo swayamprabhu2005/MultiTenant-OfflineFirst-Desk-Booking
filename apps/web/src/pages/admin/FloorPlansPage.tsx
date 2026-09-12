@@ -434,11 +434,14 @@ export const FloorPlansPage: React.FC = () => {
   const desks = currentSection?.desks || [];
   const meetingRoom = currentSection?.meetingRoom;
 
-  // Split desks into 4-desk ergonomic clusters (2 facing 2 setup)
+  // Filter out meeting room seats (M-XX) so pod clusters ONLY contain standard cubicles (C-XX)
+  const standardDesks = desks.filter((d) => !d.isMeetingRoom && !d.deskCode.startsWith('M-'));
+
+  // Split standard desks into 4-desk ergonomic clusters (2 facing 2 setup)
   const podSize = 4;
   const podClusters: DeskItem[][] = [];
-  for (let i = 0; i < desks.length; i += podSize) {
-    podClusters.push(desks.slice(i, i + podSize));
+  for (let i = 0; i < standardDesks.length; i += podSize) {
+    podClusters.push(standardDesks.slice(i, i + podSize));
   }
   const totalPods = podClusters.length;
 
@@ -446,7 +449,7 @@ export const FloorPlansPage: React.FC = () => {
   const numColumns = Math.max(1, Math.ceil(totalPods / 2));
 
   // Compute Symmetrical HDMI Allocation across active clusters
-  const totalHdmiCount = desks.filter(d => d.hasHdmi).length;
+  const totalHdmiCount = standardDesks.filter(d => d.hasHdmi).length;
   const baseHdmiPerPod = totalPods > 0 ? Math.floor(totalHdmiCount / totalPods) : 0;
   const remainderHdmi = totalPods > 0 ? totalHdmiCount % totalPods : 0;
 
