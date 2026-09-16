@@ -25,6 +25,10 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
     ...(options.headers || {}),
   };
 
+  if (options.body instanceof FormData) {
+    delete (headers as Record<string, string>)['Content-Type'];
+  }
+
   const maxRetries = 5;
   let attempt = 0;
 

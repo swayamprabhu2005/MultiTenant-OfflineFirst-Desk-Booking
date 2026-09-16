@@ -137,3 +137,52 @@ export interface MeetingRoomDTO {
   hdmiCount: number;
 }
 
+export enum IssueStatus {
+  OPEN = 'OPEN',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+}
+
+export enum IssuePriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export interface IssueReportDTO {
+  id: string;
+  title: string;
+  description: string;
+  category?: string | null;
+  priority: IssuePriority;
+  screenshotUrl?: string | null;
+  clientVersion?: string | null;
+  deviceInfo?: string | null;
+  systemDiagnostics?: Record<string, any> | null;
+  status: IssueStatus;
+  resolutionNote?: string | null;
+  reporterId: string;
+  reporter?: {
+    id: string;
+    name: string;
+    email: string;
+    role: Role;
+  };
+  organizationId: string;
+  organization?: {
+    id: string;
+    name: string;
+    code: string;
+    subdomain: string;
+  };
+  resolvedById?: string | null;
+  resolvedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+

@@ -142,11 +142,13 @@ router.delete('/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN]), async 
       await tx.building.deleteMany({ where: { organizationId: id } });
       // 7. Delete all branches
       await tx.branch.deleteMany({ where: { organizationId: id } });
-      // 8. Delete all users belonging to this organization
+      // 8. Delete tenant issue reports
+      await tx.issueReport.deleteMany({ where: { organizationId: id } });
+      // 9. Delete all users belonging to this organization
       await tx.user.deleteMany({ where: { organizationId: id } });
-      // 9. Delete tenant-scoped audit logs
+      // 10. Delete tenant-scoped audit logs
       await tx.auditLog.deleteMany({ where: { organizationId: id } });
-      // 10. Delete the organization itself
+      // 11. Delete the organization itself
       await tx.organization.delete({ where: { id } });
     });
 

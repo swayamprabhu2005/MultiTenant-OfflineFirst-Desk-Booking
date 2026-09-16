@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
@@ -13,7 +13,11 @@ import {
   Calendar,
   Menu,
   ChevronLeft,
+  ShieldAlert,
+  Cpu,
 } from 'lucide-react';
+import { fetchApi } from '../../services/api';
+import { SystemDiagnosticsModal } from '../system/SystemDiagnosticsModal';
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
@@ -25,10 +29,21 @@ export const Sidebar: React.FC = () => {
   const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
   const isEmployee = user?.role === 'EMPLOYEE';
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openIssuesCount, setOpenIssuesCount] = useState<number | null>(null);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+
+  useEffect(() => {
+    if (isPlatformAdmin) {
+      fetchApi<{ open: number }>('/issues/stats')
+        .then(data => setOpenIssuesCount(data.open))
+        .catch(() => {});
+    }
+  }, [isPlatformAdmin]);
 
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+        { name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: openIssuesCount },
       ]
     : isEmployee
     ? [
@@ -104,7 +119,7 @@ export const Sidebar: React.FC = () => {
                     : undefined
                 }
                 className={({ isActive }) =>
-                  `flex items-center ${
+                  `relative flex items-center ${
                     isCollapsed ? 'justify-center px-2 py-3' : 'space-x-3 px-3 py-2.5'
                   } rounded-xl text-sm font-semibold transition-all border ${
                     isActive
@@ -116,29 +131,60 @@ export const Sidebar: React.FC = () => {
                 }
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span className="truncate">{item.name}</span>}
+                {!isCollapsed && (
+                  <div className="flex items-center justify-between flex-1 truncate">
+                    <span className="truncate">{item.name}</span>
+                    {item.badge !== undefined && item.badge !== null && item.badge > 0 && (
+                      <span className="ml-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-rose-500 text-white shadow-xs">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {isCollapsed && item.badge !== undefined && item.badge !== null && item.badge > 0 && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white"></span>
+                )}
               </NavLink>
             );
           })}
         </nav>
       </div>
 
-      {/* Bottom Control Plane Indicator */}
+      {/* Bottom Control Plane & System Diagnostics */}
       {!isCollapsed ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500">
-          <div className="font-bold text-slate-700 flex items-center justify-between mb-1">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-2">
+          <div className="font-bold text-slate-700 flex items-center justify-between">
             <span>Control Plane</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span className="flex items-center space-x-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-[10px] text-emerald-700 font-bold">ONLINE</span>
+            </span>
           </div>
-          <p className="text-[11px] leading-tight text-slate-400">
-            Multi-tenant isolation &amp; dynamic white-label tokens.
-          </p>
+          <button
+            type="button"
+            onClick={() => setIsDiagnosticsOpen(true)}
+            className="w-full py-1.5 px-2 bg-white hover:bg-slate-100 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-700 text-[11px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs group"
+          >
+            <Cpu className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
+            <span>System Diagnostics</span>
+          </button>
         </div>
       ) : (
-        <div className="flex justify-center p-2" title="System Active">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsDiagnosticsOpen(true)}
+          className="flex justify-center p-2 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mx-auto" 
+          title="System Diagnostics & Versions"
+        >
+          <Cpu className="w-5 h-5 text-indigo-600" />
+        </button>
       )}
+
+      {/* In-App System Diagnostics Modal */}
+      <SystemDiagnosticsModal
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+      />
     </aside>
   );
 };
