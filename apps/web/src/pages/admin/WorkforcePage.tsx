@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useTenant } from '../../context/TenantContext';
 import { fetchApi } from '../../services/api';
 import {
@@ -17,6 +18,7 @@ import {
   UserCheck,
   Globe,
   Key,
+  Building,
 } from 'lucide-react';
 
 interface BranchOption {
@@ -145,9 +147,15 @@ export const WorkforcePage: React.FC = () => {
     }
   };
 
+  const [initialLoading, setInitialLoading] = useState(true);
+
   useEffect(() => {
-    loadBranches();
-    loadConfig();
+    const init = async () => {
+      setInitialLoading(true);
+      await Promise.all([loadBranches(), loadConfig()]);
+      setInitialLoading(false);
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -287,8 +295,29 @@ export const WorkforcePage: React.FC = () => {
         </div>
       )}
 
-      {/* Ingestion Hub Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
+      {/* PREREQUISITE GATEKEEPER: If 0 branches exist in DB */}
+      {!initialLoading && branches.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-xl mx-auto space-y-4 my-8 animate-fade-in">
+          <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto text-amber-500 border border-amber-100">
+            <Building className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">Workspace Configuration Required</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            Please configure your workspace layout first. Once physical branches are defined through the Excel ingestion pipeline, you will be able to manage and bulk-ingest your enterprise workforce.
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/admin/workspace-setup"
+              className="inline-flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              <span>Launch Workspace Setup</span>
+              <span className="text-sm font-black">➔</span>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        /* Ingestion Hub Card */
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
@@ -578,6 +607,7 @@ export const WorkforcePage: React.FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };
