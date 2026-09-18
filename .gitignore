@@ -75,6 +75,10 @@ Workspace_FloorPlan_*.xlsx
 
 # Internal Project Planning Documents
 plan.md
+Issue.md
+CCI-Code-Crunch_Team_Guide.docx
+*.docx
 
 # Architectural Visual Assets (Shared Externally)
 schema.svg
+
