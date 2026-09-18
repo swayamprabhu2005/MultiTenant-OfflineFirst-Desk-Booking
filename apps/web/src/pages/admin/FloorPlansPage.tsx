@@ -832,8 +832,11 @@ export const FloorPlansPage: React.FC = () => {
                 <div className="flex items-center justify-between w-full px-0.5">
                   <span className="text-[11px] font-black shrink-0 whitespace-nowrap">{desk.deskCode}</span>
                   {hasHdmi && (
-                    <span className="text-[8px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
-                      HDMI
+                    <span
+                      title="PC Station (HDMI Equipped Monitor)"
+                      className="p-0.5 rounded bg-white/80 border border-slate-200 text-slate-700 flex-shrink-0"
+                    >
+                      <Monitor className="w-3 h-3 text-emerald-600" />
                     </span>
                   )}
                 </div>
@@ -944,10 +947,10 @@ export const FloorPlansPage: React.FC = () => {
                 <span>Reserved</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-emerald-400 font-mono font-bold">
-                  HDMI
+                <span className="p-0.5 rounded bg-white border border-slate-200 text-slate-700 inline-flex items-center justify-center">
+                  <Monitor className="w-3 h-3 text-emerald-600" />
                 </span>
-                <span>Display</span>
+                <span>PC Station</span>
               </div>
             </div>
 

@@ -842,10 +842,10 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 <span>Your Desk</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-emerald-400 font-mono font-bold">
-                  HDMI
+                <span className="p-0.5 rounded bg-white border border-slate-200 text-slate-700 inline-flex items-center justify-center">
+                  <Monitor className="w-3 h-3 text-emerald-600" />
                 </span>
-                <span>Display</span>
+                <span>PC Station</span>
               </div>
             </div>
 
