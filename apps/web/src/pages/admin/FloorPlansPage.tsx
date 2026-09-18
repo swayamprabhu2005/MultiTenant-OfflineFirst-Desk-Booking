@@ -2,7 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap } from 'lucide-react';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar } from 'lucide-react';
+
+export interface DeskBookingInfo {
+  id: string;
+  userId: string;
+  slotType: string;
+  startTime: string;
+  endTime: string;
+  notes?: string | null;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    department?: string | null;
+  };
+  bookedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
 
 interface DeskItem {
   id: string;
@@ -11,6 +31,7 @@ interface DeskItem {
   hasHdmi: boolean;
   isMeetingRoom?: boolean;
   status: 'AVAILABLE' | 'BOOKED';
+  bookings?: DeskBookingInfo[];
 }
 
 interface MeetingRoomItem {
@@ -76,10 +97,64 @@ function formatFloorDisplayName(fl?: { name?: string; code?: string; floorNumber
   return 'Floor 1';
 }
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dStr: string): Date {
+  const [y, m, d] = dStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function getTodayString(): string {
+  return formatLocalDate(new Date());
+}
+
+function getFutureDateString(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return formatLocalDate(d);
+}
+
+export function getDatesInRange(startStr: string, endStr: string): string[] {
+  const dates: string[] = [];
+  const start = parseLocalDate(startStr);
+  const end = parseLocalDate(endStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return [startStr];
+  }
+  const curr = new Date(start);
+  let limit = 0;
+  while (curr <= end && limit < 31) {
+    dates.push(formatLocalDate(curr));
+    curr.setDate(curr.getDate() + 1);
+    limit++;
+  }
+  return dates.length > 0 ? dates : [startStr];
+}
+
+export function formatDateDisplay(dStr: string): { day: string; date: string; full: string } {
+  try {
+    const d = parseLocalDate(dStr);
+    const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { day, date, full: `${day}, ${date}` };
+  } catch {
+    return { day: '', date: dStr, full: dStr };
+  }
+}
+
 export const FloorPlansPage: React.FC = () => {
   const { user } = useAuth();
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Multi-Day Date Range Selection
+  const [startDate, setStartDate] = useState<string>(getTodayString());
+  const [endDate, setEndDate] = useState<string>(getFutureDateString(7));
 
   // Hierarchy Selection State
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -113,7 +188,11 @@ export const FloorPlansPage: React.FC = () => {
   const loadHierarchy = async () => {
     try {
       setLoading(true);
-      const data = await fetchApi<BranchItem[]>('/workspace/hierarchy');
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+      });
+      const data = await fetchApi<BranchItem[]>(`/workspace/hierarchy?${params.toString()}`);
       const allBranches = data || [];
       const scopedBranches =
         user?.role === 'BRANCH_ADMIN' && user?.scopedBranchId
@@ -149,7 +228,7 @@ export const FloorPlansPage: React.FC = () => {
 
   useEffect(() => {
     loadHierarchy();
-  }, [user?.role, user?.scopedBranchId]);
+  }, [user?.role, user?.scopedBranchId, startDate, endDate]);
 
   const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
   const currentBuilding = currentBranch?.buildings.find(bld => bld.id === selectedBuildingId) || currentBranch?.buildings[0];
@@ -504,9 +583,12 @@ export const FloorPlansPage: React.FC = () => {
         <div className="grid grid-cols-2 gap-2">
           {podDesks.map((desk, slotIdx) => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
-            const isAvailable = desk.status === 'AVAILABLE';
+            const activeBooking = desk.bookings && desk.bookings.length > 0 ? desk.bookings[0] : null;
+            const isBooked = !!activeBooking || desk.status === 'BOOKED';
+            const isAvailable = !isBooked;
             const isSelected = activeDesk?.id === desk.id;
             const isMassSelected = selectedDeskIds.includes(desk.id);
+            const bookedUser = activeBooking?.user || activeBooking?.bookedByUser;
             return (
               <button
                 key={desk.id}
@@ -533,14 +615,26 @@ export const FloorPlansPage: React.FC = () => {
                     : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
               >
-                <span className="text-[11px] font-black">{desk.deskCode}</span>
-                {hasHdmi ? (
-                  <span className="text-[8.5px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
-                    HDMI
-                  </span>
-                ) : (
-                  <span className="text-[8.5px] text-slate-400 font-mono">STD</span>
-                )}
+                <div className="flex items-center justify-between w-full px-0.5">
+                  <span className="text-[11px] font-black shrink-0 whitespace-nowrap">{desk.deskCode}</span>
+                  {hasHdmi && (
+                    <span className="text-[8px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
+                      HDMI
+                    </span>
+                  )}
+                </div>
+                <div className="w-full flex items-center justify-between px-0.5">
+                  {bookedUser ? (
+                    <span className="text-[9px] font-black text-red-700 truncate max-w-[85px]" title={`Reserved by ${bookedUser.name} (${activeBooking?.slotType.replace('_', ' ')})`}>
+                      {bookedUser.name.split(' ')[0]}
+                    </span>
+                  ) : isBooked ? (
+                    <span className="text-[9px] font-black text-red-700">Reserved</span>
+                  ) : (
+                    <span className="text-[9px] font-semibold text-emerald-700">Free</span>
+                  )}
+                  {!hasHdmi && <span className="text-[7.5px] text-slate-400 font-mono">STD</span>}
+                </div>
               </button>
             );
           })}
@@ -595,6 +689,34 @@ export const FloorPlansPage: React.FC = () => {
 
           {/* Action Buttons & Legend (Aligned Right) */}
           <div className="flex flex-wrap items-center justify-end gap-3.5 lg:ml-auto">
+            {/* Multi-Day Date Range Picker */}
+            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+              <div className="flex items-center space-x-1.5 px-2">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Range:</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="date"
+                  min={getTodayString()}
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    if (e.target.value > endDate) setEndDate(e.target.value);
+                  }}
+                  className="bg-white text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-400">&rarr;</span>
+                <input
+                  type="date"
+                  min={startDate || getTodayString()}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-white text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                />
+              </div>
+            </div>
+
             {/* Legend */}
             <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <div className="flex items-center gap-1.5">
@@ -942,9 +1064,12 @@ export const FloorPlansPage: React.FC = () => {
                       isMeetingRoom: true,
                       status: 'AVAILABLE',
                     };
-                    const isAvailable = seatDesk.status === 'AVAILABLE';
+                    const hasActiveSeatBooking = seatDesk.bookings && seatDesk.bookings.length > 0;
+                    const isSeatBooked = hasActiveSeatBooking || seatDesk.status === 'BOOKED';
+                    const isAvailable = !isSeatBooked;
                     const isSelected = activeDesk?.id === seatDesk.id;
                     const isMassSelected = selectedDeskIds.includes(seatDesk.id);
+                    const bookedSeatUser = seatDesk.bookings?.[0]?.user || seatDesk.bookings?.[0]?.bookedByUser;
 
                     return (
                       <button
@@ -979,7 +1104,13 @@ export const FloorPlansPage: React.FC = () => {
                         title={`Conference Seat ${seatDesk.deskCode} (${isAvailable ? 'Available' : 'Reserved'})`}
                       >
                         <span className="font-black">{seatDesk.deskCode}</span>
-                        {seatDesk.hasHdmi ? (
+                        {bookedSeatUser ? (
+                          <span className="text-[7.5px] font-black text-red-700 truncate max-w-[50px]" title={`Reserved by ${bookedSeatUser.name}`}>
+                            {bookedSeatUser.name.split(' ')[0]}
+                          </span>
+                        ) : isSeatBooked ? (
+                          <span className="text-[7.5px] font-black text-red-700">Booked</span>
+                        ) : seatDesk.hasHdmi ? (
                           <span className="text-[8px] text-purple-700 font-mono font-bold">HDMI</span>
                         ) : (
                           <span className="text-[8px] text-slate-400 font-mono">STD</span>
