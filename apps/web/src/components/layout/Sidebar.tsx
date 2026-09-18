@@ -124,27 +124,29 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Network Status Indicator for Offline-First users */}
-      <div className="px-1 mb-3">
-        <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
-      </div>
+      {/* Bottom Container: Network Status Indicator and Control Plane */}
+      <div className="mt-auto pt-4 space-y-2">
+        <div className="px-1">
+          <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
+        </div>
 
-      {/* Bottom Control Plane Indicator */}
-      {!isCollapsed ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500">
-          <div className="font-bold text-slate-700 flex items-center justify-between mb-1">
-            <span>Control Plane</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+        {/* Bottom Control Plane Indicator */}
+        {!isCollapsed ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500">
+            <div className="font-bold text-slate-700 flex items-center justify-between mb-1">
+              <span>Control Plane</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <p className="text-[11px] leading-tight text-slate-400">
+              Multi-tenant isolation &amp; dynamic white-label tokens.
+            </p>
           </div>
-          <p className="text-[11px] leading-tight text-slate-400">
-            Multi-tenant isolation &amp; dynamic white-label tokens.
-          </p>
-        </div>
-      ) : (
-        <div className="flex justify-center p-2" title="System Active">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-        </div>
-      )}
+        ) : (
+          <div className="flex justify-center p-2" title="System Active">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          </div>
+        )}
+      </div>
     </aside>
   );
 };
