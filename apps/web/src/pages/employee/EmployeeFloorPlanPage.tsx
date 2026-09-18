@@ -177,7 +177,7 @@ function getFutureDateString(days: number): string {
   return formatLocalDate(d);
 }
 
-function getDatesInRange(startStr: string, endStr: string): string[] {
+export function getDatesInRange(startStr: string, endStr: string): string[] {
   const dates: string[] = [];
   const start = parseLocalDate(startStr);
   const end = parseLocalDate(endStr);
@@ -205,6 +205,18 @@ function formatDateDisplay(dStr: string): { day: string; date: string; full: str
   }
 }
 
+export function get7DaysWindow(baseDateStr: string, weekOffset: number = 0): string[] {
+  const base = parseLocalDate(baseDateStr);
+  base.setDate(base.getDate() + weekOffset * 7);
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    days.push(formatLocalDate(d));
+  }
+  return days;
+}
+
 export const EmployeeFloorPlanPage: React.FC = () => {
   const { user } = useAuth();
 
@@ -217,6 +229,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   // Multi-Day Date Range Selection
   const [startDate, setStartDate] = useState<string>(getTodayString());
   const [endDate, setEndDate] = useState<string>(getFutureDateString(7));
+  const [modalWeekOffset, setModalWeekOffset] = useState<number>(0);
 
   // Active Branch / Building / Floor / Section navigation
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -399,6 +412,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
     setBookingNotes('');
     setModalSlotType('FULL_DAY');
     setModalSelectedDates([]);
+    setModalWeekOffset(0);
   };
 
   // Toggle single date in modal sub-range
@@ -831,8 +845,6 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       </div>
     );
   };
-
-  const rangeDatesList = getDatesInRange(startDate, endDate);
 
   if (loading && branches.length === 0) {
     return (
@@ -1375,109 +1387,139 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 </div>
               )}
 
-            {/* Visual Day-by-Day Strip (Monday - Sunday / Date Range Matrix) */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                    Schedule &amp; Availability Matrix
-                  </label>
-                  <p className="text-[11px] text-slate-500">
-                    Green days are available. Red days with cross (<span className="text-red-500 font-bold">&times;</span>) are reserved.
-                  </p>
-                </div>
+            {/* Visual Day-by-Day Strip (7-Day Matrix with Week Navigation) */}
+            {(() => {
+              const modal7Days = get7DaysWindow(startDate, modalWeekOffset);
+              return (
+                <div className="space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Schedule &amp; Availability Matrix
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Green days are available. Red days with cross (<span className="text-red-500 font-bold">&times;</span>) are reserved.
+                      </p>
+                    </div>
 
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rangeDates = getDatesInRange(startDate, endDate);
-                      const availableDates = rangeDates.filter((dStr) => {
-                        return !activeDesk.bookings?.some((b) => {
-                          const bStart = b.startTime.split('T')[0];
-                          const bEnd = b.endTime.split('T')[0];
-                          return dStr >= bStart && dStr <= bEnd;
-                        });
+                    <div className="flex items-center space-x-3">
+                      {/* 7-Day Sliding Window Week Navigator */}
+                      <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setModalWeekOffset((prev) => Math.max(0, prev - 1))}
+                          disabled={modalWeekOffset <= 0}
+                          className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs disabled:opacity-30 cursor-pointer"
+                          title="Previous 7 Days"
+                        >
+                          &larr;
+                        </button>
+                        <span className="text-[10px] font-mono font-bold text-slate-700 px-1 select-none">
+                          {formatDateDisplay(modal7Days[0]).date} – {formatDateDisplay(modal7Days[6]).date}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setModalWeekOffset((prev) => prev + 1)}
+                          className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                          title="Next 7 Days"
+                        >
+                          &rarr;
+                        </button>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const availableDates = modal7Days.filter((dStr) => {
+                              return !activeDesk.bookings?.some((b) => {
+                                const bStart = b.startTime.split('T')[0];
+                                const bEnd = b.endTime.split('T')[0];
+                                return dStr >= bStart && dStr <= bEnd;
+                              });
+                            });
+                            setModalSelectedDates((prev) => Array.from(new Set([...prev, ...availableDates])));
+                          }}
+                          className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                        >
+                          Select Free
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setModalSelectedDates([])}
+                          className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Day Strip Horizontal Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {modal7Days.map((dStr) => {
+                      const { day, date } = formatDateDisplay(dStr);
+                      const conflictingBooking = activeDesk.bookings?.find((b) => {
+                        const bStart = b.startTime.split('T')[0];
+                        const bEnd = b.endTime.split('T')[0];
+                        return dStr >= bStart && dStr <= bEnd;
                       });
-                      setModalSelectedDates(availableDates);
-                    }}
-                    className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                  >
-                    Select All Free
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setModalSelectedDates([])}
-                    className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
-                  >
-                    Clear
-                  </button>
+
+                      const isBooked = !!conflictingBooking;
+                      const isUserBooking =
+                        conflictingBooking?.user?.id === user?.id ||
+                        conflictingBooking?.bookedByUser?.id === user?.id;
+                      const isDateSelected = modalSelectedDates.includes(dStr);
+
+                      if (isBooked) {
+                        return (
+                          <div
+                            key={dStr}
+                            className={`p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none ${
+                              isUserBooking
+                                ? 'bg-blue-50 border-blue-200 text-blue-800'
+                                : 'bg-red-50/90 border-red-200 text-red-800'
+                            }`}
+                            title={
+                              isUserBooking
+                                ? `You have reserved this desk on ${dStr}`
+                                : `Reserved by ${conflictingBooking?.user?.name || 'someone else'} on ${dStr}`
+                            }
+                          >
+                            <span className="text-[10px] font-bold uppercase">{day}</span>
+                            <span className="text-xs font-black">{date}</span>
+                            <div className="mt-1 flex items-center space-x-0.5 text-[9px] font-black text-red-600">
+                              <X className="w-3 h-3 text-red-600" />
+                              <span>{isUserBooking ? 'Yours' : 'Booked'}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={dStr}
+                          type="button"
+                          onClick={() => toggleModalDate(dStr)}
+                          className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-2xs ${
+                            isDateSelected
+                              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 font-black'
+                              : 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase">{day}</span>
+                          <span className="text-xs">{date}</span>
+                          <div className="mt-1 text-[9px] font-bold">
+                            {isDateSelected ? '✓ Selected' : 'Free'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              {/* Day Strip Horizontal Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                {rangeDatesList.map((dStr) => {
-                  const { day, date } = formatDateDisplay(dStr);
-                  const conflictingBooking = activeDesk.bookings?.find((b) => {
-                    const bStart = b.startTime.split('T')[0];
-                    const bEnd = b.endTime.split('T')[0];
-                    return dStr >= bStart && dStr <= bEnd;
-                  });
-
-                  const isBooked = !!conflictingBooking;
-                  const isUserBooking =
-                    conflictingBooking?.user?.id === user?.id ||
-                    conflictingBooking?.bookedByUser?.id === user?.id;
-                  const isDateSelected = modalSelectedDates.includes(dStr);
-
-                  if (isBooked) {
-                    return (
-                      <div
-                        key={dStr}
-                        className={`p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none ${
-                          isUserBooking
-                            ? 'bg-blue-50 border-blue-200 text-blue-800'
-                            : 'bg-red-50/90 border-red-200 text-red-800'
-                        }`}
-                        title={
-                          isUserBooking
-                            ? `You have reserved this desk on ${dStr}`
-                            : `Reserved by ${conflictingBooking?.user?.name || 'someone else'} on ${dStr}`
-                        }
-                      >
-                        <span className="text-[10px] font-bold uppercase">{day}</span>
-                        <span className="text-xs font-black">{date}</span>
-                        <div className="mt-1 flex items-center space-x-0.5 text-[9px] font-black text-red-600">
-                          <X className="w-3 h-3 text-red-600" />
-                          <span>{isUserBooking ? 'Yours' : 'Booked'}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <button
-                      key={dStr}
-                      type="button"
-                      onClick={() => toggleModalDate(dStr)}
-                      className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-2xs ${
-                        isDateSelected
-                          ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 font-black'
-                          : 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
-                      }`}
-                    >
-                      <span className="text-[10px] uppercase">{day}</span>
-                      <span className="text-xs">{date}</span>
-                      <div className="mt-1 text-[9px] font-bold">
-                        {isDateSelected ? '✓ Selected' : 'Free'}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Booking Configuration: Session Dropdown & Notes */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
