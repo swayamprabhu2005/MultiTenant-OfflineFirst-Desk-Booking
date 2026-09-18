@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
+  cacheMyBookings,
+  getCachedMyBookings,
+  getPendingOutboxItems,
+  isAppOnline,
+  syncOutboxQueue,
+  OutboxItem,
+} from '../../services/offlineStore';
+import {
   Calendar,
   Clock,
   MapPin,
@@ -70,7 +78,9 @@ export const MyBookingsPage: React.FC = () => {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST' | 'QUEUED'>('ALL');
+  const [queuedItems, setQueuedItems] = useState<OutboxItem[]>([]);
+  const [isSyncingQueued, setIsSyncingQueued] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
@@ -89,24 +99,88 @@ export const MyBookingsPage: React.FC = () => {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
+  const loadQueuedItems = async () => {
+    try {
+      const items = await getPendingOutboxItems();
+      const bookingItems = items.filter((i) =>
+        ['CREATE_BOOKING', 'BULK_BOOKING', 'CANCEL_BOOKING'].includes(i.action)
+      );
+      setQueuedItems(bookingItems);
+    } catch {
+      setQueuedItems([]);
+    }
+  };
+
+  const handleSyncQueued = async () => {
+    if (!isAppOnline() || isSyncingQueued) return;
+    try {
+      setIsSyncingQueued(true);
+      const result = await syncOutboxQueue();
+      if (result.synced > 0) {
+        setSuccessNotice(`Successfully synchronized ${result.synced} offline transaction(s) with the server!`);
+        setTimeout(() => setSuccessNotice(null), 5000);
+      }
+      await loadQueuedItems();
+      await loadBookings();
+    } catch (err: any) {
+      console.error('Failed to sync queue:', err);
+      setErrorNotice(err.message || 'Synchronization failed.');
+    } finally {
+      setIsSyncingQueued(false);
+    }
+  };
+
   const loadBookings = async () => {
+    await loadQueuedItems();
+
+    if (!isAppOnline()) {
+      if (user?.id) {
+        const cached = await getCachedMyBookings(user.id);
+        if (cached && cached.length > 0) {
+          setBookings(cached);
+          setTotalCount(cached.length);
+          setTotalPages(1);
+          setErrorNotice('Operating in Offline Mode — viewing cached bookings.');
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     try {
       setLoading(true);
       setErrorNotice(null);
 
       const params = new URLSearchParams({
-        status: statusFilter,
+        status: statusFilter === 'QUEUED' ? 'ALL' : statusFilter,
         page: page.toString(),
         limit: '10',
       });
 
       const res = await fetchApi<MyBookingsResponse>(`/employee/my-bookings?${params.toString()}`);
-      setBookings(res?.bookings || []);
+      const serverBookings = res?.bookings || [];
+      setBookings(serverBookings);
       setTotalPages(res?.pagination?.totalPages || 1);
       setTotalCount(res?.pagination?.total || 0);
+
+      if (user?.id && serverBookings.length > 0 && statusFilter === 'ALL') {
+        cacheMyBookings(user.id, serverBookings);
+      }
     } catch (err: any) {
       console.error('Failed to load my bookings:', err);
-      setErrorNotice(err.message || 'Unable to load your bookings history.');
+      if (user?.id) {
+        const cached = await getCachedMyBookings(user.id);
+        if (cached && cached.length > 0) {
+          setBookings(cached);
+          setTotalCount(cached.length);
+          setTotalPages(1);
+          setErrorNotice('Network unavailable — viewing cached bookings.');
+        } else {
+          setErrorNotice(err.message || 'Unable to load your bookings history.');
+        }
+      } else {
+        setErrorNotice(err.message || 'Unable to load your bookings history.');
+      }
     } finally {
       setLoading(false);
     }
@@ -116,6 +190,18 @@ export const MyBookingsPage: React.FC = () => {
     setSelectedBookingIds([]);
     loadBookings();
   }, [statusFilter, page]);
+
+  useEffect(() => {
+    const handleOutboxChange = () => {
+      loadQueuedItems();
+    };
+    window.addEventListener('offline-outbox-updated', handleOutboxChange);
+    window.addEventListener('offline-sync-completed', handleOutboxChange);
+    return () => {
+      window.removeEventListener('offline-outbox-updated', handleOutboxChange);
+      window.removeEventListener('offline-sync-completed', handleOutboxChange);
+    };
+  }, []);
 
   // Handle Bulk Multi-Select Cancellation
   const handleBulkCancel = async () => {
@@ -261,6 +347,26 @@ export const MyBookingsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Offline Outbox Notice */}
+      {queuedItems.length > 0 && statusFilter !== 'QUEUED' && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between text-xs font-medium animate-fadeIn">
+          <div className="flex items-center space-x-2.5">
+            <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 animate-pulse" />
+            <span>
+              You have <strong>{queuedItems.length}</strong> offline desk reservation action(s) queued in local storage waiting to sync.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('QUEUED')}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center space-x-1"
+          >
+            <span>View Queued</span>
+            <span className="bg-amber-800/60 px-1.5 py-0.2 rounded-full text-[10px]">{queuedItems.length}</span>
+          </button>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Status Tabs */}
@@ -307,6 +413,29 @@ export const MyBookingsPage: React.FC = () => {
           >
             Completed Past
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter('QUEUED');
+              setPage(1);
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center space-x-1.5 ${
+              statusFilter === 'QUEUED'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <span>Queued / Sync Pending</span>
+            {queuedItems.length > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  statusFilter === 'QUEUED' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
+                }`}
+              >
+                {queuedItems.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Search & Refresh */}
@@ -334,7 +463,107 @@ export const MyBookingsPage: React.FC = () => {
 
       {/* Bookings Table / Card List */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
+        {statusFilter === 'QUEUED' ? (
+          queuedItems.length === 0 ? (
+            <div className="text-center py-20 px-4 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center font-bold">
+                <Clock className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-700">No Pending Offline Reservations</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                All your desk reservations are currently synchronized with the server database.
+              </p>
+            </div>
+          ) : (
+            <div className="p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
+                    <Clock className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-900">
+                      {queuedItems.length} Offline Transaction(s) Queued in Local Storage
+                    </h4>
+                    <p className="text-[11px] text-amber-700">
+                      Created while operating offline. Click Sync Now or reconnect to synchronize.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isAppOnline() || isSyncingQueued}
+                  onClick={handleSyncQueued}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs flex items-center space-x-2 transition-all cursor-pointer ${
+                    !isAppOnline()
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isSyncingQueued ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingQueued ? 'Syncing...' : isAppOnline() ? 'Sync Now' : 'Offline'}</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/75 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3.5 px-5">Action Type</th>
+                      <th className="py-3.5 px-5">Workstation Details</th>
+                      <th className="py-3.5 px-5">Requested Date(s)</th>
+                      <th className="py-3.5 px-5">Queued At</th>
+                      <th className="py-3.5 px-5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {queuedItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-amber-50/40 transition-colors">
+                        <td className="py-4 px-5">
+                          <span className="font-mono text-[11px] font-black px-2.5 py-1 rounded-xl bg-amber-100 text-amber-900 border border-amber-300">
+                            {item.action.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="font-bold text-slate-800">
+                            {item.payload?.deskCode ? `Desk ${item.payload.deskCode}` : item.payload?.deskId ? `Desk ID: ${item.payload.deskId.substring(0, 8)}...` : item.payload?.deskIds ? `${item.payload.deskIds.length} Desks (Bulk)` : 'Reservation'}
+                          </div>
+                          {item.payload?.notes && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              Note: {item.payload.notes}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="flex items-center space-x-1.5 text-slate-600 font-semibold">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span>
+                              {Array.isArray(item.payload?.bookingDates)
+                                ? item.payload.bookingDates.join(', ')
+                                : item.payload?.date || 'Today'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            Slot: {item.payload?.slotType ? item.payload.slotType.replace('_', ' ') : 'Full Day'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-5 text-slate-500 font-mono text-[11px]">
+                          {new Date(item.createdAt).toLocaleTimeString()}
+                        </td>
+                        <td className="py-4 px-5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Sync Pending</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-3">
             <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
             <span className="text-xs font-bold text-slate-500">Retrieving Reservation History...</span>
@@ -547,7 +776,7 @@ export const MyBookingsPage: React.FC = () => {
         )}
 
         {/* Pagination Footer */}
-        {totalPages > 1 && (
+        {statusFilter !== 'QUEUED' && totalPages > 1 && (
           <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
             <span className="text-xs text-slate-500">
               Showing page <span className="font-bold text-slate-700">{page}</span> of{' '}

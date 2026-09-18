@@ -7,7 +7,7 @@
 import { fetchApi } from './api';
 
 const DB_NAME = 'deskbooking_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface OutboxItem {
   id: string;
@@ -39,6 +39,10 @@ export async function getOfflineDb(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains('floorplan_cache')) {
         db.createObjectStore('floorplan_cache', { keyPath: 'cacheKey' });
+      }
+
+      if (!db.objectStoreNames.contains('my_bookings_cache')) {
+        db.createObjectStore('my_bookings_cache', { keyPath: 'userId' });
       }
     };
 
@@ -229,6 +233,48 @@ export async function getCachedFloorPlanData(cacheKey: string): Promise<any | nu
 
       req.onsuccess = () => {
         resolve(req.result?.data || null);
+      };
+
+      req.onerror = () => {
+        resolve(null);
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cache personal bookings history in IndexedDB
+ */
+export async function cacheMyBookings(userId: string, bookings: any[]): Promise<void> {
+  try {
+    const db = await getOfflineDb();
+    const tx = db.transaction('my_bookings_cache', 'readwrite');
+    const store = tx.objectStore('my_bookings_cache');
+    store.put({
+      userId,
+      bookings,
+      cachedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Failed to cache my bookings offline:', err);
+  }
+}
+
+/**
+ * Retrieve cached personal bookings history from IndexedDB
+ */
+export async function getCachedMyBookings(userId: string): Promise<any[] | null> {
+  try {
+    const db = await getOfflineDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction('my_bookings_cache', 'readonly');
+      const store = tx.objectStore('my_bookings_cache');
+      const req = store.get(userId);
+
+      req.onsuccess = () => {
+        resolve(req.result?.bookings || null);
       };
 
       req.onerror = () => {
