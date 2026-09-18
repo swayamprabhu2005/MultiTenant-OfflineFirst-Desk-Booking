@@ -798,6 +798,8 @@ export const FloorPlansPage: React.FC = () => {
           {podDesks.map((desk, slotIdx) => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
             const activeBooking = desk.bookings && desk.bookings.length > 0 ? desk.bookings[0] : null;
+            const hasMyBooking = desk.bookings ? desk.bookings.some(b => b.userId === user?.id) : activeBooking?.userId === user?.id;
+            const isMine = !!hasMyBooking;
             const isBooked = !!activeBooking || desk.status === 'BOOKED';
             const isAvailable = !isBooked;
             const isSelected = activeDesk?.id === desk.id;
@@ -823,7 +825,9 @@ export const FloorPlansPage: React.FC = () => {
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
-                  isAvailable
+                  isMine
+                    ? isMassSelected ? '' : 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
+                    : isAvailable
                     ? isMassSelected ? '' : 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
                     : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
@@ -853,10 +857,14 @@ export const FloorPlansPage: React.FC = () => {
                 <div className="w-full flex items-center justify-center">
                   <span
                     className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
-                      isBooked ? 'text-red-700' : 'text-emerald-700'
+                      isMine
+                        ? 'text-blue-700'
+                        : isAvailable
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
                     }`}
                   >
-                    {isBooked ? 'Booked' : 'Free'}
+                    {isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
                   </span>
                 </div>
               </button>
@@ -950,8 +958,12 @@ export const FloorPlansPage: React.FC = () => {
                 <span>Available</span>
               </div>
               <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-400 inline-block" />
+                <span>Your Desk</span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-red-100 border border-red-300 inline-block" />
-                <span>Reserved</span>
+                <span>Booked</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="p-0.5 rounded bg-white border border-slate-200 text-slate-700 inline-flex items-center justify-center">
