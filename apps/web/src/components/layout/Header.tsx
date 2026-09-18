@@ -3,7 +3,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import { LogOut, UserCheck, Shield } from 'lucide-react';
 import { NotificationBell } from '../NotificationBell';
-import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
 
 // Helper to calculate relative brightness / luminance from hex
 function isColorDark(hex: string): boolean {
@@ -91,7 +90,6 @@ export const Header: React.FC = () => {
 
         {/* Right Actions */}
         <div className="flex items-center space-x-3 sm:space-x-4">
-          <NetworkStatusIndicator isDarkHeader={isDark} />
           {user && <NotificationBell isDarkHeader={isDark} />}
 
           {/* Profile & Logout */}

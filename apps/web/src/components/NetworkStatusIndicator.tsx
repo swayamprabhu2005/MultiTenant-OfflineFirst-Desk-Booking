@@ -9,10 +9,14 @@ import {
 
 interface NetworkStatusIndicatorProps {
   isDarkHeader?: boolean;
+  inSidebar?: boolean;
+  isCollapsed?: boolean;
 }
 
 export const NetworkStatusIndicator: React.FC<NetworkStatusIndicatorProps> = ({
   isDarkHeader = false,
+  inSidebar = false,
+  isCollapsed = false,
 }) => {
   const { user } = useAuth();
   const [online, setOnline] = useState<boolean>(isAppOnline());
@@ -96,7 +100,114 @@ export const NetworkStatusIndicator: React.FC<NetworkStatusIndicatorProps> = ({
     return null;
   }
 
-  // Visual Styling depending on network and sync state
+  // Collapsed Sidebar View
+  if (inSidebar && isCollapsed) {
+    if (!online) {
+      return (
+        <div className="flex justify-center p-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-800" title="Offline - Changes Queued Locally">
+          <WifiOff className="w-4 h-4 text-amber-700 animate-pulse" />
+        </div>
+      );
+    }
+    if (isSyncing) {
+      return (
+        <div className="flex justify-center p-2 rounded-xl bg-sky-100 border border-sky-300 text-sky-800" title="Syncing...">
+          <RefreshCw className="w-4 h-4 text-sky-700 animate-spin" />
+        </div>
+      );
+    }
+    if (outboxCount > 0) {
+      return (
+        <button
+          type="button"
+          onClick={handleSync}
+          className="w-full flex justify-center p-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 cursor-pointer"
+          title={`${outboxCount} Queued. Click to Sync Now`}
+        >
+          <RefreshCw className="w-4 h-4 text-amber-700" />
+        </button>
+      );
+    }
+    return (
+      <div className="flex justify-center p-2 rounded-xl bg-emerald-100 border border-emerald-300" title="System Online & Synced">
+        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+      </div>
+    );
+  }
+
+  // Expanded Sidebar View: Solid vibrant green pill badge
+  if (inSidebar) {
+    if (!online) {
+      return (
+        <div 
+          className="flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs"
+          title="Application is operating offline. Bookings are saved locally in Outbox."
+        >
+          <div className="flex items-center gap-1.5">
+            <WifiOff className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
+            <span>Offline</span>
+          </div>
+          {outboxCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black">
+              {outboxCount} queued
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (isSyncing) {
+      return (
+        <div 
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-100 text-sky-800 border border-sky-300 shadow-2xs"
+          title="Synchronizing outbox transactions with server..."
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-sky-700 animate-spin" />
+          <span>Syncing with Server...</span>
+        </div>
+      );
+    }
+
+    if (outboxCount > 0) {
+      return (
+        <button
+          type="button"
+          onClick={handleSync}
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-all cursor-pointer shadow-2xs"
+          title="Click to flush pending outbox queue to server"
+        >
+          <div className="flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
+            <span>{outboxCount} Queued</span>
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded-md">
+            Sync Now
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <div 
+        className="flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-all"
+        title="Connected to Server • Offline-First Engine Active"
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="tracking-tight">Online</span>
+        </div>
+        {syncNotice ? (
+          <span className="text-[10px] font-semibold text-emerald-700 truncate max-w-[100px]">
+            {syncNotice}
+          </span>
+        ) : (
+          <span className="text-[10px] font-mono text-emerald-600 font-normal">Active</span>
+        )}
+      </div>
+    );
+  }
+
+  // Header View (Fallback if ever needed)
   if (!online) {
     return (
       <div 

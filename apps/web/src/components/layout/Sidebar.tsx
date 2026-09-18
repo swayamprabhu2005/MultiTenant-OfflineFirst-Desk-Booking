@@ -14,6 +14,7 @@ import {
   Menu,
   ChevronLeft,
 } from 'lucide-react';
+import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
@@ -121,6 +122,11 @@ export const Sidebar: React.FC = () => {
             );
           })}
         </nav>
+      </div>
+
+      {/* Network Status Indicator for Offline-First users */}
+      <div className="px-1 mb-3">
+        <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
       </div>
 
       {/* Bottom Control Plane Indicator */}
