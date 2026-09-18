@@ -1084,7 +1084,8 @@ export async function generateBranchFloorPlanTemplate(
   bldHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   bldHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 3; c++) {
-    bldHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    bldHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    bldHeader.getCell(c).border = THIN_BORDER;
   }
 
   const buildingsData =
@@ -1093,25 +1094,40 @@ export async function generateBranchFloorPlanTemplate(
       : [{ code: 'BLD001', name: 'Main Tower', floors: [] }];
 
   buildingsData.forEach((bld, idx) => {
-    const r = sheetBuildings.getRow(idx + 2);
-    r.height = 22;
-    r.getCell(1).value = bld.code;
+    const rowNum = idx + 2;
+    const r = sheetBuildings.getRow(rowNum);
+    r.height = 24;
+
+    // Col A: Building Code (Formula cascading from Branch Info, locked grey)
+    r.getCell(1).value = {
+      formula: `IF(ROW()-1 <= 'Branch Info'!$C$2, "BLD" & TEXT(ROW()-1, "000"), "")`,
+      result: bld.code || `BLD${String(rowNum - 1).padStart(3, '0')}`,
+    };
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+    r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+    r.getCell(1).protection = { locked: true };
+
+    // Col B: Building Name (Editable Yellow)
     r.getCell(2).value = bld.name;
+    r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+    r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    r.getCell(2).protection = { locked: false };
+
+    // Col C: Number of Floors (Editable Yellow)
     r.getCell(3).value = Math.max(1, bld.floors.length);
+    r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+    r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    r.getCell(3).protection = { locked: false };
+
     for (let c = 1; c <= 3; c++) {
-      r.getCell(c).font = { name: 'Segoe UI', size: 10 };
       r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-      r.getCell(c).border = {
-        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      };
+      r.getCell(c).border = THIN_BORDER;
     }
   });
   sheetBuildings.getColumn(1).width = 20;
   sheetBuildings.getColumn(2).width = 30;
   sheetBuildings.getColumn(3).width = 22;
+  await sheetBuildings.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 3. Sheet: Floors
   const sheetFloors = workbook.addWorksheet('Floors');
@@ -1123,46 +1139,69 @@ export async function generateBranchFloorPlanTemplate(
   flHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   flHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 4; c++) {
-    flHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    flHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    flHeader.getCell(c).border = THIN_BORDER;
   }
 
   let flRowIdx = 2;
-  buildingsData.forEach((bld) => {
+  buildingsData.forEach((bld, bldIdx) => {
     const floorsData =
       bld.floors.length > 0
         ? bld.floors
         : [
             {
-              code: '1-FL01',
+              code: `${bldIdx + 1}-FL01`,
               name: 'Floor 1',
               floorNumber: 1,
               sections: [],
             },
           ];
 
-    floorsData.forEach((fl) => {
-      const r = sheetFloors.getRow(flRowIdx++);
-      r.height = 22;
-      r.getCell(1).value = bld.name;
-      r.getCell(2).value = fl.code;
-      r.getCell(3).value = fl.name;
+    floorsData.forEach((fl, flIdx) => {
+      const rowNum = flRowIdx++;
+      const r = sheetFloors.getRow(rowNum);
+      r.height = 24;
+
+      // Col A: Building Name (Formula linking to Buildings sheet, locked grey)
+      const bldRowNum = bldIdx + 2;
+      r.getCell(1).value = {
+        formula: `Buildings!B${bldRowNum}`,
+        result: bld.name,
+      };
+      r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+      r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+      r.getCell(1).protection = { locked: true };
+
+      // Col B: Floor Code (Building-scoped code e.g. 1-FL01, locked grey)
+      r.getCell(2).value = fl.code || `${bldIdx + 1}-FL${String(flIdx + 1).padStart(2, '0')}`;
+      r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+      r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+      r.getCell(2).protection = { locked: true };
+
+      // Col C: Floor Name (Editable Yellow)
+      r.getCell(3).value = fl.name || `Floor ${flIdx + 1}`;
+      r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+      r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+      r.getCell(3).protection = { locked: false };
+
+      // Col D: Number of Sections (Editable Yellow)
       r.getCell(4).value = Math.max(1, fl.sections.length);
+      r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+      r.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+      r.getCell(4).protection = { locked: false };
+
       for (let c = 1; c <= 4; c++) {
-        r.getCell(c).font = { name: 'Segoe UI', size: 10 };
         r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-        r.getCell(c).border = {
-          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        };
+        r.getCell(c).border = THIN_BORDER;
       }
     });
   });
+
   sheetFloors.getColumn(1).width = 26;
   sheetFloors.getColumn(2).width = 20;
   sheetFloors.getColumn(3).width = 24;
   sheetFloors.getColumn(4).width = 22;
+  await sheetFloors.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 4. Sheet: Sections & Cubicles
   const sheetSections = workbook.addWorksheet('Sections & Cubicles');
