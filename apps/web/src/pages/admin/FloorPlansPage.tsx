@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users } from 'lucide-react';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck } from 'lucide-react';
 
 export interface ColleagueItem {
   id: string;
@@ -186,6 +186,7 @@ export const FloorPlansPage: React.FC = () => {
   const [selectedColleague, setSelectedColleague] = useState<ColleagueItem | null>(null);
   const [isLoadingColleagues, setIsLoadingColleagues] = useState<boolean>(false);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState<boolean>(false);
+  const [isCancellingBooking, setIsCancellingBooking] = useState<boolean>(false);
 
   // Branch Admin Mass Booking Mode State
   const [isMassBookingMode, setIsMassBookingMode] = useState(false);
@@ -359,42 +360,37 @@ export const FloorPlansPage: React.FC = () => {
     }
   };
 
-  // Book Desk Action
-  const handleBookDesk = async (deskId: string) => {
-    try {
-      setBookingLoading(true);
-      await fetchApi('/workspace/book-desk', {
-        method: 'POST',
-        body: JSON.stringify({ deskId }),
-      });
-      // Refresh hierarchy
-      await loadHierarchy();
-      if (activeDesk && activeDesk.id === deskId) {
-        setActiveDesk({ ...activeDesk, status: 'BOOKED' });
-      }
-    } catch (err: any) {
-      alert(err.message || 'Failed to reserve desk');
-    } finally {
-      setBookingLoading(false);
-    }
-  };
 
-  // Cancel Booking Action
-  const handleCancelBooking = async (deskId: string) => {
+  // Handle Cancellation / Release of Reservation by Branch Admin
+  const handleReleaseReservation = async (bookingId: string) => {
     try {
-      setBookingLoading(true);
-      await fetchApi('/workspace/cancel-booking', {
+      setIsCancellingBooking(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/cancel-booking', {
         method: 'POST',
-        body: JSON.stringify({ deskId }),
+        body: JSON.stringify({
+          bookingId,
+          reason: 'Released by Branch Administrator',
+        }),
       });
+
+      setActionNotice({
+        type: 'success',
+        text: res?.message || `Reservation for Desk ${activeDesk?.deskCode || ''} successfully released.`,
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+
+      // Close modal and instantly refresh hierarchy canvas
+      setActiveDesk(null);
       await loadHierarchy();
-      if (activeDesk && activeDesk.id === deskId) {
-        setActiveDesk({ ...activeDesk, status: 'AVAILABLE' });
-      }
     } catch (err: any) {
-      alert(err.message || 'Failed to cancel reservation');
+      console.error('Failed to cancel booking:', err);
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to release workstation reservation.',
+      });
+      setTimeout(() => setActionNotice(null), 5000);
     } finally {
-      setBookingLoading(false);
+      setIsCancellingBooking(false);
     }
   };
 
@@ -1267,116 +1263,6 @@ export const FloorPlansPage: React.FC = () => {
 
       </div>
 
-      {/* Interactive Central Glassmorphic Desk Inspector Modal */}
-      {activeDesk &&
-        createPortal(
-          <div
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setActiveDesk(null);
-            }}
-            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-          >
-            <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/80 p-6 flex flex-col justify-between space-y-6 relative animate-scale-up">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                    {activeDesk.isMeetingRoom || activeDesk.deskCode.startsWith('M-')
-                      ? 'CONFERENCE POD SEAT'
-                      : 'WORKSTATION INSPECTOR'}
-                  </span>
-                  <button
-                    onClick={() => setActiveDesk(null)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Station Badge */}
-                <div className="flex items-center space-x-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shadow-xs ${
-                    activeDesk.status === 'AVAILABLE'
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : 'bg-red-100 text-red-800 border border-red-300'
-                  }`}>
-                    {activeDesk.deskCode}
-                  </div>
-                  <div>
-                    <div className="text-sm font-black text-slate-900">
-                      Desk {activeDesk.deskCode}
-                    </div>
-                    <div className="text-xs font-semibold text-slate-500 flex items-center space-x-1.5 mt-0.5">
-                      <span className={`w-2 h-2 rounded-full ${
-                        activeDesk.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-red-500'
-                      }`} />
-                      <span>{activeDesk.status === 'AVAILABLE' ? 'Ready for Reservation' : 'Occupied / In Use'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hardware & Spec Grid */}
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Location:</span>
-                    <span className="font-bold text-slate-800">
-                      {currentBranch?.name} • {currentBuilding?.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Floor &amp; Section:</span>
-                    <span className="font-bold text-slate-800">
-                      {currentFloor?.code} • {currentSection?.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">HDMI Display:</span>
-                    <span className={`font-bold ${activeDesk.hasHdmi ? 'text-emerald-700' : 'text-slate-600'}`}>
-                      {activeDesk.hasHdmi ? '🖥️ Yes (Display Included)' : 'BYOD (No Monitor)'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-slate-500">Ergonomics:</span>
-                    <span className="font-bold text-slate-800">Standard Height Adjustable</span>
-                  </div>
-                </div>
-
-                {/* Read-Only Admin Notice or Action Buttons */}
-                {user?.role === 'ORGANIZATION_ADMIN' ? (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-[11px] leading-relaxed">
-                    <span className="font-bold text-slate-700 block mb-0.5 uppercase text-[10px] tracking-wider text-center">
-                      Administrative Oversight Mode
-                    </span>
-                    Global Organization Administrators have read-only architectural oversight across all branches. Desk booking is managed directly by branch personnel and branch administrators.
-                  </div>
-                ) : activeDesk.status === 'AVAILABLE' ? (
-                  <button
-                    onClick={() => handleBookDesk(activeDesk.id)}
-                    disabled={bookingLoading}
-                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {bookingLoading ? 'Reserving Desk...' : 'Confirm Desk Booking (8 Hours)'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleCancelBooking(activeDesk.id)}
-                    disabled={bookingLoading}
-                    className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {bookingLoading ? 'Updating Status...' : 'Cancel Reservation (Release Desk)'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setActiveDesk(null)}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all cursor-pointer"
-                >
-                  Close Window
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* Glassmorphic Add Cubicle Modal */}
       {isAddCubicleOpen &&
@@ -1631,6 +1517,99 @@ export const FloorPlansPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Active Reservation Management Banner (Direct Release Authority for Branch Admin) */}
+            {activeDesk.bookings && activeDesk.bookings.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs text-amber-950 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between font-bold text-amber-900 border-b border-amber-200/80 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <UserCheck className="w-4 h-4 text-amber-700" />
+                    <span>Active Reservation(s) on Workstation</span>
+                  </div>
+                  <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-800">
+                    Admin Release Authority
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {activeDesk.bookings.map((bk) => {
+                    const bookedUser = bk.user;
+                    const proxyUser = bk.bookedByUser;
+                    const startDateDisplay = formatDateDisplay(bk.startTime.split('T')[0]).full;
+                    const endDateDisplay = formatDateDisplay(bk.endTime.split('T')[0]).full;
+                    const isSameDate = bk.startTime.split('T')[0] === bk.endTime.split('T')[0];
+
+                    return (
+                      <div
+                        key={bk.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/90 p-3 rounded-xl border border-amber-200 shadow-2xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-slate-900 text-xs">
+                              {bookedUser?.name || 'Assigned Employee'}
+                            </span>
+                            <span className="text-slate-500 text-[11px]">
+                              ({bookedUser?.email || 'No email'})
+                            </span>
+                            {bookedUser?.department && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
+                                {bookedUser.department}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-slate-600 flex items-center space-x-2">
+                            <span className="font-semibold text-amber-800">
+                              {isSameDate ? startDateDisplay : `${startDateDisplay} – ${endDateDisplay}`}
+                            </span>
+                            <span>&bull;</span>
+                            <span className="capitalize font-medium">
+                              {bk.slotType.replace('_', ' ').toLowerCase()}
+                            </span>
+                            {bk.notes && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="italic text-slate-500 truncate max-w-[200px]" title={bk.notes}>
+                                  "{bk.notes}"
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {proxyUser && proxyUser.id !== bookedUser?.id && (
+                            <div className="text-[10px] text-slate-500">
+                              Booked via proxy by: <span className="font-medium text-slate-700">{proxyUser.name}</span> ({proxyUser.email})
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="shrink-0 flex items-center">
+                          <button
+                            type="button"
+                            onClick={() => handleReleaseReservation(bk.id)}
+                            disabled={isCancellingBooking}
+                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                          >
+                            {isCancellingBooking ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Releasing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Release Desk</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Visual Day-by-Day Strip (Date Range Matrix) */}
             <div className="space-y-2.5">
