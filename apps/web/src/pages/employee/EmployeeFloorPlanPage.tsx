@@ -7,7 +7,8 @@ import {
   enqueueOutboxItem, 
   isAppOnline, 
   cacheFloorPlanData, 
-  getCachedFloorPlanData 
+  getCachedFloorPlanData,
+  getPendingOutboxItems,
 } from '../../services/offlineStore';
 import {
   Calendar,
@@ -242,14 +243,57 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   const [bulkNotes, setBulkNotes] = useState<string>('');
   const [isSubmittingBulk, setIsSubmittingBulk] = useState<boolean>(false);
 
+  // Pending sync workstation IDs from offline outbox
+  const [pendingDeskIds, setPendingDeskIds] = useState<string[]>([]);
+
+  const loadPendingDeskIds = async () => {
+    try {
+      const items = await getPendingOutboxItems();
+      const ids: string[] = [];
+      for (const item of items) {
+        if (item.action === 'CREATE_BOOKING' && item.payload?.deskId) {
+          ids.push(item.payload.deskId);
+        } else if (item.action === 'BULK_BOOKING' && Array.isArray(item.payload?.deskIds)) {
+          ids.push(...item.payload.deskIds);
+        }
+      }
+      setPendingDeskIds(ids);
+    } catch {
+      setPendingDeskIds([]);
+    }
+  };
+
+  const initHierarchySelection = (branchList: BranchItem[]) => {
+    if (branchList.length === 0) return;
+    const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
+    setSelectedBranchId(currBranch.id);
+
+    if (currBranch.buildings.length > 0) {
+      const currBld = currBranch.buildings.find((bld) => bld.id === selectedBuildingId) || currBranch.buildings[0];
+      setSelectedBuildingId(currBld.id);
+
+      if (currBld.floors.length > 0) {
+        const currFl = currBld.floors.find((fl) => fl.id === selectedFloorId) || currBld.floors[0];
+        setSelectedFloorId(currFl.id);
+
+        if (currFl.sections.length > 0) {
+          const currSec = currFl.sections.find((sec) => sec.id === selectedSectionId) || currFl.sections[0];
+          setSelectedSectionId(currSec.id);
+        }
+      }
+    }
+  };
+
   // Load floor plan layout with date range availability
   const loadFloorPlans = async () => {
+    await loadPendingDeskIds();
     const cacheKey = `employee_floorplans_${selectedBranchId || 'all'}`;
 
     if (!isAppOnline()) {
       const cached = await getCachedFloorPlanData(cacheKey);
       if (cached && cached.length > 0) {
         setBranches(cached);
+        initHierarchySelection(cached);
         setErrorNotice('Operating in Offline Mode — viewing cached floor plan layout.');
         setLoading(false);
         return;
@@ -277,31 +321,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
         cacheFloorPlanData(cacheKey, branchList);
       }
 
-      if (branchList.length > 0) {
-        const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
-        setSelectedBranchId(currBranch.id);
-
-        if (currBranch.buildings.length > 0) {
-          const currBld = currBranch.buildings.find((bld) => bld.id === selectedBuildingId) || currBranch.buildings[0];
-          setSelectedBuildingId(currBld.id);
-
-          if (currBld.floors.length > 0) {
-            const currFl = currBld.floors.find((fl) => fl.id === selectedFloorId) || currBld.floors[0];
-            setSelectedFloorId(currFl.id);
-
-            if (currFl.sections.length > 0) {
-              const currSec = currFl.sections.find((sec) => sec.id === selectedSectionId) || currFl.sections[0];
-              setSelectedSectionId(currSec.id);
-            }
-          }
-        }
-      }
+      initHierarchySelection(branchList);
     } catch (err: any) {
       console.error('Failed to load floor plans:', err);
       // Fallback to cache on network failure
       const cached = await getCachedFloorPlanData(cacheKey);
       if (cached && cached.length > 0) {
         setBranches(cached);
+        initHierarchySelection(cached);
         setErrorNotice('Network unavailable — displaying cached floor plan layout.');
       } else {
         setErrorNotice(err.message || 'Unable to retrieve floor plan layout.');
@@ -314,6 +341,19 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   useEffect(() => {
     loadFloorPlans();
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    const handleSyncEvent = () => {
+      loadPendingDeskIds();
+      loadFloorPlans();
+    };
+    window.addEventListener('offline-outbox-updated', handleSyncEvent);
+    window.addEventListener('offline-sync-completed', handleSyncEvent);
+    return () => {
+      window.removeEventListener('offline-outbox-updated', handleSyncEvent);
+      window.removeEventListener('offline-sync-completed', handleSyncEvent);
+    };
+  }, []);
 
   // Search colleagues for proxy booking
   useEffect(() => {
@@ -687,11 +727,12 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               ? bulkSelectedDesks.some((b) => b.id === desk.id)
               : activeDesk?.id === desk.id;
             
-            // Check if desk has confirmed bookings across date range
+            // Check if desk has confirmed bookings across date range or pending offline sync
+            const isPendingSync = pendingDeskIds.includes(desk.id);
             const bookingCount = desk.bookings ? desk.bookings.length : desk.isReserved ? 1 : 0;
             const isBookedInRange = bookingCount > 0;
-            const isAvailable = !isBookedInRange;
-            const isMine = desk.isMyBooking;
+            const isAvailable = !isBookedInRange && !isPendingSync;
+            const isMine = desk.isMyBooking && !isPendingSync;
 
             return (
               <button
@@ -707,6 +748,8 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 className={`group relative rounded-xl border-2 p-1.5 flex flex-col items-center justify-between transition-all cursor-pointer text-center overflow-hidden min-w-0 ${deskHeightClass} ${
                   isSelected
                     ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-400 shadow-sm'
+                    : isPendingSync
+                    ? 'border-amber-400 bg-amber-100/90 text-amber-900 hover:bg-amber-200'
                     : isMine
                     ? 'border-blue-500 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-600 text-blue-900'
                     : isAvailable
@@ -721,20 +764,28 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Line 2: PC Station Icon / Bulk Selection Indicator */}
+                {/* Line 2: PC Station Icon / Bulk Selection Indicator / Sync Pending */}
                 <div className="flex items-center justify-center space-x-1 h-4 my-0.5">
-                  {hasHdmi && (
-                    <span title="PC Station (HDMI Equipped Monitor)" className="text-emerald-600 flex items-center justify-center">
-                      <Monitor className="w-3.5 h-3.5" />
+                  {isPendingSync ? (
+                    <span title="Offline Booking Pending Sync" className="text-amber-600 flex items-center justify-center">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" />
                     </span>
-                  )}
-                  {isBulkMode && isAvailable && (
-                    <span className="text-purple-600 flex items-center justify-center">
-                      {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
-                    </span>
-                  )}
-                  {!hasHdmi && (!isBulkMode || !isAvailable) && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  ) : (
+                    <>
+                      {hasHdmi && (
+                        <span title="PC Station (HDMI Equipped Monitor)" className="text-emerald-600 flex items-center justify-center">
+                          <Monitor className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+                      {isBulkMode && isAvailable && (
+                        <span className="text-purple-600 flex items-center justify-center">
+                          {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
+                        </span>
+                      )}
+                      {!hasHdmi && (!isBulkMode || !isAvailable) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -742,14 +793,16 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 <div className="w-full flex items-center justify-center">
                   <span
                     className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
-                      isMine
+                      isPendingSync
+                        ? 'text-amber-800 font-extrabold'
+                        : isMine
                         ? 'text-blue-700'
                         : isAvailable
                         ? 'text-emerald-700'
                         : 'text-red-700'
                     }`}
                   >
-                    {isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
+                    {isPendingSync ? 'Sync Pending' : isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
                   </span>
                 </div>
               </button>
@@ -828,6 +881,10 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-400 inline-block" />
                 <span>Your Desk</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-amber-100 border border-amber-400 inline-block" />
+                <span>Sync Pending</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="p-0.5 rounded bg-white border border-slate-200 text-slate-700 inline-flex items-center justify-center">

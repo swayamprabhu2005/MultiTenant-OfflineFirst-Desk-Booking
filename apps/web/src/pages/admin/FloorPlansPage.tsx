@@ -7,7 +7,8 @@ import {
   enqueueOutboxItem, 
   isAppOnline, 
   cacheFloorPlanData, 
-  getCachedFloorPlanData 
+  getCachedFloorPlanData,
+  getPendingOutboxItems,
 } from '../../services/offlineStore';
 import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck } from 'lucide-react';
 
@@ -213,8 +214,49 @@ export const FloorPlansPage: React.FC = () => {
   const floorPlanInputRef = useRef<HTMLInputElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
+  const [pendingDeskIds, setPendingDeskIds] = useState<string[]>([]);
+
+  const loadPendingDeskIds = async () => {
+    try {
+      const items = await getPendingOutboxItems();
+      const ids: string[] = [];
+      for (const item of items) {
+        if (item.action === 'CREATE_BOOKING' && item.payload?.deskId) {
+          ids.push(item.payload.deskId);
+        } else if (item.action === 'BULK_BOOKING' && Array.isArray(item.payload?.deskIds)) {
+          ids.push(...item.payload.deskIds);
+        }
+      }
+      setPendingDeskIds(ids);
+    } catch {
+      setPendingDeskIds([]);
+    }
+  };
+
+  const initHierarchySelection = (branchList: BranchItem[]) => {
+    if (branchList.length === 0) return;
+    const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
+    setSelectedBranchId(currBranch.id);
+
+    if (currBranch.buildings && currBranch.buildings.length > 0) {
+      const currBld = currBranch.buildings.find((bld) => bld.id === selectedBuildingId) || currBranch.buildings[0];
+      setSelectedBuildingId(currBld.id);
+
+      if (currBld.floors && currBld.floors.length > 0) {
+        const currFl = currBld.floors.find((fl) => fl.id === selectedFloorId) || currBld.floors[0];
+        setSelectedFloorId(currFl.id);
+
+        if (currFl.sections && currFl.sections.length > 0) {
+          const currSec = currFl.sections.find((sec) => sec.id === selectedSectionId) || currFl.sections[0];
+          setSelectedSectionId(currSec.id);
+        }
+      }
+    }
+  };
+
   // Load Hierarchy
   const loadHierarchy = async () => {
+    await loadPendingDeskIds();
     try {
       setLoading(true);
       const cacheKey = `admin_hierarchy_${user?.scopedBranchId || 'all'}`;
@@ -223,6 +265,7 @@ export const FloorPlansPage: React.FC = () => {
         const cached = await getCachedFloorPlanData(cacheKey);
         if (cached && cached.length > 0) {
           setBranches(cached);
+          initHierarchySelection(cached);
           setActionNotice({
             type: 'info',
             text: 'Operating in Offline Mode — viewing cached architectural floor plan.',
@@ -247,25 +290,7 @@ export const FloorPlansPage: React.FC = () => {
 
       if (scopedBranches.length > 0) {
         cacheFloorPlanData(cacheKey, scopedBranches);
-      }
-
-      if (scopedBranches && scopedBranches.length > 0) {
-        const firstBranch = scopedBranches[0];
-        setSelectedBranchId(firstBranch.id);
-
-        if (firstBranch.buildings.length > 0) {
-          const firstBld = firstBranch.buildings[0];
-          setSelectedBuildingId(firstBld.id);
-
-          if (firstBld.floors.length > 0) {
-            const firstFl = firstBld.floors[0];
-            setSelectedFloorId(firstFl.id);
-
-            if (firstFl.sections.length > 0) {
-              setSelectedSectionId(firstFl.sections[0].id);
-            }
-          }
-        }
+        initHierarchySelection(scopedBranches);
       }
     } catch (err) {
       console.error('Failed to load workspace hierarchy:', err);
@@ -273,6 +298,7 @@ export const FloorPlansPage: React.FC = () => {
       const cached = await getCachedFloorPlanData(cacheKey);
       if (cached && cached.length > 0) {
         setBranches(cached);
+        initHierarchySelection(cached);
         setActionNotice({
           type: 'info',
           text: 'Network offline — loaded cached architectural floor plan.',
@@ -286,6 +312,18 @@ export const FloorPlansPage: React.FC = () => {
   useEffect(() => {
     loadHierarchy();
   }, [user?.role, user?.scopedBranchId, startDate, endDate]);
+
+  useEffect(() => {
+    const handleOutboxChange = () => {
+      loadPendingDeskIds();
+    };
+    window.addEventListener('offline-outbox-updated', handleOutboxChange);
+    window.addEventListener('offline-sync-completed', handleOutboxChange);
+    return () => {
+      window.removeEventListener('offline-outbox-updated', handleOutboxChange);
+      window.removeEventListener('offline-sync-completed', handleOutboxChange);
+    };
+  }, []);
 
   const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
   const currentBuilding = currentBranch?.buildings.find(bld => bld.id === selectedBuildingId) || currentBranch?.buildings[0];
@@ -799,9 +837,10 @@ export const FloorPlansPage: React.FC = () => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
             const activeBooking = desk.bookings && desk.bookings.length > 0 ? desk.bookings[0] : null;
             const hasMyBooking = desk.bookings ? desk.bookings.some(b => b.userId === user?.id) : activeBooking?.userId === user?.id;
-            const isMine = !!hasMyBooking;
             const isBooked = !!activeBooking || desk.status === 'BOOKED';
-            const isAvailable = !isBooked;
+            const isPendingSync = pendingDeskIds.includes(desk.id);
+            const isAvailable = !isBooked && !isPendingSync;
+            const isMine = !!hasMyBooking && !isPendingSync;
             const isSelected = activeDesk?.id === desk.id;
             const isMassSelected = selectedDeskIds.includes(desk.id);
             return (
@@ -825,7 +864,9 @@ export const FloorPlansPage: React.FC = () => {
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
-                  isMine
+                  isPendingSync
+                    ? isMassSelected ? '' : 'bg-amber-100/90 border-amber-400 text-amber-900 hover:bg-amber-200'
+                    : isMine
                     ? isMassSelected ? '' : 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
                     : isAvailable
                     ? isMassSelected ? '' : 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
@@ -839,9 +880,13 @@ export const FloorPlansPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Line 2: PC Station Icon / Standard workstation dot */}
+                {/* Line 2: PC Station Icon / Standard workstation dot / Sync Pending */}
                 <div className="flex items-center justify-center h-4 my-0.5">
-                  {hasHdmi ? (
+                  {isPendingSync ? (
+                    <span title="Offline Booking Pending Sync" className="text-amber-600 flex items-center justify-center">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    </span>
+                  ) : hasHdmi ? (
                     <span
                       title="PC Station (HDMI Equipped Monitor)"
                       className="text-emerald-600 flex items-center justify-center"
@@ -857,14 +902,16 @@ export const FloorPlansPage: React.FC = () => {
                 <div className="w-full flex items-center justify-center">
                   <span
                     className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
-                      isMine
+                      isPendingSync
+                        ? 'text-amber-800 font-extrabold'
+                        : isMine
                         ? 'text-blue-700'
                         : isAvailable
                         ? 'text-emerald-700'
                         : 'text-red-700'
                     }`}
                   >
-                    {isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
+                    {isPendingSync ? 'Sync Pending' : isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
                   </span>
                 </div>
               </button>
@@ -960,6 +1007,10 @@ export const FloorPlansPage: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-400 inline-block" />
                 <span>Your Desk</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-amber-100 border border-amber-400 inline-block" />
+                <span>Sync Pending</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-red-100 border border-red-300 inline-block" />
