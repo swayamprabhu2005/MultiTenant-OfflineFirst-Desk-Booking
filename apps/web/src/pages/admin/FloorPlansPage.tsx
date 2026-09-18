@@ -1727,12 +1727,17 @@ export const FloorPlansPage: React.FC = () => {
 
       {/* Central Workstation Inspector Modal with Schedule Matrix */}
       {activeDesk && createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-fade-in">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActiveDesk(null);
+          }}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-fade-in"
+        >
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <span className="font-mono text-xs font-black tracking-wider text-slate-500 uppercase">
-                WORKSTATION INSPECTOR • SCHEDULE MATRIX
+                {isOrgAdmin ? 'WORKSTATION INSPECTOR • VIEW ONLY' : 'WORKSTATION INSPECTOR • SCHEDULE MATRIX'}
               </span>
               <button
                 type="button"
@@ -1790,9 +1795,11 @@ export const FloorPlansPage: React.FC = () => {
                     <UserCheck className="w-4 h-4 text-amber-700" />
                     <span>Active Reservation(s) on Workstation</span>
                   </div>
-                  <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-800">
-                    Admin Release Authority
-                  </span>
+                  {!isOrgAdmin && (
+                    <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-800">
+                      Admin Release Authority
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1848,26 +1855,28 @@ export const FloorPlansPage: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="shrink-0 flex items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleReleaseReservation(bk.id)}
-                            disabled={isCancellingBooking}
-                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
-                          >
-                            {isCancellingBooking ? (
-                              <>
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                <span>Releasing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Release Desk</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        {!isOrgAdmin && (
+                          <div className="shrink-0 flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleReleaseReservation(bk.id)}
+                              disabled={isCancellingBooking}
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                            >
+                              {isCancellingBooking ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Releasing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Release Desk</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1887,33 +1896,35 @@ export const FloorPlansPage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rangeDates = getDatesInRange(startDate, endDate);
-                      const availableDates = rangeDates.filter((dStr) => {
-                        return !activeDesk.bookings?.some((b) => {
-                          const bStart = b.startTime.split('T')[0];
-                          const bEnd = b.endTime.split('T')[0];
-                          return dStr >= bStart && dStr <= bEnd;
+                {!isOrgAdmin && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rangeDates = getDatesInRange(startDate, endDate);
+                        const availableDates = rangeDates.filter((dStr) => {
+                          return !activeDesk.bookings?.some((b) => {
+                            const bStart = b.startTime.split('T')[0];
+                            const bEnd = b.endTime.split('T')[0];
+                            return dStr >= bStart && dStr <= bEnd;
+                          });
                         });
-                      });
-                      setModalSelectedDates(availableDates);
-                    }}
-                    className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                  >
-                    Select All Free
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setModalSelectedDates([])}
-                    className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
+                        setModalSelectedDates(availableDates);
+                      }}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                    >
+                      Select All Free
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setModalSelectedDates([])}
+                      className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Day Strip Horizontal Grid */}
@@ -1947,6 +1958,19 @@ export const FloorPlansPage: React.FC = () => {
                     );
                   }
 
+                  if (isOrgAdmin) {
+                    return (
+                      <div
+                        key={dStr}
+                        className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-emerald-50/70 border-emerald-300 text-emerald-900 font-bold"
+                      >
+                        <span className="text-[10px] uppercase">{day}</span>
+                        <span className="text-xs">{date}</span>
+                        <div className="mt-1 text-[9px] font-bold text-emerald-700">Free</div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       key={dStr}
@@ -1969,199 +1993,217 @@ export const FloorPlansPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Booking Configuration: Session Dropdown & Notes */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-              {/* Session Window Dropdown */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Session Window</span>
-                </label>
-                <select
-                  value={modalSlotType}
-                  onChange={(e) => setModalSlotType(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
-                >
-                  <option value="FULL_DAY">Full Day (9:00 AM – 6:00 PM)</option>
-                  <option value="MORNING">Morning / First Half (9:00 AM – 1:30 PM)</option>
-                  <option value="AFTERNOON">Afternoon / Second Half (1:30 PM – 6:00 PM)</option>
-                </select>
-              </div>
-
-              {/* Optional Purpose / Notes */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Booking Purpose (Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={bookingNotes}
-                  onChange={(e) => setBookingNotes(e.target.value)}
-                  placeholder="e.g. Branch Admin allocation, Onsite visit"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Beneficiary: For Myself vs For Colleague (Proxy Booking) */}
-            <div className="space-y-3 pt-2 border-t border-slate-100">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700">Reservation Beneficiary:</span>
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBookingForMode('SELF');
-                      setSelectedColleague(null);
-                    }}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      bookingForMode === 'SELF'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    For Myself
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBookingForMode('COLLEAGUE')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
-                      bookingForMode === 'COLLEAGUE'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Users className="w-3 h-3" />
-                    <span>For Colleague / Staff</span>
-                  </button>
-                </div>
-              </div>
-
-              {bookingForMode === 'COLLEAGUE' && (
-                <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Search colleagues by name, email, or department..."
-                      value={colleagueSearch}
-                      onChange={(e) => setColleagueSearch(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                    {isLoadingColleagues && (
-                      <Loader2 className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5 animate-spin" />
-                    )}
+            {/* Booking Configuration: Session Dropdown & Notes (Hidden for Global Org Admin) */}
+            {!isOrgAdmin && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  {/* Session Window Dropdown */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
+                      <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Session Window</span>
+                    </label>
+                    <select
+                      value={modalSlotType}
+                      onChange={(e) => setModalSlotType(e.target.value as any)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="FULL_DAY">Full Day (9:00 AM – 6:00 PM)</option>
+                      <option value="MORNING">Morning / First Half (9:00 AM – 1:30 PM)</option>
+                      <option value="AFTERNOON">Afternoon / Second Half (1:30 PM – 6:00 PM)</option>
+                    </select>
                   </div>
 
-                  {selectedColleague ? (
-                    <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900">
-                      <div>
-                        <span className="font-bold">{selectedColleague.name}</span>
-                        <span className="text-slate-500 ml-2">({selectedColleague.email})</span>
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-mono">
-                          {selectedColleague.department}
-                        </span>
-                      </div>
+                  {/* Optional Purpose / Notes */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Booking Purpose (Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bookingNotes}
+                      onChange={(e) => setBookingNotes(e.target.value)}
+                      placeholder="e.g. Branch Admin allocation, Onsite visit"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Beneficiary: For Myself vs For Colleague (Proxy Booking) */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">Reservation Beneficiary:</span>
+                    <div className="flex items-center space-x-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedColleague(null)}
-                        className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                        onClick={() => {
+                          setBookingForMode('SELF');
+                          setSelectedColleague(null);
+                        }}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          bookingForMode === 'SELF'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
                       >
-                        <X className="w-4 h-4" />
+                        For Myself
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBookingForMode('COLLEAGUE')}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                          bookingForMode === 'COLLEAGUE'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Users className="w-3 h-3" />
+                        <span>For Colleague / Staff</span>
                       </button>
                     </div>
-                  ) : colleaguesList.length > 0 ? (
-                    <div className="max-h-36 overflow-y-auto space-y-1 bg-white p-1 rounded-xl border border-slate-200">
-                      {colleaguesList.map((colleague) => (
-                        <button
-                          key={colleague.id}
-                          type="button"
-                          onClick={() => setSelectedColleague(colleague)}
-                          className="w-full text-left p-2 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
-                        >
+                  </div>
+
+                  {bookingForMode === 'COLLEAGUE' && (
+                    <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Search colleagues by name, email, or department..."
+                          value={colleagueSearch}
+                          onChange={(e) => setColleagueSearch(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                        {isLoadingColleagues && (
+                          <Loader2 className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5 animate-spin" />
+                        )}
+                      </div>
+
+                      {selectedColleague ? (
+                        <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900">
                           <div>
-                            <div className="font-bold text-slate-800">{colleague.name}</div>
-                            <div className="text-[10px] text-slate-500">
-                              {colleague.email} &bull; {colleague.department}
-                            </div>
-                          </div>
-                          {colleague.hasActiveBookingToday && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
-                              Booked Today ({colleague.reservedDeskCode})
+                            <span className="font-bold">{selectedColleague.name}</span>
+                            <span className="text-slate-500 ml-2">({selectedColleague.email})</span>
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-mono">
+                              {selectedColleague.department}
                             </span>
-                          )}
-                        </button>
-                      ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedColleague(null)}
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : colleaguesList.length > 0 ? (
+                        <div className="max-h-36 overflow-y-auto space-y-1 bg-white p-1 rounded-xl border border-slate-200">
+                          {colleaguesList.map((colleague) => (
+                            <button
+                              key={colleague.id}
+                              type="button"
+                              onClick={() => setSelectedColleague(colleague)}
+                              className="w-full text-left p-2 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-bold text-slate-800">{colleague.name}</div>
+                                <div className="text-[10px] text-slate-500">
+                                  {colleague.email} &bull; {colleague.department}
+                                </div>
+                              </div>
+                              {colleague.hasActiveBookingToday && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
+                                  Booked Today ({colleague.reservedDeskCode})
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : colleagueSearch.trim() ? (
+                        <div className="text-center py-3 text-xs text-slate-400">
+                          No matching colleagues found in this branch.
+                        </div>
+                      ) : null}
                     </div>
-                  ) : colleagueSearch.trim() ? (
-                    <div className="text-center py-3 text-xs text-slate-400">
-                      No matching colleagues found in this branch.
-                    </div>
-                  ) : null}
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Modal Actions */}
             <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
-              {user?.role === 'BRANCH_ADMIN' && (
-                <div>
-                  {activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
-                    <button
-                      type="button"
-                      disabled={isAssigningDedicated}
-                      onClick={handleReleaseDedicated}
-                      className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isAssigningDedicated || !selectedColleague}
-                      onClick={handleAssignDedicated}
-                      className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
-                      title={!selectedColleague ? 'Search and select a colleague above to assign as dedicated desk' : 'Permanently assign this desk to the selected executive'}
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>{isAssigningDedicated ? 'Assigning...' : '🔒 Assign as Dedicated Desk'}</span>
-                    </button>
-                  )}
+              {isOrgAdmin ? (
+                <div className="flex items-center justify-end w-full">
+                  <button
+                    type="button"
+                    onClick={() => setActiveDesk(null)}
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Close Inspector
+                  </button>
                 </div>
-              )}
-
-              <div className="flex items-center gap-2.5 ml-auto">
-                <button
-                  type="button"
-                  onClick={() => setActiveDesk(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmReservation}
-                  disabled={modalSelectedDates.length === 0 || isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-                >
-                  {isSubmittingBooking ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Reserving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>
-                        Reserve Workstation
-                        {modalSelectedDates.length > 0 ? ` (${modalSelectedDates.length} Day${modalSelectedDates.length > 1 ? 's' : ''})` : ''}
-                      </span>
-                    </>
+              ) : (
+                <>
+                  {user?.role === 'BRANCH_ADMIN' && (
+                    <div>
+                      {activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
+                        <button
+                          type="button"
+                          disabled={isAssigningDedicated}
+                          onClick={handleReleaseDedicated}
+                          className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isAssigningDedicated || !selectedColleague}
+                          onClick={handleAssignDedicated}
+                          className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                          title={!selectedColleague ? 'Search and select a colleague above to assign as dedicated desk' : 'Permanently assign this desk to the selected executive'}
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>{isAssigningDedicated ? 'Assigning...' : '🔒 Assign as Dedicated Desk'}</span>
+                        </button>
+                      )}
+                    </div>
                   )}
-                </button>
-              </div>
+
+                  <div className="flex items-center gap-2.5 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setActiveDesk(null)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmReservation}
+                      disabled={modalSelectedDates.length === 0 || isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                    >
+                      {isSubmittingBooking ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Reserving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>
+                            Reserve Workstation
+                            {modalSelectedDates.length > 0 ? ` (${modalSelectedDates.length} Day${modalSelectedDates.length > 1 ? 's' : ''})` : ''}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>,
