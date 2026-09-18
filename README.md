@@ -8,7 +8,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
 ![Express](https://img.shields.io/badge/Express.js-4.x-000000?style=flat-square&logo=express&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat-square&logo=prisma&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Offline--First-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![pnpm](https://img.shields.io/badge/pnpm-Monorepo-F69220?style=flat-square&logo=pnpm&logoColor=white)
 
 ---
@@ -137,6 +137,33 @@ flowchart TD
 | `CANCEL_BOOKING` | Workstation release with optional cancellation reason |
 | `ADD_CUBICLE` | Manual workstation addition by a branch admin |
 | `IMPORT_WORKFORCE_ROSTER` | Multi-branch bulk employee onboarding event |
+| `RELEASE_DESK` | Branch admin direct desk release with audit trail |
+| `UPLOAD_BRANCH_FLOOR_PLAN` | Branch floor plan re-ingestion from spreadsheet |
+
+---
+
+### 7. 📡 Offline-First Engine & Background Sync
+- **Role-Gated Offline Support**: Offline capabilities are exclusively available to **Employee** and **Branch Admin** roles. Platform and Organization Admins remain strictly online for governance integrity.
+- **IndexedDB Outbox Queue**: Desk reservations and cancellations made while offline are queued in an IndexedDB `outbox_queue` store with FIFO replay upon reconnection.
+- **Floor Plan Cache**: Complete workspace hierarchies are cached in IndexedDB `floorplan_cache`, enabling desk browsing without network connectivity.
+- **Network Status Indicator**: A real-time connectivity pill in the header shows Online/Offline/Syncing states with pending operation count badges.
+- **Automatic Background Sync**: On network restoration, queued operations are automatically replayed via standard HTTP POST to the API server.
+
+---
+
+### 8. 🔔 In-App Notification Center
+- **Event-Derived Activity Stream**: Notifications are dynamically projected from `Booking` and `AuditLog` tables — no dedicated notification storage table required.
+- **Bell Icon with Unread Badge**: Real-time unread count badge with 25-second polling interval.
+- **Domain-Categorized Notifications**: Visual categorization with dedicated icons for booking confirmations, proxy reservations, cancellations, and admin broadcasts.
+- **Mark Read & Clear Actions**: One-click mark-all-as-read and clear notification history.
+
+---
+
+### 9. 👥 Branch-Scoped Office Presence ("Who is in Office")
+- **Software-Inferred Presence**: Derives real-time office occupancy from confirmed desk bookings for the current day — no hardware badges or RFID required.
+- **Branch Isolation**: Employees and Branch Admins can only see presence within their assigned branch.
+- **Searchable Colleague Directory**: Instant client-side search across name, email, department, and desk code with department-level count groupings.
+- **Identity Attribution**: Current user "YOU" badge and proxy booking attribution ("Proxy by: Lead Name").
 
 ---
 
@@ -144,31 +171,41 @@ flowchart TD
 
 ```
 MultiTenant-OfflineFirst-DeskBooking/
+├── ADR/                               # Architecture Decision Records
 ├── apps/
-│   ├── api/                          # Express.js + Prisma ORM Backend
+│   ├── api/                           # Express.js + Prisma ORM Backend
 │   │   ├── prisma/
-│   │   │   └── schema.prisma         # Multi-tenant schema
+│   │   │   └── schema.prisma          # Multi-tenant relational schema
 │   │   └── src/
-│   │       ├── routes/               # Modular API endpoints
+│   │       ├── routes/                # Modular API endpoints
 │   │       │   ├── auth.routes.ts
 │   │       │   ├── audit.routes.ts
+│   │       │   ├── branches.routes.ts
+│   │       │   ├── buildings.routes.ts
 │   │       │   ├── employee.routes.ts
+│   │       │   ├── notification.routes.ts
+│   │       │   ├── organizations.routes.ts
 │   │       │   ├── roster.routes.ts
 │   │       │   ├── branch-roster.routes.ts
 │   │       │   └── workspace.routes.ts
-│   │       └── services/             # Excel engines, hashing, auth services
-│   └── web/                          # React 18 + Vite + Tailwind CSS Frontend
+│   │       └── services/              # Excel engines, hashing, auth services
+│   └── web/                           # React 18 + Vite + Tailwind CSS Frontend
 │       └── src/
 │           ├── components/
-│           │   ├── dashboard/        # Role-specific dashboards
-│           │   └── layout/           # Navbar, Sidebar, ProtectedRoute
+│           │   ├── dashboard/         # Role-specific dashboards
+│           │   ├── layout/            # Header, Sidebar, AppLayout, ProtectedRoute
+│           │   ├── NetworkStatusIndicator.tsx
+│           │   ├── NotificationBell.tsx
+│           │   └── OfficePresenceModal.tsx
 │           ├── pages/
-│           │   ├── admin/            # FloorPlans, Workforce, BranchAdmins, AuditLogs
-│           │   ├── branch/           # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
-│           │   └── employee/         # EmployeeFloorPlanPage, MyBookingsPage, Dashboard
-│           └── services/             # Centralized fetchApi client
+│           │   ├── admin/             # FloorPlans, Workforce, BranchAdmins, AuditLogs
+│           │   ├── branch/            # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
+│           │   └── employee/          # EmployeeFloorPlanPage, MyBookingsPage, Dashboard
+│           └── services/
+│               ├── api.ts             # Centralized fetchApi client with retry
+│               └── offlineStore.ts    # IndexedDB outbox queue & floor plan cache
 └── packages/
-    └── shared/                       # Shared TypeScript interfaces, Role & Slot enums
+    └── shared/                        # Shared TypeScript interfaces, Role & Slot enums
 ```
 
 ---
@@ -179,11 +216,13 @@ MultiTenant-OfflineFirst-DeskBooking/
 |---|---|
 | **Frontend** | React 18, Vite 5, TypeScript 5, Tailwind CSS 3 |
 | **Backend** | Express.js 4, TypeScript, Node.js |
-| **ORM & Database** | Prisma ORM, SQLite (offline-first) |
+| **ORM & Database** | Prisma ORM, PostgreSQL 16 |
 | **Auth** | JWT Bearer tokens, bcrypt password hashing |
-| **Excel Engine** | ExcelJS — multi-sheet generation with live column formulas |
+| **Excel Engine** | ExcelJS + JSZip — multi-sheet generation with live column formulas |
+| **Offline-First** | IndexedDB (native) — outbox queue & floor plan cache |
+| **Containerization** | Docker Compose — PostgreSQL 16 Alpine |
 | **Monorepo** | pnpm Workspaces |
-| **Build Tooling** | Vite (web), ts-node / tsx (API), pnpm |
+| **Build Tooling** | Vite (web), tsc (API), pnpm |
 
 ---
 
@@ -192,22 +231,30 @@ MultiTenant-OfflineFirst-DeskBooking/
 ### Prerequisites
 - Node.js `>= 18.x`
 - pnpm `>= 8.x` (`npm install -g pnpm`)
+- Docker Desktop (for PostgreSQL) or a local PostgreSQL instance on port 5432
 
 ### One-Click Startup (Windows)
 ```powershell
 .\run.bat
 ```
 The `run.bat` script will:
-1. Verify port availability on `3000` and `4000`.
-2. Generate the Prisma client and run database migrations automatically.
-3. Start the API server on `http://localhost:4000`.
-4. Start the web frontend on `http://localhost:3000`.
-5. Auto-launch the web console in your default browser.
+1. Detect or start PostgreSQL via Docker Compose on port `5432`.
+2. Verify and clean port allocations on `3000` and `4000`.
+3. Install pnpm workspace dependencies.
+4. Generate the Prisma client, push the database schema, and seed initial data.
+5. Start the API server on `http://localhost:4000` and the web frontend on `http://localhost:3000`.
+6. Auto-launch the web console in your default browser.
 
 ### Manual Startup
 ```bash
+# Start PostgreSQL (if using Docker)
+docker compose up -d postgres
+
 # Install all dependencies
 pnpm install
+
+# Generate Prisma client & push schema
+pnpm db:generate && pnpm db:push && pnpm db:seed
 
 # Run both API and web concurrently
 pnpm dev
@@ -216,7 +263,7 @@ pnpm dev
 ### Environment Configuration
 Copy `.env.example` to `.env` and configure:
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/deskbooking_db"
 JWT_SECRET="your-secret-key"
 ```
 
@@ -227,19 +274,46 @@ JWT_SECRET="your-secret-key"
 | Method | Route | Description |
 |---|---|---|
 | `POST` | `/api/auth/login` | Authenticate and receive JWT |
+| `POST` | `/api/auth/signup` | Register new organization with admin |
+| `GET` | `/api/workspace/hierarchy` | Fetch full facility hierarchy with live bookings |
 | `GET` | `/api/roster/multi-branch-template` | Download multi-branch Excel roster |
 | `POST` | `/api/roster/multi-branch-import` | Bulk import employee roster |
 | `GET` | `/api/branch-roster/floor-plan-template` | Download branch floor plan workbook |
 | `POST` | `/api/branch-roster/floor-plan-import` | Import branch floor plan changes |
 | `POST` | `/api/branch-roster/cubicle` | Add a new workstation in-UI |
 | `GET` | `/api/employee/dashboard-summary` | Employee dashboard stats |
+| `GET` | `/api/employee/presence` | Branch-scoped office presence |
 | `POST` | `/api/employee/bookings` | Create a desk reservation |
 | `POST` | `/api/employee/bulk-bookings` | Bulk pod reservation |
 | `POST` | `/api/employee/cancel-booking` | Cancel a single booking |
 | `POST` | `/api/employee/cancel-selected` | Cancel selected bookings |
 | `POST` | `/api/employee/bulk-cancel` | Bulk cancel all future bookings |
+| `GET` | `/api/notifications` | Fetch notification activity stream |
+| `POST` | `/api/notifications/mark-read` | Mark all notifications as read |
+| `POST` | `/api/notifications/clear` | Clear notification history |
 | `GET` | `/api/audit` | Fetch organization audit logs |
 | `GET` | `/api/health` | API health check |
+
+---
+
+## 📐 Architecture Decision Records
+
+All significant architectural decisions are documented as ADRs in the [`ADR/`](ADR/) directory.
+
+| ADR | Decision |
+|-----|----------|
+| [001](ADR/001-use-pnpm-monorepo-architecture.md) | pnpm Monorepo Architecture |
+| [002](ADR/002-adopt-multi-tenant-subdomain-isolation.md) | Multi-Tenant Subdomain Isolation |
+| [003](ADR/003-use-postgresql-with-prisma-orm.md) | PostgreSQL with Prisma ORM |
+| [004](ADR/004-implement-four-tier-rbac-hierarchy.md) | Four-Tier RBAC Hierarchy |
+| [005](ADR/005-use-jwt-bearer-token-authentication.md) | JWT Bearer Token Authentication |
+| [006](ADR/006-render-floor-plans-with-zero-svg-css.md) | Zero-SVG CSS Floor Plans |
+| [007](ADR/007-use-excel-driven-workspace-ingestion.md) | Excel-Driven Workspace Ingestion |
+| [008](ADR/008-implement-offline-first-indexeddb-outbox.md) | Offline-First IndexedDB Outbox |
+| [009](ADR/009-use-react-vite-tailwind-frontend.md) | React + Vite + Tailwind Frontend |
+| [010](ADR/010-use-expressjs-rest-api-backend.md) | Express.js REST API Backend |
+| [011](ADR/011-derive-notifications-from-domain-events.md) | Event-Derived Notifications |
+| [012](ADR/012-implement-branch-scoped-office-presence.md) | Branch-Scoped Office Presence |
 
 ---
 
