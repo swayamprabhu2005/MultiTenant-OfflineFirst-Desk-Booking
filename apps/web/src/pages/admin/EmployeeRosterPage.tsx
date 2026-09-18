@@ -450,43 +450,49 @@ export const EmployeeRosterPage: React.FC = () => {
               />
             </div>
 
-            {/* Actions: Download Template, Upload Excel, Manual Add */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Download Template (Only unassigned branches) */}
-              <button
-                onClick={handleDownloadTemplate}
-                disabled={downloadingTemplate}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer"
-                title="Download spreadsheet with unassigned branches"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                <span>{downloadingTemplate ? 'Generating...' : 'Download Template'}</span>
-              </button>
+            {/* Actions: Download Template & Upload (Row 1), Assign Administrator (Row 2) on the Right */}
+            <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+              {/* Row 1: Side-by-side Ingestion Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Download Template (Only unassigned branches) */}
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                  title="Download spreadsheet with unassigned branches"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
+                  <span>{downloadingTemplate ? 'Generating...' : 'Download Template'}</span>
+                </button>
 
-              {/* Upload Completed Excel */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept=".xlsx"
-                onChange={handleExcelUpload}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingExcel}
-                className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 shadow-sm flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5 text-purple-600" />
-                <span>{uploadingExcel ? 'Importing...' : 'Upload Completed Roster'}</span>
-              </button>
+                {/* Upload Completed Excel */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".xlsx"
+                  onChange={handleExcelUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingExcel}
+                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 shadow-xs flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <Upload className="w-3.5 h-3.5 text-purple-600" />
+                  <span>{uploadingExcel ? 'Importing...' : 'Upload Completed Roster'}</span>
+                </button>
+              </div>
 
-              {/* Manual Single Administrator Assignment */}
+              {/* Row 2: Assign Administrator placed cleanly underneath */}
               <button
+                type="button"
                 onClick={() => openAssignModal()}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow flex items-center space-x-1.5 transition-all cursor-pointer"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
-                <span>Assign Administrator</span>
+                <span>+ Assign Administrator</span>
               </button>
             </div>
           </div>
