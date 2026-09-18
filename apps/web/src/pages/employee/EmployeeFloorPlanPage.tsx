@@ -1085,7 +1085,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       {/* 2D ARCHITECTURAL FLOOR PLAN CANVAS (PURE HTML & CSS DIVS - ZERO SVG) */}
       <div className="bg-white rounded-3xl border-4 border-slate-900 p-6 shadow-2xl relative overflow-hidden min-h-[580px] flex flex-col justify-between">
         
-        {/* Floor Plan Header Tag & Zoom Controller */}
+        {/* Floor Plan Header Tag */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3 mb-6">
           <div className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
             LEVEL: {formatFloorDisplayName(currentFloor).toUpperCase()} • {currentSection?.name} • COMPASS: {currentSection?.direction}

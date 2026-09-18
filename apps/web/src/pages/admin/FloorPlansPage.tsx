@@ -214,7 +214,6 @@ export const FloorPlansPage: React.FC = () => {
   const [isImportingPlan, setIsImportingPlan] = useState(false);
   const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const floorPlanInputRef = useRef<HTMLInputElement>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   const [pendingDeskIds, setPendingDeskIds] = useState<string[]>([]);
 
@@ -1301,7 +1300,7 @@ export const FloorPlansPage: React.FC = () => {
       {/* 2D ARCHITECTURAL FLOOR PLAN CANVAS (PURE HTML & CSS DIVS - ZERO SVG) */}
       <div className="bg-white rounded-3xl border-4 border-slate-900 p-6 shadow-2xl relative overflow-hidden min-h-[580px] flex flex-col justify-between">
         
-        {/* Floor Plan Header Tag & Zoom Controller */}
+        {/* Floor Plan Header Tag */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3 mb-6">
           <div className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
             LEVEL: {formatFloorDisplayName(currentFloor).toUpperCase()} • {currentSection?.name} • COMPASS: {currentSection?.direction}
@@ -1310,47 +1309,11 @@ export const FloorPlansPage: React.FC = () => {
             <div className="text-[10px] font-mono text-slate-500 font-bold">
               TOTAL STATIONS: {desks.length} | PODS: {totalPods} | ROOMS: {meetingRoom ? 1 : 0}
             </div>
-            {/* Dynamic Zoom Controller */}
-            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-300 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setZoomLevel((prev) => Math.max(70, prev - 10))}
-                disabled={zoomLevel <= 70}
-                title="Zoom Out Floor Plan"
-                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
-              >
-                −
-              </button>
-              <span className="font-mono text-[10px] font-bold text-slate-700 px-1 min-w-[38px] text-center">
-                {zoomLevel}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel((prev) => Math.min(130, prev + 10))}
-                disabled={zoomLevel >= 130}
-                title="Zoom In Floor Plan"
-                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
-              >
-                +
-              </button>
-              {zoomLevel !== 100 && (
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(100)}
-                  className="text-[9px] font-bold text-slate-500 hover:text-slate-900 px-1.5 py-0.5 rounded hover:bg-slate-200 cursor-pointer"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Main Floor Geometry Container with Dynamic Zoom Scale */}
-        <div
-          className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start transition-transform duration-200 origin-top"
-          style={{ transform: `scale(${zoomLevel / 100})` }}
-        >
+        {/* Main Floor Geometry Container */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
           
           {/* Main Open-Plan Desk Clusters Area (Column-Wise Expansion) */}
           <div className="lg:col-span-3">
