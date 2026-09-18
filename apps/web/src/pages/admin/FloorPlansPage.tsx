@@ -10,7 +10,7 @@ import {
   getCachedFloorPlanData,
   getPendingOutboxItems,
 } from '../../services/offlineStore';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck } from 'lucide-react';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck, Lock } from 'lucide-react';
 
 export interface ColleagueItem {
   id: string;
@@ -195,6 +195,7 @@ export const FloorPlansPage: React.FC = () => {
   const [isLoadingColleagues, setIsLoadingColleagues] = useState<boolean>(false);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState<boolean>(false);
   const [isCancellingBooking, setIsCancellingBooking] = useState<boolean>(false);
+  const [isAssigningDedicated, setIsAssigningDedicated] = useState<boolean>(false);
 
   // Branch Admin Mass Booking Mode State
   const [isMassBookingMode, setIsMassBookingMode] = useState(false);
@@ -526,6 +527,70 @@ export const FloorPlansPage: React.FC = () => {
     }
   };
 
+  // Dedicated Desk Assignment Handlers for Branch Admin
+  const handleAssignDedicated = async () => {
+    if (!activeDesk || !selectedColleague) return;
+    try {
+      setIsAssigningDedicated(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/branch-roster/assign-dedicated', {
+        method: 'POST',
+        body: JSON.stringify({
+          deskId: activeDesk.id,
+          employeeId: selectedColleague.id,
+          notes: bookingNotes.trim() || `Dedicated Executive Station for ${selectedColleague.name}`,
+        }),
+      });
+
+      setActionNotice({
+        type: 'success',
+        text: res?.message || `Workstation ${activeDesk.deskCode} permanently dedicated to ${selectedColleague.name}.`,
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+      setActiveDesk(null);
+      await loadHierarchy();
+    } catch (err: any) {
+      console.error('Failed to assign dedicated desk:', err);
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to assign dedicated workstation.',
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+    } finally {
+      setIsAssigningDedicated(false);
+    }
+  };
+
+  const handleReleaseDedicated = async () => {
+    if (!activeDesk) return;
+    try {
+      setIsAssigningDedicated(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/branch-roster/assign-dedicated', {
+        method: 'POST',
+        body: JSON.stringify({
+          deskId: activeDesk.id,
+          release: true,
+        }),
+      });
+
+      setActionNotice({
+        type: 'success',
+        text: res?.message || `Dedicated assignment for workstation ${activeDesk.deskCode} released successfully.`,
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+      setActiveDesk(null);
+      await loadHierarchy();
+    } catch (err: any) {
+      console.error('Failed to release dedicated desk:', err);
+      setActionNotice({
+        type: 'error',
+        text: err.message || 'Failed to release dedicated workstation.',
+      });
+      setTimeout(() => setActionNotice(null), 5000);
+    } finally {
+      setIsAssigningDedicated(false);
+    }
+  };
+
   // Mass Booking Actions for Branch Admin
   const handleConfirmMassBooking = async () => {
     if (selectedDeskIds.length === 0) return;
@@ -837,7 +902,9 @@ export const FloorPlansPage: React.FC = () => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
             const activeBooking = desk.bookings && desk.bookings.length > 0 ? desk.bookings[0] : null;
             const hasMyBooking = desk.bookings ? desk.bookings.some(b => b.userId === user?.id) : activeBooking?.userId === user?.id;
-            const isBooked = !!activeBooking || desk.status === 'BOOKED';
+            const dedicatedBooking = desk.bookings?.find(b => b.slotType === 'DEDICATED');
+            const isDedicated = !!dedicatedBooking;
+            const isBooked = !!activeBooking || desk.status === 'BOOKED' || isDedicated;
             const isPendingSync = pendingDeskIds.includes(desk.id);
             const isAvailable = !isBooked && !isPendingSync;
             const isMine = !!hasMyBooking && !isPendingSync;
@@ -864,7 +931,9 @@ export const FloorPlansPage: React.FC = () => {
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
-                  isPendingSync
+                  isDedicated
+                    ? isMassSelected ? '' : 'bg-amber-50/90 border-amber-500 text-amber-950 hover:bg-amber-100'
+                    : isPendingSync
                     ? isMassSelected ? '' : 'bg-amber-100/90 border-amber-400 text-amber-900 hover:bg-amber-200'
                     : isMine
                     ? isMassSelected ? '' : 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
@@ -880,9 +949,13 @@ export const FloorPlansPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Line 2: PC Station Icon / Standard workstation dot / Sync Pending */}
+                {/* Line 2: PC Station Icon / Standard workstation dot / Sync Pending / Lock */}
                 <div className="flex items-center justify-center h-4 my-0.5">
-                  {isPendingSync ? (
+                  {isDedicated ? (
+                    <span title={`Fixed Dedicated Workstation: ${dedicatedBooking?.user?.name || 'Executive'}`} className="text-amber-700 flex items-center justify-center">
+                      <Lock className="w-3.5 h-3.5" />
+                    </span>
+                  ) : isPendingSync ? (
                     <span title="Offline Booking Pending Sync" className="text-amber-600 flex items-center justify-center">
                       <Clock className="w-3.5 h-3.5 animate-pulse" />
                     </span>
@@ -902,7 +975,9 @@ export const FloorPlansPage: React.FC = () => {
                 <div className="w-full flex items-center justify-center">
                   <span
                     className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
-                      isPendingSync
+                      isDedicated
+                        ? 'text-amber-900 font-extrabold'
+                        : isPendingSync
                         ? 'text-amber-800 font-extrabold'
                         : isMine
                         ? 'text-blue-700'
@@ -911,7 +986,15 @@ export const FloorPlansPage: React.FC = () => {
                         : 'text-red-700'
                     }`}
                   >
-                    {isPendingSync ? 'Sync Pending' : isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
+                    {isDedicated
+                      ? `Fixed ${dedicatedBooking?.user?.name?.split(' ')[0] || 'Exec'}`
+                      : isPendingSync
+                      ? 'Sync Pending'
+                      : isMine
+                      ? 'Your Desk'
+                      : isAvailable
+                      ? 'Free'
+                      : 'Booked'}
                   </span>
                 </div>
               </button>
@@ -2012,35 +2095,64 @@ export const FloorPlansPage: React.FC = () => {
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setActiveDesk(null)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReservation}
-                disabled={modalSelectedDates.length === 0 || isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              >
-                {isSubmittingBooking ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Reserving...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>
-                      Reserve Workstation
-                      {modalSelectedDates.length > 0 ? ` (${modalSelectedDates.length} Day${modalSelectedDates.length > 1 ? 's' : ''})` : ''}
-                    </span>
-                  </>
-                )}
-              </button>
+            <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+              {user?.role === 'BRANCH_ADMIN' && (
+                <div>
+                  {activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
+                    <button
+                      type="button"
+                      disabled={isAssigningDedicated}
+                      onClick={handleReleaseDedicated}
+                      className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isAssigningDedicated || !selectedColleague}
+                      onClick={handleAssignDedicated}
+                      className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                      title={!selectedColleague ? 'Search and select a colleague above to assign as dedicated desk' : 'Permanently assign this desk to the selected executive'}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{isAssigningDedicated ? 'Assigning...' : '🔒 Assign as Dedicated Desk'}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveDesk(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReservation}
+                  disabled={modalSelectedDates.length === 0 || isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                >
+                  {isSubmittingBooking ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Reserving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        Reserve Workstation
+                        {modalSelectedDates.length > 0 ? ` (${modalSelectedDates.length} Day${modalSelectedDates.length > 1 ? 's' : ''})` : ''}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>,

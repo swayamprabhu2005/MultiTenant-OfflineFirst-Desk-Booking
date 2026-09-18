@@ -23,9 +23,10 @@ import {
   UserCheck,
   Loader2,
   Trash2,
-  Zap,
-  CheckSquare,
   Square,
+  CheckSquare,
+  Lock,
+  Zap,
 } from 'lucide-react';
 
 export interface DeskBookingInfo {
@@ -728,9 +729,11 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               : activeDesk?.id === desk.id;
             
             // Check if desk has confirmed bookings across date range or pending offline sync
+            const dedicatedBooking = desk.bookings?.find(b => b.slotType === 'DEDICATED');
+            const isDedicated = !!dedicatedBooking;
             const isPendingSync = pendingDeskIds.includes(desk.id);
             const bookingCount = desk.bookings ? desk.bookings.length : desk.isReserved ? 1 : 0;
-            const isBookedInRange = bookingCount > 0;
+            const isBookedInRange = bookingCount > 0 || isDedicated;
             const isAvailable = !isBookedInRange && !isPendingSync;
             const isMine = desk.isMyBooking && !isPendingSync;
 
@@ -748,6 +751,8 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 className={`group relative rounded-xl border-2 p-1.5 flex flex-col items-center justify-between transition-all cursor-pointer text-center overflow-hidden min-w-0 ${deskHeightClass} ${
                   isSelected
                     ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-400 shadow-sm'
+                    : isDedicated
+                    ? 'border-amber-500 bg-amber-50/90 text-amber-950'
                     : isPendingSync
                     ? 'border-amber-400 bg-amber-100/90 text-amber-900 hover:bg-amber-200'
                     : isMine
@@ -764,9 +769,13 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Line 2: PC Station Icon / Bulk Selection Indicator / Sync Pending */}
+                {/* Line 2: PC Station Icon / Bulk Selection Indicator / Sync Pending / Lock */}
                 <div className="flex items-center justify-center space-x-1 h-4 my-0.5">
-                  {isPendingSync ? (
+                  {isDedicated ? (
+                    <span title={`Fixed Dedicated Executive Station: ${dedicatedBooking?.user?.name || 'Executive'}`} className="text-amber-700 flex items-center justify-center">
+                      <Lock className="w-3.5 h-3.5" />
+                    </span>
+                  ) : isPendingSync ? (
                     <span title="Offline Booking Pending Sync" className="text-amber-600 flex items-center justify-center">
                       <Clock className="w-3.5 h-3.5 animate-pulse" />
                     </span>
@@ -793,7 +802,9 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 <div className="w-full flex items-center justify-center">
                   <span
                     className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
-                      isPendingSync
+                      isDedicated
+                        ? 'text-amber-900 font-extrabold'
+                        : isPendingSync
                         ? 'text-amber-800 font-extrabold'
                         : isMine
                         ? 'text-blue-700'
@@ -802,7 +813,15 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                         : 'text-red-700'
                     }`}
                   >
-                    {isPendingSync ? 'Sync Pending' : isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
+                    {isDedicated
+                      ? `Fixed ${dedicatedBooking?.user?.name?.split(' ')[0] || 'Exec'}`
+                      : isPendingSync
+                      ? 'Sync Pending'
+                      : isMine
+                      ? 'Your Desk'
+                      : isAvailable
+                      ? 'Free'
+                      : 'Booked'}
                   </span>
                 </div>
               </button>
