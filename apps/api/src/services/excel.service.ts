@@ -1018,6 +1018,19 @@ export async function generateBranchFloorPlanTemplate(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'MultiTenant DeskBooking Platform';
 
+  // Color Palette Constants
+  const HEADER_FILL = 'FF1F4E79'; // Deep Navy Blue
+  const SUBHEADER_FILL = 'FF2F5597'; // Royal Slate Blue
+  const GREY_LOCKED_FILL = 'FFF1F5F9'; // Slate-100 Read-Only Protected
+  const YELLOW_INPUT_FILL = 'FFFFF2CC'; // Pale Warm Yellow (Active user input)
+  const DISABLED_GREY_FILL = 'FFE2E8F0'; // Slate-200 Lockout Fill
+  const THIN_BORDER = {
+    top: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+  };
+
   // 1. Sheet: Branch Info
   const sheetBranch = workbook.addWorksheet('Branch Info');
   sheetBranch.views = [{ showGridLines: true }];
@@ -1028,27 +1041,38 @@ export async function generateBranchFloorPlanTemplate(
   bHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   bHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 3; c++) {
-    bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+    bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
+    bHeader.getCell(c).border = THIN_BORDER;
   }
 
   const bRow = sheetBranch.getRow(2);
-  bRow.height = 22;
+  bRow.height = 24;
+  // Branch Code (Locked Grey)
   bRow.getCell(1).value = branch.code;
+  bRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(1).protection = { locked: true };
+
+  // Branch Name (Locked Grey)
   bRow.getCell(2).value = branch.name;
+  bRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(2).protection = { locked: true };
+
+  // Number of Buildings (Editable Yellow)
   bRow.getCell(3).value = Math.max(1, branch.buildings.length);
+  bRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+  bRow.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+  bRow.getCell(3).protection = { locked: false };
+
   for (let c = 1; c <= 3; c++) {
-    bRow.getCell(c).font = { name: 'Segoe UI', size: 10 };
     bRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-    bRow.getCell(c).border = {
-      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-    };
+    bRow.getCell(c).border = THIN_BORDER;
   }
   sheetBranch.getColumn(1).width = 20;
   sheetBranch.getColumn(2).width = 30;
   sheetBranch.getColumn(3).width = 24;
+  await sheetBranch.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 2. Sheet: Buildings
   const sheetBuildings = workbook.addWorksheet('Buildings');
