@@ -1408,6 +1408,46 @@ export interface BranchFloorPlanValidationResult {
   data?: ParsedBranchFloorPlan;
 }
 
+function getCellString(cell: ExcelJS.Cell): string {
+  if (!cell) return '';
+  const val = cell.value;
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    if ('result' in val && val.result !== undefined && val.result !== null) {
+      return String(val.result).trim();
+    }
+    if ('text' in val && typeof (val as any).text === 'string') {
+      return (val as any).text.trim();
+    }
+    if ('richText' in val && Array.isArray((val as any).richText)) {
+      return (val as any).richText.map((t: any) => t.text).join('').trim();
+    }
+  }
+  if (cell.text && cell.text.trim()) {
+    return cell.text.trim();
+  }
+  return String(val).trim();
+}
+
+function getCellNumber(cell: ExcelJS.Cell): number {
+  if (!cell) return NaN;
+  const val = cell.value;
+  if (val === null || val === undefined) return NaN;
+  if (typeof val === 'object') {
+    if ('result' in val && val.result !== undefined && val.result !== null) {
+      const resNum = Number(val.result);
+      if (!isNaN(resNum)) return resNum;
+    }
+  }
+  const n = Number(cell.value);
+  if (!isNaN(n)) return n;
+  if (cell.text) {
+    const textNum = Number(cell.text.trim());
+    if (!isNaN(textNum)) return textNum;
+  }
+  return NaN;
+}
+
 /**
  * Validates and parses branch-scoped floor plan Excel template
  */
@@ -1437,8 +1477,8 @@ export async function parseAndValidateBranchFloorPlan(
 
   // 1. Branch Info
   const branchRow = sheetBranch.getRow(2);
-  const branchCode = branchRow.getCell(1).text?.trim();
-  const branchName = branchRow.getCell(2).text?.trim();
+  const branchCode = getCellString(branchRow.getCell(1));
+  const branchName = getCellString(branchRow.getCell(2));
 
   if (!branchCode) {
     errors.push('Branch Info (Row 2): Branch Code is missing.');
@@ -1474,15 +1514,17 @@ export async function parseAndValidateBranchFloorPlan(
 
   for (let r = 2; r <= sheetBuildings.rowCount; r++) {
     const row = sheetBuildings.getRow(r);
-    const bldCode = row.getCell(1).text?.trim();
-    const bldName = row.getCell(2).text?.trim();
-    const floorCountVal = Number(row.getCell(3).value);
+    let bldCode = getCellString(row.getCell(1));
+    const bldName = getCellString(row.getCell(2));
+    const floorCountVal = getCellNumber(row.getCell(3));
 
     if (!bldCode && !bldName) continue;
 
-    if (!bldCode) {
-      errors.push(`Buildings (Row ${r}): Building Code is required.`);
+    // Handle formula fallback if not evaluated
+    if (!bldCode || bldCode.startsWith('=')) {
+      bldCode = `BLD${String(r - 1).padStart(3, '0')}`;
     }
+
     if (!bldName) {
       errors.push(`Buildings (Row ${r}): Building Name is required.`);
     }
@@ -1492,7 +1534,7 @@ export async function parseAndValidateBranchFloorPlan(
 
     if (bldName) {
       buildingsMap.set(bldName.toLowerCase(), {
-        code: bldCode || `BLD-${buildingsMap.size + 1}`,
+        code: bldCode,
         name: bldName,
         floorCount: isNaN(floorCountVal) ? 1 : floorCountVal,
         floors: [],
@@ -1523,17 +1565,24 @@ export async function parseAndValidateBranchFloorPlan(
     }
   >();
 
+  const buildingsList = Array.from(buildingsMap.values());
   for (let r = 2; r <= sheetFloors.rowCount; r++) {
     const row = sheetFloors.getRow(r);
-    const bldName = row.getCell(1).text?.trim();
-    const flCode = row.getCell(2).text?.trim();
-    const flName = row.getCell(3).text?.trim();
+    let bldName = getCellString(row.getCell(1));
+    let flCode = getCellString(row.getCell(2));
+    const flName = getCellString(row.getCell(3));
 
     if (!bldName && !flCode && !flName) continue;
 
-    if (!flCode) {
-      errors.push(`Floors (Row ${r}): Floor Code is required.`);
-      continue;
+    // If formula reference e.g. =Buildings!B2 or =Buildings!$B$2
+    if (bldName.startsWith('=')) {
+      const match = bldName.match(/B(\d+)/i);
+      if (match) {
+        const bldRowIdx = parseInt(match[1], 10) - 2;
+        if (bldRowIdx >= 0 && bldRowIdx < buildingsList.length) {
+          bldName = buildingsList[bldRowIdx].name;
+        }
+      }
     }
 
     let bldEntry = bldName ? buildingsMap.get(bldName.toLowerCase()) : null;
@@ -1546,7 +1595,14 @@ export async function parseAndValidateBranchFloorPlan(
       continue;
     }
 
+    const bldIndex = buildingsList.findIndex((b) => b.code === bldEntry?.code);
     const floorNumber = bldEntry.floors.length + 1;
+
+    // If formula or missing flCode, fallback to building-scoped code
+    if (!flCode || flCode.startsWith('=')) {
+      flCode = `${(bldIndex >= 0 ? bldIndex : 0) + 1}-FL${String(floorNumber).padStart(2, '0')}`;
+    }
+
     const floorObj = {
       code: flCode,
       name: flName || `Floor ${floorNumber}`,
@@ -1559,22 +1615,34 @@ export async function parseAndValidateBranchFloorPlan(
   }
 
   // 4. Sections & Cubicles
+  const floorsList = Array.from(floorsMap.values());
   for (let r = 2; r <= sheetSections.rowCount; r++) {
     const row = sheetSections.getRow(r);
-    const flCode = row.getCell(1).text?.trim();
-    const secName = row.getCell(2).text?.trim();
-    const direction = (row.getCell(3).text?.trim() || 'NORTH').toUpperCase();
-    const standardDeskCount = Number(row.getCell(4).value || 0);
-    const hdmiDeskCount = Number(row.getCell(5).value || 0);
-    const hasMeetingRoomRaw = row.getCell(6).text?.trim()?.toLowerCase();
-    const meetingRoomCapacity = Number(row.getCell(7).value || 0);
-    const meetingRoomHdmi = Number(row.getCell(8).value || 0);
+    let flCode = getCellString(row.getCell(1));
+    const secName = getCellString(row.getCell(2));
+    const direction = (getCellString(row.getCell(3)) || 'NORTH').toUpperCase();
+    const standardDeskCount = getCellNumber(row.getCell(4));
+    const hdmiDeskCount = getCellNumber(row.getCell(5));
+    const hasMeetingRoomRaw = getCellString(row.getCell(6)).toLowerCase();
+    const meetingRoomCapacity = getCellNumber(row.getCell(7));
+    const meetingRoomHdmi = getCellNumber(row.getCell(8));
 
     if (!flCode && !secName) continue;
 
     if (!secName) {
       errors.push(`Sections & Cubicles (Row ${r}): Section Name is required.`);
       continue;
+    }
+
+    // If flCode is formula reference e.g. =Floors!B2
+    if (flCode.startsWith('=')) {
+      const match = flCode.match(/B(\d+)/i);
+      if (match) {
+        const flRowIdx = parseInt(match[1], 10) - 2;
+        if (flRowIdx >= 0 && flRowIdx < floorsList.length) {
+          flCode = floorsList[flRowIdx].code;
+        }
+      }
     }
 
     let floorEntry = flCode ? floorsMap.get(flCode.toLowerCase()) : null;
@@ -1587,34 +1655,39 @@ export async function parseAndValidateBranchFloorPlan(
       continue;
     }
 
+    const stdCount = isNaN(standardDeskCount) ? 0 : standardDeskCount;
+    const hdmiCount = isNaN(hdmiDeskCount) ? 0 : hdmiDeskCount;
+
     if (isNaN(standardDeskCount) || standardDeskCount < 0) {
       errors.push(`Sections & Cubicles (Row ${r}): Standard Cubicles must be a non-negative number.`);
     }
     if (isNaN(hdmiDeskCount) || hdmiDeskCount < 0) {
       errors.push(`Sections & Cubicles (Row ${r}): HDMI Cubicles must be a non-negative number.`);
-    } else if (hdmiDeskCount > standardDeskCount) {
+    } else if (hdmiCount > stdCount) {
       errors.push(
-        `Sections & Cubicles (Row ${r}): HDMI Cubicles (${hdmiDeskCount}) cannot exceed Standard Cubicles (${standardDeskCount}).`
+        `Sections & Cubicles (Row ${r}): HDMI Cubicles (${hdmiCount}) cannot exceed Standard Cubicles (${stdCount}).`
       );
     }
 
     const hasMeetingRoom =
       hasMeetingRoomRaw === 'yes' || hasMeetingRoomRaw === 'true' || hasMeetingRoomRaw === '1';
+    const mrCap = isNaN(meetingRoomCapacity) ? 0 : meetingRoomCapacity;
+    const mrHdmi = isNaN(meetingRoomHdmi) ? 0 : meetingRoomHdmi;
 
     if (hasMeetingRoom) {
-      if (isNaN(meetingRoomCapacity) || meetingRoomCapacity <= 0) {
+      if (mrCap <= 0) {
         errors.push(
           `Sections & Cubicles (Row ${r}): Meeting Room is set to 'Yes', but Meeting Room Capacity is missing or 0. Please specify capacity >= 1.`
         );
-      } else if (meetingRoomHdmi > meetingRoomCapacity) {
+      } else if (mrHdmi > mrCap) {
         errors.push(
-          `Sections & Cubicles (Row ${r}): Meeting Room HDMI (${meetingRoomHdmi}) cannot exceed Meeting Room capacity (${meetingRoomCapacity}).`
+          `Sections & Cubicles (Row ${r}): Meeting Room HDMI (${mrHdmi}) cannot exceed Meeting Room capacity (${mrCap}).`
         );
       }
     } else {
-      if (meetingRoomCapacity > 0) {
+      if (mrCap > 0) {
         errors.push(
-          `Sections & Cubicles (Row ${r}): Meeting Room is 'No', but meeting room capacity (${meetingRoomCapacity}) was entered. Please clear Column G or set Meeting Room to 'Yes'.`
+          `Sections & Cubicles (Row ${r}): Meeting Room is 'No', but meeting room capacity (${mrCap}) was entered. Please clear Column G or set Meeting Room to 'Yes'.`
         );
       }
     }
@@ -1622,11 +1695,11 @@ export async function parseAndValidateBranchFloorPlan(
     floorEntry.sections.push({
       name: secName,
       direction: ['NORTH', 'SOUTH', 'EAST', 'WEST'].includes(direction) ? direction : 'NORTH',
-      standardDeskCount: Math.max(0, isNaN(standardDeskCount) ? 0 : standardDeskCount),
-      hdmiDeskCount: Math.max(0, isNaN(hdmiDeskCount) ? 0 : hdmiDeskCount),
+      standardDeskCount: Math.max(0, stdCount),
+      hdmiDeskCount: Math.max(0, hdmiCount),
       hasMeetingRoom,
-      meetingRoomCapacity: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomCapacity) ? 0 : meetingRoomCapacity) : 0,
-      meetingRoomHdmi: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomHdmi) ? 0 : meetingRoomHdmi) : 0,
+      meetingRoomCapacity: hasMeetingRoom ? Math.max(0, mrCap) : 0,
+      meetingRoomHdmi: hasMeetingRoom ? Math.max(0, mrHdmi) : 0,
     });
   }
 
