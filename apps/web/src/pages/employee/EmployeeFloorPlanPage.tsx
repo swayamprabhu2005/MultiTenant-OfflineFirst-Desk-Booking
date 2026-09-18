@@ -632,7 +632,11 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       : 'grid grid-cols-1 gap-4';
 
   const deskHeightClass =
-    numColumns >= 4 ? 'min-h-[72px] sm:min-h-[80px]' : 'min-h-[82px] sm:min-h-[92px]';
+    numColumns >= 5
+      ? 'min-h-[58px] sm:min-h-[64px]'
+      : numColumns >= 3
+      ? 'min-h-[64px] sm:min-h-[70px]'
+      : 'min-h-[70px] sm:min-h-[76px]';
 
   const renderPod = (podIdx: number, title: string) => {
     const podDesks = podClusters[podIdx] || [];
@@ -700,69 +704,53 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                     openDeskInspector({ ...desk, hasHdmi });
                   }
                 }}
-                className={`group relative rounded-xl border-2 p-2 flex flex-col justify-between transition-all cursor-pointer text-left ${deskHeightClass} ${
+                className={`group relative rounded-xl border-2 p-1.5 flex flex-col items-center justify-between transition-all cursor-pointer text-center overflow-hidden min-w-0 ${deskHeightClass} ${
                   isSelected
                     ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-400 shadow-sm'
                     : isMine
-                    ? 'border-blue-500 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-600'
+                    ? 'border-blue-500 bg-blue-50/80 hover:bg-blue-100 hover:border-blue-600 text-blue-900'
                     : isAvailable
-                    ? 'border-emerald-300 bg-emerald-50/60 hover:bg-emerald-100/80 hover:border-emerald-500 shadow-2xs'
-                    : 'border-red-300 bg-red-50/70 hover:bg-red-100/80 hover:border-red-400'
+                    ? 'border-emerald-300 bg-emerald-50/60 hover:bg-emerald-100/80 hover:border-emerald-500 text-emerald-900 shadow-2xs'
+                    : 'border-red-300 bg-red-50/70 hover:bg-red-100/80 hover:border-red-400 text-red-900'
                 }`}
               >
-                <div className="flex items-center justify-between w-full">
-                  <span
-                    className={`font-mono text-[11px] sm:text-xs font-black tracking-tight shrink-0 whitespace-nowrap ${
-                      isSelected
-                        ? 'text-purple-900'
-                        : isMine
-                        ? 'text-blue-900'
-                        : isAvailable
-                        ? 'text-emerald-900'
-                        : 'text-red-900'
-                    }`}
-                  >
+                {/* Line 1: Cubicle Code */}
+                <div className="w-full flex items-center justify-center">
+                  <span className="font-mono text-[11px] font-black tracking-tight text-center truncate">
                     {desk.deskCode}
                   </span>
-
-                  <div className="flex items-center space-x-1">
-                    {hasHdmi && (
-                      <span
-                        title="HDMI Equipped Monitor"
-                        className="p-0.5 rounded bg-white/80 border border-slate-200 text-slate-700 flex-shrink-0"
-                      >
-                        <Monitor className="w-3 h-3 text-emerald-600" />
-                      </span>
-                    )}
-                    {isBulkMode && isAvailable && (
-                      <span className="text-purple-600">
-                        {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
-                      </span>
-                    )}
-                  </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-1 text-[10px] font-semibold">
-                  {isMine ? (
-                    <span className="text-blue-700 flex items-center space-x-0.5 font-bold">
-                      <span>Your Desk</span>
-                    </span>
-                  ) : isAvailable ? (
-                    <span className="text-emerald-700 flex items-center space-x-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      <span>Available</span>
-                    </span>
-                  ) : (
-                    <span
-                      className="text-red-700 flex items-center space-x-0.5 truncate max-w-[100px]"
-                      title={`Booked on ${bookingCount} day(s) in selected range. Click to inspect days.`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                      <span className="truncate">
-                        {bookingCount > 1 ? `Reserved (${bookingCount}d)` : 'Reserved'}
-                      </span>
+                {/* Line 2: PC Station Icon / Bulk Selection Indicator */}
+                <div className="flex items-center justify-center space-x-1 h-4 my-0.5">
+                  {hasHdmi && (
+                    <span title="PC Station (HDMI Equipped Monitor)" className="text-emerald-600 flex items-center justify-center">
+                      <Monitor className="w-3.5 h-3.5" />
                     </span>
                   )}
+                  {isBulkMode && isAvailable && (
+                    <span className="text-purple-600 flex items-center justify-center">
+                      {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
+                    </span>
+                  )}
+                  {!hasHdmi && (!isBulkMode || !isAvailable) && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  )}
+                </div>
+
+                {/* Line 3: Standardized Status Label */}
+                <div className="w-full flex items-center justify-center">
+                  <span
+                    className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
+                      isMine
+                        ? 'text-blue-700'
+                        : isAvailable
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
+                    }`}
+                  >
+                    {isMine ? 'Your Desk' : isAvailable ? 'Free' : 'Booked'}
+                  </span>
                 </div>
               </button>
             );

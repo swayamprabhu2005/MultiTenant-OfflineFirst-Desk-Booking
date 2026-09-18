@@ -772,10 +772,10 @@ export const FloorPlansPage: React.FC = () => {
 
   const deskHeightClass =
     numColumns >= 5
-      ? 'h-11 sm:h-12'
+      ? 'min-h-[58px] sm:min-h-[64px]'
       : numColumns >= 3
-      ? 'h-13 sm:h-14'
-      : 'h-15 sm:h-16';
+      ? 'min-h-[64px] sm:min-h-[70px]'
+      : 'min-h-[70px] sm:min-h-[76px]';
 
   const renderPod = (podIdx: number, title: string) => {
     const podDesks = podClusters[podIdx] || [];
@@ -802,7 +802,6 @@ export const FloorPlansPage: React.FC = () => {
             const isAvailable = !isBooked;
             const isSelected = activeDesk?.id === desk.id;
             const isMassSelected = selectedDeskIds.includes(desk.id);
-            const bookedUser = activeBooking?.user || activeBooking?.bookedByUser;
             return (
               <button
                 key={desk.id}
@@ -817,7 +816,7 @@ export const FloorPlansPage: React.FC = () => {
                     openDeskInspector({ ...desk, hasHdmi });
                   }
                 }}
-                className={`${deskHeightClass} rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
+                className={`${deskHeightClass} rounded-xl border-2 font-bold p-1.5 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs overflow-hidden min-w-0 ${
                   isMassSelected
                     ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
                     : isSelected
@@ -829,28 +828,36 @@ export const FloorPlansPage: React.FC = () => {
                     : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
               >
-                <div className="flex items-center justify-between w-full px-0.5">
-                  <span className="text-[11px] font-black shrink-0 whitespace-nowrap">{desk.deskCode}</span>
-                  {hasHdmi && (
+                {/* Line 1: Cubicle Code */}
+                <div className="w-full flex items-center justify-center">
+                  <span className="text-[11px] font-mono font-black tracking-tight text-center truncate">
+                    {desk.deskCode}
+                  </span>
+                </div>
+
+                {/* Line 2: PC Station Icon / Standard workstation dot */}
+                <div className="flex items-center justify-center h-4 my-0.5">
+                  {hasHdmi ? (
                     <span
                       title="PC Station (HDMI Equipped Monitor)"
-                      className="p-0.5 rounded bg-white/80 border border-slate-200 text-slate-700 flex-shrink-0"
+                      className="text-emerald-600 flex items-center justify-center"
                     >
-                      <Monitor className="w-3 h-3 text-emerald-600" />
+                      <Monitor className="w-3.5 h-3.5" />
                     </span>
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                   )}
                 </div>
-                <div className="w-full flex items-center justify-between px-0.5">
-                  {bookedUser ? (
-                    <span className="text-[9px] font-black text-red-700 truncate max-w-[85px]" title={`Reserved by ${bookedUser.name} (${activeBooking?.slotType.replace('_', ' ')})`}>
-                      {bookedUser.name.split(' ')[0]}
-                    </span>
-                  ) : isBooked ? (
-                    <span className="text-[9px] font-black text-red-700">Reserved</span>
-                  ) : (
-                    <span className="text-[9px] font-semibold text-emerald-700">Free</span>
-                  )}
-                  {!hasHdmi && <span className="text-[7.5px] text-slate-400 font-mono">STD</span>}
+
+                {/* Line 3: Standardized Status Label */}
+                <div className="w-full flex items-center justify-center">
+                  <span
+                    className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
+                      isBooked ? 'text-red-700' : 'text-emerald-700'
+                    }`}
+                  >
+                    {isBooked ? 'Booked' : 'Free'}
+                  </span>
                 </div>
               </button>
             );
