@@ -894,7 +894,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Team Pod Mode Button */}
+            {/* Mass Booking Mode Button */}
             <button
               type="button"
               onClick={() => {
@@ -910,10 +910,10 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400'
                   : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'
               }`}
-              title="Toggle multi-desk selection mode for team sprints"
+              title="Toggle multi-cubicle selection mode for mass bookings"
             >
               <Zap className="w-3.5 h-3.5" />
-              <span>{isBulkMode ? 'Exit Team Mode' : '⚡ Team Pod Mode'}</span>
+              <span>{isBulkMode ? 'Exit Mass Mode' : '⚡ Mass Booking Mode'}</span>
               {bulkSelectedDesks.length > 0 && (
                 <span className="w-5 h-5 rounded-full bg-white text-purple-700 text-[10px] font-black flex items-center justify-center ml-0.5 shadow-xs">
                   {bulkSelectedDesks.length}
@@ -1647,7 +1647,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Configure Team Pod ({bulkSelectedDesks.length})</span>
+              <span>Configure Mass Booking ({bulkSelectedDesks.length})</span>
             </button>
             <button
               type="button"
@@ -1660,7 +1660,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
         </div>
       )}
 
-      {/* Team Pod Bulk Confirmation Modal */}
+      {/* Mass Booking Bulk Confirmation Modal */}
       {isBulkModalOpen &&
         createPortal(
           <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
@@ -1668,7 +1668,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
                   <Zap className="w-4 h-4 text-purple-600" />
-                  <span>Confirm Team Pod Reservation</span>
+                  <span>Confirm Mass Workstation Booking</span>
                 </h3>
                 <button
                   type="button"
@@ -1680,7 +1680,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
               </div>
 
               <p className="text-xs text-slate-500">
-                You are about to reserve <span className="font-bold text-slate-800">{bulkSelectedDesks.length} workstations</span> for your team sprint on <span className="font-bold text-slate-800">{startDate}</span>.
+                You are about to reserve <span className="font-bold text-slate-800">{bulkSelectedDesks.length} workstations</span> on <span className="font-bold text-slate-800">{startDate}</span>.
               </p>
 
               <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
@@ -1696,13 +1696,13 @@ export const EmployeeFloorPlanPage: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                  Team Sprint Notes / Project
+                  Project / Workshop Purpose (Required)
                 </label>
                 <input
                   type="text"
                   value={bulkNotes}
                   onChange={(e) => setBulkNotes(e.target.value)}
-                  placeholder="e.g. Backend Architecture Sprint"
+                  placeholder="e.g. Cross-Functional Architecture Workshop"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
                 />
               </div>
@@ -1721,7 +1721,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                   onClick={handleConfirmBulkReservation}
                   className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1.5"
                 >
-                  {isSubmittingBulk ? <span>Reserving...</span> : <span>Confirm Pod Booking</span>}
+                  {isSubmittingBulk ? <span>Reserving...</span> : <span>Confirm Mass Booking</span>}
                 </button>
               </div>
             </div>
