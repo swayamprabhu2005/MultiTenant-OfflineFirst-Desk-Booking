@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { OfficePresenceModal } from '../../components/OfficePresenceModal';
 import {
   Calendar,
   Clock,
@@ -781,6 +782,9 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 </span>
               )}
             </button>
+
+            {/* Who is in Office Presence Trigger */}
+            <OfficePresenceModal branchId={selectedBranchId} triggerVariant="button" />
           </div>
         </div>
 

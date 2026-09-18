@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTenant } from "../../context/TenantContext";
 import { fetchApi } from "../../services/api";
+import { OfficePresenceModal } from "../OfficePresenceModal";
 import {
   Monitor,
   Calendar,
@@ -195,6 +196,7 @@ export const EmployeeDashboard: React.FC = () => {
 
         {/* Quick CTA Actions */}
         <div className="flex flex-wrap items-center gap-3">
+          <OfficePresenceModal branchId={data?.branch?.id} triggerVariant="button" />
           <Link
             to="/employee/floor-plan"
             style={{ backgroundColor: orgColor }}

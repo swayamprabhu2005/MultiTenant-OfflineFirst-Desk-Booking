@@ -279,6 +279,162 @@ router.get("/branch-metrics", authMiddleware, async (req: AuthenticatedRequest, 
 });
 
 /**
+ * GET /api/employee/office-presence
+ * Live in-office presence for the current calendar day strictly scoped to the user's branch
+ */
+router.get("/office-presence", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const user = req.user!;
+    const requestedBranchId = (req.query.branchId as string)?.trim();
+
+    // Security Check: Enforce strict branch scoping for EMPLOYEE and BRANCH_ADMIN
+    const userAssignedBranchId = user.scopedBranchId || user.baseBranchId;
+    if (["EMPLOYEE", "BRANCH_ADMIN"].includes(user.role)) {
+      if (requestedBranchId && userAssignedBranchId && requestedBranchId !== userAssignedBranchId) {
+        return res.status(403).json({ error: "Access restricted: You can only view presence for your assigned branch facility." });
+      }
+    }
+
+    const branch = await resolveEmployeeBranch(req);
+    if (!branch) {
+      return res.status(404).json({ error: "Branch facility not found." });
+    }
+
+    // Compute start and end of current day in local server calendar
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    // Find all confirmed bookings in this branch today
+    const bookingsToday = await prisma.booking.findMany({
+      where: {
+        organizationId: orgId,
+        status: "CONFIRMED",
+        startTime: { lte: endOfToday },
+        endTime: { gte: startOfToday },
+        desk: {
+          section: {
+            floor: {
+              building: {
+                branchId: branch.id,
+              },
+            },
+          },
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            department: true,
+            role: true,
+          },
+        },
+        bookedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        desk: {
+          include: {
+            section: {
+              include: {
+                floor: {
+                  include: {
+                    building: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { desk: { deskCode: "asc" } },
+        { startTime: "asc" },
+      ],
+    });
+
+    // Format colleague presence list
+    const presenceList = bookingsToday.map((b) => ({
+      bookingId: b.id,
+      user: {
+        id: b.user.id,
+        name: b.user.name,
+        email: b.user.email,
+        department: b.user.department || "General Staff",
+        role: b.user.role,
+        isCurrentUser: b.user.id === user.id,
+      },
+      bookedBy: b.bookedByUser && b.bookedByUser.id !== b.user.id ? {
+        id: b.bookedByUser.id,
+        name: b.bookedByUser.name,
+        email: b.bookedByUser.email,
+      } : null,
+      desk: {
+        id: b.desk.id,
+        deskCode: b.desk.deskCode,
+        hasHdmi: b.desk.hasHdmi,
+        isMeetingRoom: b.desk.isMeetingRoom,
+      },
+      location: {
+        buildingId: b.desk.section.floor.building.id,
+        buildingName: b.desk.section.floor.building.name,
+        floorId: b.desk.section.floor.id,
+        floorCode: b.desk.section.floor.code,
+        floorName: b.desk.section.floor.name,
+        sectionId: b.desk.section.id,
+        sectionName: b.desk.section.name,
+        direction: b.desk.section.direction,
+      },
+      slotType: b.slotType,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      notes: b.notes,
+    }));
+
+    // Unique headcount
+    const uniqueUserIds = new Set(presenceList.map((p) => p.user.id));
+    const totalPresent = uniqueUserIds.size;
+
+    // Aggregations for filter pills
+    const departmentCounts: Record<string, number> = {};
+    const floorCounts: Record<string, number> = {};
+
+    for (const p of presenceList) {
+      const dept = p.user.department || "General Staff";
+      departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+      const flName = p.location.floorName || p.location.floorCode;
+      floorCounts[flName] = (floorCounts[flName] || 0) + 1;
+    }
+
+    return res.json({
+      success: true,
+      branch: {
+        id: branch.id,
+        name: branch.name,
+        code: branch.code,
+      },
+      date: todayDateStr,
+      totalPresent,
+      departmentCounts,
+      floorCounts,
+      presence: presenceList,
+    });
+  } catch (error: any) {
+    console.error("Failed to load office presence:", error);
+    return res.status(500).json({ error: error.message || "Failed to retrieve office presence." });
+  }
+});
+
+
+/**
  * Slot time computer for 3 daily options:
  * FULL_DAY (9:00 - 18:00)
  * MORNING (9:00 - 13:30)

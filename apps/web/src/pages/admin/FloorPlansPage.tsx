@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { OfficePresenceModal } from '../../components/OfficePresenceModal';
 import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck } from 'lucide-react';
 
 export interface ColleagueItem {
@@ -880,6 +881,9 @@ export const FloorPlansPage: React.FC = () => {
                   )}
                 </button>
               )}
+
+              {/* Who is in Office Presence Trigger */}
+              <OfficePresenceModal branchId={selectedBranchId} triggerVariant="button" />
 
               <button
                 type="button"
