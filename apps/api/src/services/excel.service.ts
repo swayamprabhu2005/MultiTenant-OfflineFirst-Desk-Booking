@@ -1181,7 +1181,8 @@ export async function generateBranchFloorPlanTemplate(
             ];
 
       sectionsData.forEach((sec) => {
-        const r = sheetSections.getRow(secRowIdx++);
+        const rowNum = secRowIdx++;
+        const r = sheetSections.getRow(rowNum);
         r.height = 22;
         r.getCell(1).value = fl.code;
         r.getCell(2).value = sec.name;
@@ -1192,16 +1193,33 @@ export async function generateBranchFloorPlanTemplate(
         r.getCell(7).value = sec.meetingRoomCapacity || 0;
         r.getCell(8).value = sec.meetingRoomHdmi || 0;
 
+        const isEven = rowNum % 2 === 0;
+        const rowBg = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
         for (let c = 1; c <= 8; c++) {
-          r.getCell(c).font = { name: 'Segoe UI', size: 10 };
-          r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-          r.getCell(c).border = {
+          const cell = r.getCell(c);
+          cell.font = { name: 'Segoe UI', size: 10 };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.border = {
             top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
             bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
             left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
             right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
           };
         }
+
+        // Data validation dropdowns for Direction and Has Meeting Room
+        r.getCell(3).dataValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: ['"NORTH,SOUTH,EAST,WEST"'],
+        };
+        r.getCell(6).dataValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: ['"Yes,No"'],
+        };
       });
     });
   });
@@ -1441,6 +1459,24 @@ export async function parseAndValidateBranchFloorPlan(
 
     const hasMeetingRoom =
       hasMeetingRoomRaw === 'yes' || hasMeetingRoomRaw === 'true' || hasMeetingRoomRaw === '1';
+
+    if (hasMeetingRoom) {
+      if (isNaN(meetingRoomCapacity) || meetingRoomCapacity <= 0) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room is set to 'Yes', but Meeting Room Capacity is missing or 0. Please specify capacity >= 1.`
+        );
+      } else if (meetingRoomHdmi > meetingRoomCapacity) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room HDMI (${meetingRoomHdmi}) cannot exceed Meeting Room capacity (${meetingRoomCapacity}).`
+        );
+      }
+    } else {
+      if (meetingRoomCapacity > 0) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room is 'No', but meeting room capacity (${meetingRoomCapacity}) was entered. Please clear Column G or set Meeting Room to 'Yes'.`
+        );
+      }
+    }
 
     floorEntry.sections.push({
       name: secName,
