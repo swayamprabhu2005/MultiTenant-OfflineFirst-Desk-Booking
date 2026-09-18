@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import {
   cacheMyBookings,
   getCachedMyBookings,
@@ -76,6 +77,8 @@ export interface MyBookingsResponse {
 
 export const MyBookingsPage: React.FC = () => {
   const { user } = useAuth();
+  const { tenant } = useTenant();
+  const orgColor = tenant?.themeColor || user?.organization?.themeColor || '#16a34a';
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST' | 'QUEUED'>('ALL');
@@ -297,7 +300,10 @@ export const MyBookingsPage: React.FC = () => {
         <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
         <div className="space-y-2 max-w-2xl relative z-10">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold uppercase tracking-wider text-emerald-300">
+          <div
+            style={{ color: orgColor }}
+            className="inline-flex items-center space-x-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold uppercase tracking-wider"
+          >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Reservation Management</span>
           </div>
@@ -312,7 +318,8 @@ export const MyBookingsPage: React.FC = () => {
         <div className="flex items-center space-x-3 relative z-10">
           <Link
             to="/employee/floor-plan"
-            className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-lg flex items-center space-x-2 transition-all cursor-pointer"
+            style={{ backgroundColor: orgColor }}
+            className="px-5 py-3 rounded-2xl text-white text-xs font-black shadow-lg flex items-center space-x-2 hover:opacity-95 transition-all cursor-pointer"
           >
             <MapPin className="w-4 h-4" />
             <span>New Workstation Booking</span>
