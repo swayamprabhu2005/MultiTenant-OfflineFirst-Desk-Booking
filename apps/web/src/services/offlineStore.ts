@@ -4,6 +4,8 @@
  * Stores pending outbox booking transactions and caches floor plans.
  */
 
+import { fetchApi } from './api';
+
 const DB_NAME = 'deskbooking_offline_db';
 const DB_VERSION = 1;
 
@@ -249,4 +251,46 @@ function notifyOutboxUpdated() {
 
 export function isAppOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true;
+}
+
+/**
+ * Flush pending outbox transactions to the server sequentially
+ */
+export async function syncOutboxQueue(): Promise<{ synced: number; failed: number }> {
+  if (!isAppOnline()) {
+    return { synced: 0, failed: 0 };
+  }
+
+  const items = await getPendingOutboxItems();
+  if (items.length === 0) {
+    return { synced: 0, failed: 0 };
+  }
+
+  let synced = 0;
+  let failed = 0;
+
+  for (const item of items) {
+    try {
+      await updateOutboxItemStatus(item.id, 'SYNCING');
+      await fetchApi(item.endpoint, {
+        method: 'POST',
+        body: JSON.stringify(item.payload),
+      });
+      await removeOutboxItem(item.id);
+      synced++;
+    } catch (err: any) {
+      console.error(`Failed to sync outbox item ${item.id}:`, err);
+      await updateOutboxItemStatus(item.id, 'FAILED', err.message || 'Sync failed');
+      failed++;
+    }
+  }
+
+  notifyOutboxUpdated();
+  window.dispatchEvent(
+    new CustomEvent('offline-sync-completed', {
+      detail: { synced, failed, total: items.length },
+    })
+  );
+
+  return { synced, failed };
 }
