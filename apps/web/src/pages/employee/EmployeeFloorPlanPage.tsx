@@ -146,27 +146,39 @@ function formatFloorDisplayName(fl?: { name?: string; code?: string; floorNumber
   return 'Floor 1';
 }
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dStr: string): Date {
+  const [y, m, d] = dStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 function getTodayString(): string {
-  return new Date().toISOString().split('T')[0];
+  return formatLocalDate(new Date());
 }
 
 function getFutureDateString(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return formatLocalDate(d);
 }
 
 function getDatesInRange(startStr: string, endStr: string): string[] {
   const dates: string[] = [];
-  const start = new Date(startStr + 'T00:00:00');
-  const end = new Date(endStr + 'T00:00:00');
+  const start = parseLocalDate(startStr);
+  const end = parseLocalDate(endStr);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return [startStr];
   }
   const curr = new Date(start);
   let limit = 0;
   while (curr <= end && limit < 31) {
-    dates.push(curr.toISOString().split('T')[0]);
+    dates.push(formatLocalDate(curr));
     curr.setDate(curr.getDate() + 1);
     limit++;
   }
@@ -175,7 +187,7 @@ function getDatesInRange(startStr: string, endStr: string): string[] {
 
 function formatDateDisplay(dStr: string): { day: string; date: string; full: string } {
   try {
-    const d = new Date(dStr + 'T00:00:00');
+    const d = parseLocalDate(dStr);
     const day = d.toLocaleDateString('en-US', { weekday: 'short' });
     const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return { day, date, full: `${day}, ${date}` };
@@ -307,7 +319,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
     };
   }, [bookingForMode, colleagueSearch, selectedBranchId]);
 
-  // When a desk is opened in modal, compute available dates in range and preselect them
+  // When a desk is opened in modal, set defaults without pre-selecting all dates
   const openDeskInspector = (desk: EmployeeDeskItem) => {
     setActiveDesk(desk);
     setBookingForMode('SELF');
@@ -315,17 +327,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
     setColleagueSearch('');
     setBookingNotes('');
     setModalSlotType('FULL_DAY');
-
-    const rangeDates = getDatesInRange(startDate, endDate);
-    const availableDates = rangeDates.filter((dStr) => {
-      return !desk.bookings?.some((b) => {
-        const bStart = b.startTime.split('T')[0];
-        const bEnd = b.endTime.split('T')[0];
-        return dStr >= bStart && dStr <= bEnd;
-      });
-    });
-
-    setModalSelectedDates(availableDates);
+    setModalSelectedDates([]);
   };
 
   // Toggle single date in modal sub-range
@@ -724,7 +726,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                 <span className="text-xs font-bold text-slate-400">&rarr;</span>
                 <input
                   type="date"
-                  min={startDate}
+                  min={startDate || getTodayString()}
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className="bg-white text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
