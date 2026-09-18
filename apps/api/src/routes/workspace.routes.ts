@@ -4,6 +4,7 @@ import { prisma } from '../prisma';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@deskbooking/shared';
 import { generateOrgTemplate, parseAndValidateWorkspace } from '../services/excel.service';
+import { ensureMeetingRoomDesks } from './employee.routes';
 
 const router = Router();
 const upload = multer({
@@ -241,6 +242,7 @@ router.post(
 /**
  * GET /api/workspace/hierarchy
  * Returns the entire workspace hierarchy (Branch -> Building -> Floor -> Section -> Desks & Meeting Rooms)
+ * Enriched with confirmed active bookings and employee identity for accurate occupancy display
  */
 router.get(
   '/hierarchy',
@@ -248,8 +250,34 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const orgId = req.organizationId!;
+      const startDateQuery = req.query.startDate as string | undefined;
+      const endDateQuery = req.query.endDate as string | undefined;
+      const branchIdQuery = req.query.branchId as string | undefined;
+
+      // Ensure all meeting room seats exist as Desk records
+      await ensureMeetingRoomDesks(orgId);
+
+      let rangeStart: Date;
+      let rangeEnd: Date;
+
+      if (startDateQuery && endDateQuery) {
+        const sParts = startDateQuery.split('-').map(Number);
+        const eParts = endDateQuery.split('-').map(Number);
+        rangeStart = new Date(sParts[0], sParts[1] - 1, sParts[2], 0, 0, 0, 0);
+        rangeEnd = new Date(eParts[0], eParts[1] - 1, eParts[2], 23, 59, 59, 999);
+      } else {
+        const now = new Date();
+        rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 59, 999);
+      }
+
+      const branchWhere: any = { organizationId: orgId };
+      if (branchIdQuery) {
+        branchWhere.id = branchIdQuery;
+      }
+
       const branches = await prisma.branch.findMany({
-        where: { organizationId: orgId },
+        where: branchWhere,
         include: {
           buildings: {
             include: {
@@ -261,6 +289,29 @@ router.get(
                     include: {
                       desks: {
                         orderBy: { deskNumber: 'asc' },
+                        include: {
+                          bookings: {
+                            where: {
+                              status: 'CONFIRMED',
+                              startTime: { lte: rangeEnd },
+                              endTime: { gte: rangeStart },
+                            },
+                            select: {
+                              id: true,
+                              userId: true,
+                              slotType: true,
+                              startTime: true,
+                              endTime: true,
+                              notes: true,
+                              bookedByUser: {
+                                select: { id: true, name: true, email: true },
+                              },
+                              user: {
+                                select: { id: true, name: true, email: true, department: true },
+                              },
+                            },
+                          },
+                        },
                       },
                       meetingRoom: true,
                     },

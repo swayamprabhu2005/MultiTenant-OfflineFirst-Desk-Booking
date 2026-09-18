@@ -319,7 +319,7 @@ function computeSlotTimes(bookingDateStr?: string, slotType: string = 'FULL_DAY'
 /**
  * Helper to ensure meeting room seats (M-01, M-02, ...) exist as Desk records
  */
-async function ensureMeetingRoomDesks(orgId: string) {
+export async function ensureMeetingRoomDesks(orgId: string) {
   try {
     const meetingRooms = await prisma.meetingRoom.findMany({
       where: { organizationId: orgId },
