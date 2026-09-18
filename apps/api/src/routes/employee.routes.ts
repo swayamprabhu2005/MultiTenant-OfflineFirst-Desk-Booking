@@ -1102,6 +1102,9 @@ router.get('/my-bookings', authMiddleware, async (req: AuthenticatedRequest, res
     } else if (statusFilter === 'PAST') {
       whereClause.status = 'CONFIRMED';
       whereClause.endTime = { lt: now };
+    } else {
+      // Default 'ALL': Exclude cancelled bookings, show all active and historical confirmed bookings
+      whereClause.status = 'CONFIRMED';
     }
 
     const [bookings, total] = await Promise.all([

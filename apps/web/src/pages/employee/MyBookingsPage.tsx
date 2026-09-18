@@ -70,7 +70,7 @@ export const MyBookingsPage: React.FC = () => {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST' | 'CANCELLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
@@ -306,20 +306,6 @@ export const MyBookingsPage: React.FC = () => {
             }`}
           >
             Completed Past
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setStatusFilter('CANCELLED');
-              setPage(1);
-            }}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              statusFilter === 'CANCELLED'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Cancelled
           </button>
         </div>
 
