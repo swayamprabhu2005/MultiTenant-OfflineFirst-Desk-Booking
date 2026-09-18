@@ -794,9 +794,6 @@ export const EmployeeFloorPlanPage: React.FC = () => {
             </div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 mt-0.5">
               <span>Interactive Floor Plan</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                {currentSection?.name || 'Overview'}
-              </span>
             </h1>
           </div>
 
