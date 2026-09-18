@@ -1222,12 +1222,14 @@ export async function generateBranchFloorPlanTemplate(
   secHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   secHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 8; c++) {
-    secHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    secHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    secHeader.getCell(c).border = THIN_BORDER;
   }
 
   let secRowIdx = 2;
-  buildingsData.forEach((bld) => {
-    bld.floors.forEach((fl) => {
+  buildingsData.forEach((bld, bldIdx) => {
+    bld.floors.forEach((fl, flIdx) => {
+      const flCodeDefault = fl.code || `${bldIdx + 1}-FL${String(flIdx + 1).padStart(2, '0')}`;
       const sectionsData =
         fl.sections.length > 0
           ? fl.sections
@@ -1246,45 +1248,120 @@ export async function generateBranchFloorPlanTemplate(
       sectionsData.forEach((sec) => {
         const rowNum = secRowIdx++;
         const r = sheetSections.getRow(rowNum);
-        r.height = 22;
-        r.getCell(1).value = fl.code;
+        r.height = 24;
+
+        // Col A: Floor Code (Locked Grey)
+        r.getCell(1).value = flCodeDefault;
+        r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+        r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+        r.getCell(1).protection = { locked: true };
+
+        // Col B: Section Name (Editable Yellow)
         r.getCell(2).value = sec.name;
+        r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(2).protection = { locked: false };
+
+        // Col C: Direction (Yellow Dropdown)
         r.getCell(3).value = sec.direction || 'NORTH';
-        r.getCell(4).value = sec.standardDeskCount || 16;
-        r.getCell(5).value = sec.hdmiDeskCount || 8;
-        r.getCell(6).value = sec.hasMeetingRoom ? 'Yes' : 'No';
-        r.getCell(7).value = sec.meetingRoomCapacity || 0;
-        r.getCell(8).value = sec.meetingRoomHdmi || 0;
-
-        const isEven = rowNum % 2 === 0;
-        const rowBg = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
-
-        for (let c = 1; c <= 8; c++) {
-          const cell = r.getCell(c);
-          cell.font = { name: 'Segoe UI', size: 10 };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          };
-        }
-
-        // Data validation dropdowns for Direction and Has Meeting Room
+        r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
         r.getCell(3).dataValidation = {
           type: 'list',
           allowBlank: false,
           formulae: ['"NORTH,SOUTH,EAST,WEST"'],
         };
+        r.getCell(3).protection = { locked: false };
+
+        // Col D: Standard Cubicles (Editable Yellow)
+        r.getCell(4).value = sec.standardDeskCount || 16;
+        r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(4).protection = { locked: false };
+
+        // Col E: HDMI Cubicles (Editable Yellow)
+        r.getCell(5).value = sec.hdmiDeskCount || 8;
+        r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(5).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(5).protection = { locked: false };
+
+        // Col F: Has Meeting Room (Yellow Dropdown)
+        const hasMrStr = sec.hasMeetingRoom ? 'Yes' : 'No';
+        r.getCell(6).value = hasMrStr;
+        r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(6).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
         r.getCell(6).dataValidation = {
           type: 'list',
           allowBlank: false,
           formulae: ['"Yes,No"'],
         };
+        r.getCell(6).protection = { locked: false };
+
+        // Col G: Meeting Room Capacity (Dynamic Yellow when Yes, Lockout Grey when No)
+        r.getCell(7).value = sec.hasMeetingRoom ? (sec.meetingRoomCapacity || 8) : 0;
+        r.getCell(7).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: sec.hasMeetingRoom ? YELLOW_INPUT_FILL : DISABLED_GREY_FILL },
+        };
+        r.getCell(7).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: sec.hasMeetingRoom ? 'FF0F172A' : 'FF94A3B8' } };
+        r.getCell(7).protection = { locked: false };
+
+        // Col H: Meeting Room HDMI (Dynamic Yellow when Yes, Lockout Grey when No)
+        r.getCell(8).value = sec.hasMeetingRoom ? (sec.meetingRoomHdmi || 4) : 0;
+        r.getCell(8).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: sec.hasMeetingRoom ? YELLOW_INPUT_FILL : DISABLED_GREY_FILL },
+        };
+        r.getCell(8).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: sec.hasMeetingRoom ? 'FF0F172A' : 'FF94A3B8' } };
+        r.getCell(8).protection = { locked: false };
+
+        for (let c = 1; c <= 8; c++) {
+          r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+          r.getCell(c).border = THIN_BORDER;
+        }
       });
     });
+  });
+
+  // Conditional formatting on Sheet 4: Range G2:H401
+  // If Has Meeting Room is "No", grey out cells G and H automatically
+  sheetSections.addConditionalFormatting({
+    ref: 'G2:H401',
+    rules: [
+      {
+        type: 'expression',
+        priority: 1,
+        formulae: ['UPPER(TRIM($F2))="NO"'],
+        style: {
+          fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            bgColor: { argb: DISABLED_GREY_FILL },
+          },
+          font: {
+            color: { argb: 'FF94A3B8' },
+          },
+        },
+      },
+      {
+        type: 'expression',
+        priority: 2,
+        formulae: ['UPPER(TRIM($F2))="YES"'],
+        style: {
+          fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            bgColor: { argb: YELLOW_INPUT_FILL },
+          },
+          font: {
+            color: { argb: 'FF0F172A' },
+            bold: true,
+          },
+        },
+      },
+    ],
   });
 
   sheetSections.getColumn(1).width = 18;
@@ -1295,6 +1372,7 @@ export async function generateBranchFloorPlanTemplate(
   sheetSections.getColumn(6).width = 20;
   sheetSections.getColumn(7).width = 24;
   sheetSections.getColumn(8).width = 22;
+  await sheetSections.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
