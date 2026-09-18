@@ -3,6 +3,12 @@ import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { OfficePresenceModal } from '../../components/OfficePresenceModal';
+import { 
+  enqueueOutboxItem, 
+  isAppOnline, 
+  cacheFloorPlanData, 
+  getCachedFloorPlanData 
+} from '../../services/offlineStore';
 import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck } from 'lucide-react';
 
 export interface ColleagueItem {
@@ -203,7 +209,7 @@ export const FloorPlansPage: React.FC = () => {
   // Excel Floor Plan Import / Export State
   const [isExportingPlan, setIsExportingPlan] = useState(false);
   const [isImportingPlan, setIsImportingPlan] = useState(false);
-  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const floorPlanInputRef = useRef<HTMLInputElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
@@ -211,6 +217,21 @@ export const FloorPlansPage: React.FC = () => {
   const loadHierarchy = async () => {
     try {
       setLoading(true);
+      const cacheKey = `admin_hierarchy_${user?.scopedBranchId || 'all'}`;
+
+      if (!isAppOnline()) {
+        const cached = await getCachedFloorPlanData(cacheKey);
+        if (cached && cached.length > 0) {
+          setBranches(cached);
+          setActionNotice({
+            type: 'info',
+            text: 'Operating in Offline Mode — viewing cached architectural floor plan.',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
       const params = new URLSearchParams({
         startDate,
         endDate,
@@ -223,6 +244,10 @@ export const FloorPlansPage: React.FC = () => {
           : allBranches;
 
       setBranches(scopedBranches);
+
+      if (scopedBranches.length > 0) {
+        cacheFloorPlanData(cacheKey, scopedBranches);
+      }
 
       if (scopedBranches && scopedBranches.length > 0) {
         const firstBranch = scopedBranches[0];
@@ -244,6 +269,15 @@ export const FloorPlansPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to load workspace hierarchy:', err);
+      const cacheKey = `admin_hierarchy_${user?.scopedBranchId || 'all'}`;
+      const cached = await getCachedFloorPlanData(cacheKey);
+      if (cached && cached.length > 0) {
+        setBranches(cached);
+        setActionNotice({
+          type: 'info',
+          text: 'Network offline — loaded cached architectural floor plan.',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -316,21 +350,40 @@ export const FloorPlansPage: React.FC = () => {
   const handleConfirmReservation = async () => {
     if (!activeDesk || modalSelectedDates.length === 0) return;
 
+    const payload: any = {
+      deskId: activeDesk.id,
+      bookingDates: modalSelectedDates,
+      slotType: modalSlotType,
+      notes: bookingNotes.trim() || undefined,
+    };
+
+    if (bookingForMode === 'COLLEAGUE') {
+      if (!selectedColleague) {
+        setActionNotice({
+          type: 'error',
+          text: 'Please select a colleague to complete proxy reservation.',
+        });
+        return;
+      }
+      payload.colleagueUserId = selectedColleague.id;
+    }
+
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
+      setActionNotice({
+        type: 'success',
+        text: `Offline Mode: Workstation ${activeDesk.deskCode} reservation queued in Outbox. Will sync once online.`,
+      });
+      setTimeout(() => setActionNotice(null), 6000);
+      setSelectedColleague(null);
+      setColleagueSearch('');
+      setBookingNotes('');
+      setActiveDesk(null);
+      return;
+    }
+
     try {
       setIsSubmittingBooking(true);
-      const payload: any = {
-        deskId: activeDesk.id,
-        bookingDates: modalSelectedDates,
-        slotType: modalSlotType,
-        notes: bookingNotes.trim() || undefined,
-      };
-
-      if (bookingForMode === 'COLLEAGUE') {
-        if (!selectedColleague) {
-          throw new Error('Please select a colleague to complete proxy reservation.');
-        }
-        payload.colleagueUserId = selectedColleague.id;
-      }
 
       const res = await fetchApi<{ success: boolean; message: string }>('/employee/bookings', {
         method: 'POST',
@@ -351,11 +404,24 @@ export const FloorPlansPage: React.FC = () => {
       await loadHierarchy();
     } catch (err: any) {
       console.error('Failed to reserve desk:', err);
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to complete desk reservation.',
-      });
-      setTimeout(() => setActionNotice(null), 5000);
+      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
+        await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
+        setActionNotice({
+          type: 'success',
+          text: `Connection lost: Workstation ${activeDesk.deskCode} reservation saved in Outbox for auto-sync.`,
+        });
+        setTimeout(() => setActionNotice(null), 6000);
+        setSelectedColleague(null);
+        setColleagueSearch('');
+        setBookingNotes('');
+        setActiveDesk(null);
+      } else {
+        setActionNotice({
+          type: 'error',
+          text: err.message || 'Failed to complete desk reservation.',
+        });
+        setTimeout(() => setActionNotice(null), 5000);
+      }
     } finally {
       setIsSubmittingBooking(false);
     }
@@ -364,6 +430,20 @@ export const FloorPlansPage: React.FC = () => {
 
   // Handle Cancellation / Release of Reservation by Branch Admin
   const handleReleaseReservation = async (bookingId: string) => {
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+        bookingId,
+        reason: 'Released by Branch Administrator (Offline)',
+      });
+      setActionNotice({
+        type: 'success',
+        text: `Offline Mode: Release for Desk ${activeDesk?.deskCode || ''} queued in Outbox. Will sync when reconnected.`,
+      });
+      setTimeout(() => setActionNotice(null), 6000);
+      setActiveDesk(null);
+      return;
+    }
+
     try {
       setIsCancellingBooking(true);
       const res = await fetchApi<{ success: boolean; message: string }>('/employee/cancel-booking', {
@@ -385,11 +465,24 @@ export const FloorPlansPage: React.FC = () => {
       await loadHierarchy();
     } catch (err: any) {
       console.error('Failed to cancel booking:', err);
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to release workstation reservation.',
-      });
-      setTimeout(() => setActionNotice(null), 5000);
+      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
+        await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+          bookingId,
+          reason: 'Released by Branch Administrator (Offline fallback)',
+        });
+        setActionNotice({
+          type: 'success',
+          text: `Connection lost: Desk release saved in Outbox for automatic synchronization.`,
+        });
+        setTimeout(() => setActionNotice(null), 6000);
+        setActiveDesk(null);
+      } else {
+        setActionNotice({
+          type: 'error',
+          text: err.message || 'Failed to release workstation reservation.',
+        });
+        setTimeout(() => setActionNotice(null), 5000);
+      }
     } finally {
       setIsCancellingBooking(false);
     }
@@ -782,6 +875,8 @@ export const FloorPlansPage: React.FC = () => {
           className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs ${
             actionNotice.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : actionNotice.type === 'info'
+              ? 'bg-amber-50 text-amber-900 border border-amber-200'
               : 'bg-red-50 text-red-800 border border-red-200'
           }`}
         >

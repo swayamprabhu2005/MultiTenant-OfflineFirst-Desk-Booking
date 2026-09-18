@@ -3,6 +3,12 @@ import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { OfficePresenceModal } from '../../components/OfficePresenceModal';
+import { 
+  enqueueOutboxItem, 
+  isAppOnline, 
+  cacheFloorPlanData, 
+  getCachedFloorPlanData 
+} from '../../services/offlineStore';
 import {
   Calendar,
   Clock,
@@ -238,6 +244,18 @@ export const EmployeeFloorPlanPage: React.FC = () => {
 
   // Load floor plan layout with date range availability
   const loadFloorPlans = async () => {
+    const cacheKey = `employee_floorplans_${selectedBranchId || 'all'}`;
+
+    if (!isAppOnline()) {
+      const cached = await getCachedFloorPlanData(cacheKey);
+      if (cached && cached.length > 0) {
+        setBranches(cached);
+        setErrorNotice('Operating in Offline Mode — viewing cached floor plan layout.');
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setErrorNotice(null);
@@ -253,6 +271,11 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       const res = await fetchApi<FloorPlanResponse>(`/employee/floor-plans?${params.toString()}`);
       const branchList = res?.branches || [];
       setBranches(branchList);
+
+      // Cache for offline usage
+      if (branchList.length > 0) {
+        cacheFloorPlanData(cacheKey, branchList);
+      }
 
       if (branchList.length > 0) {
         const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
@@ -275,7 +298,14 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Failed to load floor plans:', err);
-      setErrorNotice(err.message || 'Unable to retrieve floor plan layout.');
+      // Fallback to cache on network failure
+      const cached = await getCachedFloorPlanData(cacheKey);
+      if (cached && cached.length > 0) {
+        setBranches(cached);
+        setErrorNotice('Network unavailable — displaying cached floor plan layout.');
+      } else {
+        setErrorNotice(err.message || 'Unable to retrieve floor plan layout.');
+      }
     } finally {
       setLoading(false);
     }
@@ -384,6 +414,24 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   const handleConfirmBulkReservation = async () => {
     if (bulkSelectedDesks.length === 0) return;
 
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('BULK_BOOKING', '/employee/bulk-bookings', {
+        deskIds: bulkSelectedDesks.map((d) => d.id),
+        bookingDate: startDate,
+        slotType: modalSlotType,
+        notes: bulkNotes.trim() || 'Team Pod Sprint Reservation',
+      });
+      setSuccessNotice(
+        `Offline Mode: Bulk reservation for ${bulkSelectedDesks.length} workstations queued locally in Outbox. Will sync once online.`
+      );
+      setTimeout(() => setSuccessNotice(null), 7000);
+      setBulkSelectedDesks([]);
+      setIsBulkModalOpen(false);
+      setIsBulkMode(false);
+      setBulkNotes('');
+      return;
+    }
+
     try {
       setIsSubmittingBulk(true);
       setErrorNotice(null);
@@ -421,23 +469,37 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   const handleConfirmReservation = async () => {
     if (!activeDesk || modalSelectedDates.length === 0) return;
 
+    const payload: any = {
+      deskId: activeDesk.id,
+      bookingDates: modalSelectedDates,
+      slotType: modalSlotType,
+      notes: bookingNotes.trim() || undefined,
+    };
+
+    if (bookingForMode === 'COLLEAGUE') {
+      if (!selectedColleague) {
+        setErrorNotice('Please search and select a colleague to complete proxy reservation.');
+        return;
+      }
+      payload.colleagueUserId = selectedColleague.id;
+    }
+
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
+      setSuccessNotice(
+        `Offline Mode: Workstation ${activeDesk.deskCode} reservation queued locally in Outbox. It will automatically synchronize once reconnected.`
+      );
+      setTimeout(() => setSuccessNotice(null), 7000);
+      setSelectedColleague(null);
+      setColleagueSearch('');
+      setBookingNotes('');
+      setActiveDesk(null);
+      return;
+    }
+
     try {
       setIsSubmittingBooking(true);
       setErrorNotice(null);
-
-      const payload: any = {
-        deskId: activeDesk.id,
-        bookingDates: modalSelectedDates,
-        slotType: modalSlotType,
-        notes: bookingNotes.trim() || undefined,
-      };
-
-      if (bookingForMode === 'COLLEAGUE') {
-        if (!selectedColleague) {
-          throw new Error('Please search and select a colleague to complete proxy reservation.');
-        }
-        payload.colleagueUserId = selectedColleague.id;
-      }
 
       const res = await fetchApi<{ success: boolean; message: string }>('/employee/bookings', {
         method: 'POST',
@@ -458,7 +520,20 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       await loadFloorPlans();
     } catch (err: any) {
       console.error('Failed to reserve desk:', err);
-      setErrorNotice(err.message || 'Failed to complete desk reservation.');
+      // If network failed during submit, fallback to outbox
+      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
+        await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
+        setSuccessNotice(
+          `Connection interrupted: Workstation ${activeDesk.deskCode} reservation saved to Outbox for automatic synchronization.`
+        );
+        setTimeout(() => setSuccessNotice(null), 7000);
+        setSelectedColleague(null);
+        setColleagueSearch('');
+        setBookingNotes('');
+        setActiveDesk(null);
+      } else {
+        setErrorNotice(err.message || 'Failed to complete desk reservation.');
+      }
     } finally {
       setIsSubmittingBooking(false);
     }
@@ -466,6 +541,17 @@ export const EmployeeFloorPlanPage: React.FC = () => {
 
   // Handle Cancellation / Release of My Reservation
   const handleReleaseReservation = async (bookingId: string) => {
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+        bookingId,
+        reason: 'Released offline from workstation inspector',
+      });
+      setSuccessNotice('Offline Mode: Workstation release queued locally in Outbox. Will sync once online.');
+      setTimeout(() => setSuccessNotice(null), 6000);
+      setActiveDesk(null);
+      return;
+    }
+
     try {
       setIsCancellingBooking(true);
       setErrorNotice(null);
@@ -485,7 +571,17 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       await loadFloorPlans();
     } catch (err: any) {
       console.error('Failed to cancel booking:', err);
-      setErrorNotice(err.message || 'Failed to cancel workstation reservation.');
+      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
+        await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+          bookingId,
+          reason: 'Released offline from workstation inspector',
+        });
+        setSuccessNotice('Connection interrupted: Release request saved to Outbox for automatic sync.');
+        setTimeout(() => setSuccessNotice(null), 6000);
+        setActiveDesk(null);
+      } else {
+        setErrorNotice(err.message || 'Failed to cancel workstation reservation.');
+      }
     } finally {
       setIsCancellingBooking(false);
     }
