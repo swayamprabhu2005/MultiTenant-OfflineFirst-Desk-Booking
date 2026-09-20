@@ -30,7 +30,9 @@ if !errorlevel! equ 0 goto start_postgres
 
 echo [INFO] Docker CLI found, but Docker engine is not active.
 echo Attempting to launch Docker Desktop...
-if exist "D:\MyPrograms\Docker\Docker Desktop.exe" (
+if exist "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe" (
+    start "" "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe"
+) else if exist "D:\MyPrograms\Docker\Docker Desktop.exe" (
     start "" "D:\MyPrograms\Docker\Docker Desktop.exe"
 ) else if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
     start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"

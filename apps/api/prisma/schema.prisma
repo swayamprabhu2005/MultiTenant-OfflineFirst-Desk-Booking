@@ -15,6 +15,20 @@ enum Role {
   EMPLOYEE
 }
 
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+
 model Organization {
   id         String       @id @default(uuid())
   name       String
@@ -36,6 +50,7 @@ model Organization {
   users                       User[]
   auditLogs                   AuditLog[]
   bookings                    Booking[]
+  issueReports                IssueReport[]
 }
 
 model Branch {
@@ -98,6 +113,8 @@ model User {
   auditLogs          AuditLog[]
   bookings           Booking[]
   proxyBookingsMade  Booking[]    @relation("BookedByProxy")
+  issueReports       IssueReport[] @relation("IssueReporter")
+  resolvedIssues     IssueReport[] @relation("IssueResolver")
 }
 
 model AuditLog {
@@ -196,5 +213,35 @@ model Booking {
   @@index([deskId, startTime, endTime, status])
   @@index([userId, status, startTime])
   @@index([organizationId, createdAt])
+}
+
+model IssueReport {
+  id             String        @id @default(uuid())
+  title          String
+  description    String
+  category       String?       @default("GENERAL")
+  priority       IssuePriority @default(MEDIUM)
+  screenshotUrl  String?
+  clientVersion  String?       @default("1.0.0")
+  deviceInfo     String?
+  systemDiagnostics Json?
+  status         IssueStatus   @default(OPEN)
+  resolutionNote String?
+
+  reporterId     String
+  reporter       User          @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  resolvedById   String?
+  resolvedBy     User?         @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId, status])
+  @@index([reporterId])
+  @@index([status, createdAt])
 }
 

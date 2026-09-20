@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  Project: Multi-Tenant Desk Booking & SaaS Control Plane
+  Architecture: Monorepo managed via PNPM Workspaces (apps/api, apps/web, packages/shared, templates)
+  Tech Stack:
+    - Backend API: Node.js, Express, TypeScript, Prisma ORM, PostgreSQL 15 / SQLite (Port 4000)
+    - Frontend Web: React 18, Vite 5, TypeScript 5, Tailwind CSS 3, Lucide React (Port 3000)
+    - Persistence: PostgreSQL 15 / SQLite with 10 relational models (Organization, Branch, Building, Floor, Section, Desk, MeetingRoom, User, Booking, AuditLog)
+    - Offline Engine: IndexedDB (desk_booking_offline_db), Outbox Queue, Network Restoration Listeners, Background Sync Engine
+    - Ingestion: JSZip (in-place XML injection), ExcelJS (multi-sheet generation, dynamic uppercase formulas), Multer (10MB limit)
+    - Security: JWT Bearer (7d), Bcrypt (10 rounds), Helmet, Express Rate Limit (500 req / 15 min)
+  Key Architectural Rules & Constraints:
+    - STRICT NO-SVG Mandate: All 2D floor plans, walls, corridors, and cubicle pods must use Pure React, semantic HTML5 <div> elements, CSS Grid, and Tailwind CSS. Zero <svg>, <path>, or vector graphics.
+    - Fixed 100% Native Scale: Complete elimination of manual zoom controls and CSS scale transforms across all floor plans to guarantee crisp, clipping-free rendering across all viewports.
+    - Offline-First Resilience: All booking and cancellation mutations while disconnected intercept into IndexedDB Outbox and automatically synchronize upon network recovery.
+    - Symmetrical 4-Desk Pod Clusters: Standard cubicles are grouped into 2-facing-2 pod clusters with balanced HDMI distribution. Meeting rooms seats (M-01 to M-10) are excluded from pod recalculation and independently bookable.
+    - 3-Color Contextual Booking Parity: Workstation states render consistently across authenticated roles (Emerald = Available, Blue = Your Active Desk, Rose = Booked by Others, Amber = Sync Pending).
+    - Dynamic Cascading Excel Formulas: Worksheets are linked via uppercase Excel formulas (=UPPER(TRIM(...)), =IF(...), =VLOOKUP(...)) with read-only instructions and conditional meeting room lockout.
+    - Strict 7-Day Sliding Window: Availability schedule matrices render strictly 7 consecutive days with < and > week navigation arrows.
+    - Multi-Workstation Mass Booking Modal: Bulk reservations require interactive modal confirmation, cubicle badge chips removal, multi-desk conflict detection, and single-day selection constraint.
+    - Dedicated Branch Admin Lifecycle: Employee roster page is dedicated exclusively to branch administrators with instant rollback upon deletion.
+    - Global Org Admin Governance: Global Organization Administrators operate in read-only mode on physical floor plans with view-only workstation inspector dialogs and backdrop click dismissal.
+    - Automated Luminance Contrast: Y = 0.299*R + 0.587*G + 0.114*B (threshold 145) controls dark vs light theme contrast across organization branding.

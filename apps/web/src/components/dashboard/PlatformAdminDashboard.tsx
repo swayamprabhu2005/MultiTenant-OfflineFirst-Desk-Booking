@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { 
   Building2, ShieldCheck, Clock, Trash2, AlertTriangle, 
-  CheckCircle2, X, Search, Users, AlertCircle 
+  CheckCircle2, X, Search, Users, AlertCircle, ShieldAlert 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const PlatformAdminDashboard: React.FC = () => {
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [issueStats, setIssueStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -22,12 +23,14 @@ export const PlatformAdminDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [orgs, logs] = await Promise.all([
+      const [orgs, logs, stats] = await Promise.all([
         fetchApi<any[]>('/organizations'),
-        fetchApi<any[]>('/audit')
+        fetchApi<any[]>('/audit'),
+        fetchApi<any>('/issues/stats').catch(() => ({ total: 0, open: 0, inProgress: 0, resolved: 0 })),
       ]);
       setOrganizations(Array.isArray(orgs) ? orgs : []);
       setAuditLogs(Array.isArray(logs) ? logs : []);
+      setIssueStats(stats);
     } catch (err: any) {
       console.error('Failed to load platform admin dashboard data:', err);
       setErrorMsg('Failed to load organizations or audit logs');
@@ -227,12 +230,66 @@ export const PlatformAdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel: Registration Audit Logs */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
-          <div className="flex items-center space-x-2 border-b pb-3 mb-4">
-            <ShieldCheck className="w-5 h-5 text-slate-600" />
-            <h3 className="text-sm font-black text-slate-800">Registration &amp; Lifecycle Audit</h3>
+        {/* Right Panel: Issue Reports & Registration Audit Logs */}
+        <div className="space-y-4">
+          
+          {/* Issue Reports Control Plane Widget */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl border border-indigo-900/40 p-5 text-white shadow-md">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-indigo-500/20 border border-indigo-400/30 rounded-lg text-indigo-300">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <h3 className="text-xs font-bold tracking-tight text-white uppercase">
+                  Platform Issues Stream
+                </h3>
+              </div>
+              {issueStats.open > 0 ? (
+                <span className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-500/30 border border-rose-400/40 text-rose-300 text-[10px] font-extrabold animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                  <span>{issueStats.open} PENDING</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold">
+                  HEALTHY
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-relaxed mb-4">
+              Cross-tenant escalation queue. Employees and administrators report system glitches, reservation failures, and facility problems here.
+            </p>
+
+            <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-950/50 p-2.5 rounded-xl border border-white/10 text-center">
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Open</p>
+                <p className="text-base font-black text-rose-400 mt-0.5">{issueStats.open}</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Investigating</p>
+                <p className="text-base font-black text-blue-400 mt-0.5">{issueStats.inProgress}</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Resolved</p>
+                <p className="text-base font-black text-emerald-400 mt-0.5">{issueStats.resolved}</p>
+              </div>
+            </div>
+
+            <Link
+              to="/admin/issues"
+              className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 shadow-md shadow-indigo-950/50"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Review &amp; Resolve Reports</span>
+            </Link>
           </div>
+
+          {/* Registration & Lifecycle Audit */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
+            <div className="flex items-center space-x-2 border-b pb-3 mb-4">
+              <ShieldCheck className="w-5 h-5 text-slate-600" />
+              <h3 className="text-sm font-black text-slate-800">Registration &amp; Lifecycle Audit</h3>
+            </div>
 
           <div className="flex-1 overflow-y-auto space-y-3.5 max-h-[480px] pr-1">
             {auditLogs.map((log: any) => (
@@ -270,6 +327,7 @@ export const PlatformAdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+    </div>
 
       {/* CONFIRMATION MODAL: DELETE ORGANIZATION */}
       {orgToDelete && createPortal(

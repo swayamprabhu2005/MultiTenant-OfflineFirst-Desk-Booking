@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import dotenv from 'dotenv';
 import { tenantMiddleware } from './middleware/tenant.middleware';
 import authRoutes from './routes/auth.routes';
@@ -14,6 +15,8 @@ import workspaceRoutes from './routes/workspace.routes';
 import branchRosterRoutes from './routes/branch-roster.routes';
 import employeeRoutes from './routes/employee.routes';
 import notificationRoutes from './routes/notification.routes';
+import issuesRoutes from './routes/issues.routes';
+import systemRoutes from './routes/system.routes';
 
 dotenv.config();
 
@@ -56,6 +59,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/organizations', orgRoutes);
@@ -67,6 +73,8 @@ app.use('/api/workspace', workspaceRoutes);
 app.use('/api/branch-roster', branchRosterRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/issues', issuesRoutes);
+app.use('/api/system', systemRoutes);
 
 // Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

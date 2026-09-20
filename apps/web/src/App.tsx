@@ -23,6 +23,7 @@ import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
 import { FloorPlansPage } from './pages/admin/FloorPlansPage';
 import { EmployeeFloorPlanPage } from './pages/employee/EmployeeFloorPlanPage';
 import { MyBookingsPage } from './pages/employee/MyBookingsPage';
+import { IssueReportsPage } from './pages/admin/IssueReportsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +95,7 @@ export const App: React.FC = () => {
               >
                 <Route index element={<DashboardRoute />} />
                 <Route path="admin/organizations" element={<Navigate to="/" replace />} />
+                <Route path="admin/issues" element={<IssueReportsPage />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />

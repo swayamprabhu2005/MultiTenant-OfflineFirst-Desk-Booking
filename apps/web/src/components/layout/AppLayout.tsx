@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { ToastContainer } from '../common/Toast';
 import { ErrorBoundary } from '../common/ErrorBoundary';
+import { ReportIssueButton } from '../issues/ReportIssueButton';
 
 export const AppLayout: React.FC = () => {
   return (
@@ -18,6 +19,9 @@ export const AppLayout: React.FC = () => {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* Global Floating Issue Report Trigger */}
+      <ReportIssueButton />
 
       <ToastContainer />
     </div>
