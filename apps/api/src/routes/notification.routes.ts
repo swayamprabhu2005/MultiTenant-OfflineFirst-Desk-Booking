@@ -60,6 +60,23 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
             },
           },
         },
+        meetingRoom: {
+          include: {
+            section: {
+              include: {
+                floor: {
+                  include: {
+                    building: {
+                      include: {
+                        branch: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         user: { select: { id: true, name: true, email: true } },
         bookedByUser: { select: { id: true, name: true, email: true } },
       },
@@ -70,9 +87,10 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     for (const b of bookings) {
       const isProxyForMe = b.bookedByUserId && b.bookedByUserId !== user.id && b.userId === user.id;
       const isProxyMadeByMe = b.bookedByUserId === user.id && b.userId !== user.id;
-      const deskCode = b.desk.deskCode;
-      const branchName = b.desk.section.floor.building.branch.name;
-      const sectionName = b.desk.section.name;
+      const resourceLabel = b.meetingRoom ? `Meeting Room ${b.meetingRoom.name}` : `Workstation ${b.desk?.deskCode || 'N/A'}`;
+      const deskCode = b.desk?.deskCode || b.meetingRoom?.name || 'N/A';
+      const branchName = b.desk?.section?.floor?.building?.branch?.name || b.meetingRoom?.section?.floor?.building?.branch?.name || 'Facility';
+      const sectionName = b.desk?.section?.name || b.meetingRoom?.section?.name || 'Main Area';
       const dateStr = b.startTime.toISOString().split('T')[0];
 
       if (b.status === 'CANCELLED') {
@@ -80,7 +98,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
           id: `cancelled-${b.id}`,
           type: 'BOOKING_CANCELLED',
           title: 'Reservation Released',
-          message: `Reservation for Workstation ${deskCode} (${sectionName}, ${branchName}) on ${dateStr} was released.`,
+          message: `Reservation for ${resourceLabel} (${sectionName}, ${branchName}) on ${dateStr} was released.`,
           timestamp: b.updatedAt.toISOString(),
           read: b.updatedAt.toISOString() <= lastReadTimestamp,
           metadata: { bookingId: b.id, deskCode, branchName, date: dateStr },
@@ -89,8 +107,8 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
         notifications.push({
           id: `proxy-recv-${b.id}`,
           type: 'PROXY_BOOKING',
-          title: 'Workstation Reserved on Your Behalf',
-          message: `${b.bookedByUser?.name || 'A colleague'} reserved Workstation ${deskCode} in ${branchName} for you on ${dateStr}.`,
+          title: 'Resource Reserved on Your Behalf',
+          message: `${b.bookedByUser?.name || 'A colleague'} reserved ${resourceLabel} in ${branchName} for you on ${dateStr}.`,
           timestamp: b.createdAt.toISOString(),
           read: b.createdAt.toISOString() <= lastReadTimestamp,
           metadata: { bookingId: b.id, bookedBy: b.bookedByUser?.name, deskCode, branchName, date: dateStr },
@@ -100,7 +118,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
           id: `proxy-made-${b.id}`,
           type: 'BOOKING_CONFIRMED',
           title: 'Proxy Reservation Confirmed',
-          message: `Successfully reserved Workstation ${deskCode} for ${b.user.name} in ${branchName} on ${dateStr}.`,
+          message: `Successfully reserved ${resourceLabel} for ${b.user.name} in ${branchName} on ${dateStr}.`,
           timestamp: b.createdAt.toISOString(),
           read: b.createdAt.toISOString() <= lastReadTimestamp,
           metadata: { bookingId: b.id, targetUser: b.user.name, deskCode, branchName, date: dateStr },
@@ -109,8 +127,8 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
         notifications.push({
           id: `booking-${b.id}`,
           type: 'BOOKING_CONFIRMED',
-          title: 'Workstation Booking Confirmed',
-          message: `Your reservation for Workstation ${deskCode} (${sectionName}, ${branchName}) on ${dateStr} is confirmed.`,
+          title: 'Booking Confirmed',
+          message: `Your reservation for ${resourceLabel} (${sectionName}, ${branchName}) on ${dateStr} is confirmed.`,
           timestamp: b.createdAt.toISOString(),
           read: b.createdAt.toISOString() <= lastReadTimestamp,
           metadata: { bookingId: b.id, deskCode, branchName, date: dateStr },

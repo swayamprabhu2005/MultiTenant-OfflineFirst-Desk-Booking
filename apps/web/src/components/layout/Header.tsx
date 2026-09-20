@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
-import { LogOut, UserCheck, Shield, Cpu } from 'lucide-react';
+import { LogOut, UserCheck, Shield } from 'lucide-react';
 import { NotificationBell } from '../NotificationBell';
-import { SystemDiagnosticsModal } from '../system/SystemDiagnosticsModal';
 
 // Helper to calculate relative brightness / luminance from hex
 function isColorDark(hex: string): boolean {
@@ -19,7 +18,6 @@ function isColorDark(hex: string): boolean {
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
   const { tenant } = useTenant();
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
   const activeOrg = user?.organization || tenant;
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN' || activeOrg?.code === 'SYSTEM';
@@ -92,22 +90,6 @@ export const Header: React.FC = () => {
 
         {/* Right Actions */}
         <div className="flex items-center space-x-3 sm:space-x-4">
-
-          {/* System Diagnostics Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsDiagnosticsOpen(true)}
-            title="Inspect Environment Diagnostics (Docker, OS, Database, Browsers)"
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-              isDark
-                ? 'bg-white/10 hover:bg-white/20 text-white border-white/20 shadow-xs'
-                : 'bg-white/80 hover:bg-white text-slate-800 border-black/10 shadow-2xs hover:shadow-xs'
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">System Info</span>
-          </button>
-
           {user && <NotificationBell isDarkHeader={isDark} />}
 
           {/* Profile & Logout */}
@@ -138,10 +120,10 @@ export const Header: React.FC = () => {
               <button
                 onClick={logout}
                 title="Sign Out"
-                className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                  isDark
-                    ? 'text-white/80 hover:text-white hover:bg-white/20'
-                    : 'text-slate-700 hover:text-slate-950 hover:bg-black/10'
+                className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                  isDark 
+                    ? 'hover:bg-white/20 text-white/90 hover:text-white' 
+                    : 'hover:bg-black/10 text-slate-800 hover:text-slate-950'
                 }`}
               >
                 <LogOut className="w-4 h-4" />
@@ -152,12 +134,6 @@ export const Header: React.FC = () => {
         </div>
 
       </div>
-
-      {/* In-App System Diagnostics Modal */}
-      <SystemDiagnosticsModal
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-      />
     </header>
   );
 };

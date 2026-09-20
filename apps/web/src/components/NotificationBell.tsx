@@ -12,6 +12,7 @@ import {
   MapPin 
 } from 'lucide-react';
 import { fetchApi } from '../services/api';
+import { isAppOnline } from '../services/offlineStore';
 
 export interface InAppNotification {
   id: string;
@@ -35,6 +36,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ isDarkHeader
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const loadNotifications = async () => {
+    if (!isAppOnline()) return;
     try {
       const res = await fetchApi<{ success: boolean; notifications: InAppNotification[]; unreadCount: number }>(
         '/notifications'
@@ -51,7 +53,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ isDarkHeader
   useEffect(() => {
     loadNotifications();
     const interval = setInterval(loadNotifications, 25000); // 25s polling
-    return () => clearInterval(interval);
+    const handleOnline = () => loadNotifications();
+    window.addEventListener('online', handleOnline);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   // Close on outside click

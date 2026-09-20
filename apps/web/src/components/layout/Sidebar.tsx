@@ -11,13 +11,12 @@ import {
   Palette,
   ShieldCheck,
   Calendar,
+  CalendarDays,
   Menu,
   ChevronLeft,
   ShieldAlert,
-  Cpu,
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
-import { SystemDiagnosticsModal } from '../system/SystemDiagnosticsModal';
 import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
 
 export const Sidebar: React.FC = () => {
@@ -28,10 +27,10 @@ export const Sidebar: React.FC = () => {
 
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
   const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
-  const isEmployee = user?.role === 'EMPLOYEE';
+  const isEmployee = user?.role === 'EMPLOYEE' || user?.role === 'TECH_LEAD';
+  const showOnlineStatus = isBranchAdmin || isEmployee;
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openIssuesCount, setOpenIssuesCount] = useState<number | null>(null);
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
   useEffect(() => {
     if (isPlatformAdmin) {
@@ -50,6 +49,7 @@ export const Sidebar: React.FC = () => {
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
+        { name: 'Outlook Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
       ]
     : isBranchAdmin
@@ -153,49 +153,30 @@ export const Sidebar: React.FC = () => {
 
       {/* Bottom Container: Network Status Indicator and Control Plane */}
       <div className="mt-auto pt-4 space-y-2">
-        <div className="px-1">
-          <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
-        </div>
+        {showOnlineStatus && (
+          <div className="px-1">
+            <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
+          </div>
+        )}
 
         {/* Bottom Control Plane Indicator */}
-        {!isCollapsed ? (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-2">
+        {!isCollapsed && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-1">
             <div className="font-bold text-slate-700 flex items-center justify-between">
               <span>Control Plane</span>
-              <span className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[10px] text-emerald-700 font-bold">ONLINE</span>
-              </span>
+              {showOnlineStatus && (
+                <span className="flex items-center space-x-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[10px] text-emerald-700 font-bold">ONLINE</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] leading-tight text-slate-400">
               Multi-tenant isolation &amp; dynamic white-label tokens.
             </p>
-            <button
-              type="button"
-              onClick={() => setIsDiagnosticsOpen(true)}
-              className="w-full py-1.5 px-2 bg-white hover:bg-slate-100 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-700 text-[11px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs group"
-            >
-              <Cpu className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
-              <span>System Diagnostics</span>
-            </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsDiagnosticsOpen(true)}
-            className="flex justify-center p-2 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mx-auto" 
-            title="System Diagnostics & Versions"
-          >
-            <Cpu className="w-5 h-5 text-indigo-600" />
-          </button>
         )}
       </div>
-
-      {/* In-App System Diagnostics Modal */}
-      <SystemDiagnosticsModal
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-      />
     </aside>
   );
 };

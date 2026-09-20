@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   ShieldAlert, Search, RefreshCw, AlertCircle, CheckCircle2, 
   Clock, Image as ImageIcon, Eye, Trash2, 
@@ -523,8 +524,8 @@ export const IssueReportsPage: React.FC = () => {
       </div>
 
       {/* Inspector / Resolution Modal */}
-      {selectedIssue && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+      {selectedIssue && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             
             {/* Modal Header */}
@@ -769,6 +770,12 @@ export const IssueReportsPage: React.FC = () => {
                       src={selectedIssue.screenshotUrl}
                       alt="Issue Screenshot"
                       className="object-contain max-h-56 w-full group-hover:scale-105 transition-transform duration-200"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.includes(':4000') && selectedIssue.screenshotUrl?.startsWith('/')) {
+                          target.src = `http://localhost:4000${selectedIssue.screenshotUrl}`;
+                        }
+                      }}
                     />
                     <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs space-x-1.5">
                       <Eye className="w-4 h-4" />
@@ -884,14 +891,15 @@ export const IssueReportsPage: React.FC = () => {
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Lightbox Modal for Screenshot Preview */}
-      {expandedImage && (
+      {expandedImage && createPortal(
         <div 
           onClick={() => setExpandedImage(null)}
-          className="fixed inset-0 z-60 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[10000] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
         >
           <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center">
             <button
@@ -905,9 +913,16 @@ export const IssueReportsPage: React.FC = () => {
               alt="Expanded Screenshot"
               className="max-h-[85vh] max-w-full rounded-xl object-contain border border-white/20 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.includes(':4000') && expandedImage.startsWith('/')) {
+                  target.src = `http://localhost:4000${expandedImage}`;
+                }
+              }}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -24,7 +24,11 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Helmet Security Headers
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // Rate Limiting Middleware
 const limiter = rateLimit({
@@ -43,6 +47,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Serve static uploaded screenshots and media
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(express.json({ limit: '10mb' }));
 

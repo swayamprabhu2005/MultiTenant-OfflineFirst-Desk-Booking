@@ -26,6 +26,7 @@ import {
   CheckSquare,
   Lock,
   Zap,
+  Users,
 } from 'lucide-react';
 
 export interface DeskBookingInfo {
@@ -259,6 +260,82 @@ export const EmployeeFloorPlanPage: React.FC = () => {
   const [selectedMassDate, setSelectedMassDate] = useState<string>('');
   const [massSlotType, setMassSlotType] = useState<'FULL_DAY' | 'MORNING' | 'AFTERNOON'>('FULL_DAY');
 
+  // Whole Meeting Room Reservation State
+  const [isWholeRoomModalOpen, setIsWholeRoomModalOpen] = useState<boolean>(false);
+  const [selectedMeetingRoomForBooking, setSelectedMeetingRoomForBooking] = useState<MeetingRoomItem | null>(null);
+  const [wholeRoomDate, setWholeRoomDate] = useState<string>(getTodayString());
+  const [wholeRoomStartHour, setWholeRoomStartHour] = useState<number>(10);
+  const [wholeRoomStartMinute, setWholeRoomStartMinute] = useState<number>(0);
+  const [wholeRoomDurationHours, setWholeRoomDurationHours] = useState<number>(1);
+  const [wholeRoomDurationMinutes, setWholeRoomDurationMinutes] = useState<number>(0);
+  const [wholeRoomTitle, setWholeRoomTitle] = useState<string>('');
+  const [wholeRoomAttendeesCount, setWholeRoomAttendeesCount] = useState<number>(4);
+  const [wholeRoomNotes, setWholeRoomNotes] = useState<string>('');
+  const [wholeRoomForMode, setWholeRoomForMode] = useState<'SELF' | 'COLLEAGUE'>('SELF');
+  const [wholeRoomColleagueId, setWholeRoomColleagueId] = useState<string>('');
+  const [isSubmittingWholeRoom, setIsSubmittingWholeRoom] = useState<boolean>(false);
+  const [wholeRoomError, setWholeRoomError] = useState<string | null>(null);
+
+  const handleOpenWholeRoomModal = (room: MeetingRoomItem) => {
+    setSelectedMeetingRoomForBooking(room);
+    setWholeRoomDate(startDate || getTodayString());
+    setWholeRoomStartHour(10);
+    setWholeRoomStartMinute(0);
+    setWholeRoomDurationHours(1);
+    setWholeRoomDurationMinutes(0);
+    setWholeRoomTitle(`${room.name} Session`);
+    setWholeRoomAttendeesCount(room.capacity || 4);
+    setWholeRoomNotes('');
+    setWholeRoomForMode('SELF');
+    setWholeRoomColleagueId('');
+    setWholeRoomError(null);
+    setIsWholeRoomModalOpen(true);
+  };
+
+  const handleConfirmWholeRoomBooking = async () => {
+    if (!selectedMeetingRoomForBooking) return;
+    try {
+      setIsSubmittingWholeRoom(true);
+      setWholeRoomError(null);
+
+      const totalMins = wholeRoomDurationHours * 60 + wholeRoomDurationMinutes;
+      if (totalMins < 15) {
+        throw new Error(`Meeting room reservation duration must be at least 15 minutes. Selected: ${totalMins} minutes.`);
+      }
+
+      const payload: any = {
+        meetingRoomId: selectedMeetingRoomForBooking.id,
+        bookingDate: wholeRoomDate,
+        startHour: wholeRoomStartHour,
+        startMinute: wholeRoomStartMinute,
+        durationHours: wholeRoomDurationHours,
+        durationMinutes: wholeRoomDurationMinutes,
+        title: wholeRoomTitle.trim() || `${selectedMeetingRoomForBooking.name} Reservation`,
+        attendeesCount: wholeRoomAttendeesCount || selectedMeetingRoomForBooking.capacity,
+        notes: wholeRoomNotes.trim() || undefined,
+      };
+
+      if (wholeRoomForMode === 'COLLEAGUE' && wholeRoomColleagueId) {
+        payload.colleagueUserId = wholeRoomColleagueId;
+      }
+
+      const res = await fetchApi<{ success: boolean; message: string; booking: any }>('/employee/bookings', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      setSuccessNotice(res?.message || `Successfully reserved ${selectedMeetingRoomForBooking.name}!`);
+      setTimeout(() => setSuccessNotice(null), 5000);
+      setIsWholeRoomModalOpen(false);
+      await loadFloorPlans();
+    } catch (err: any) {
+      console.error('Failed to reserve meeting room:', err);
+      setWholeRoomError(err.message || 'Failed to complete whole-room reservation.');
+    } finally {
+      setIsSubmittingWholeRoom(false);
+    }
+  };
+
   // Pending sync workstation IDs from offline outbox
   const [pendingDeskIds, setPendingDeskIds] = useState<string[]>([]);
 
@@ -310,7 +387,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       if (cached && cached.length > 0) {
         setBranches(cached);
         initHierarchySelection(cached);
-        setErrorNotice('Operating in Offline Mode — viewing cached floor plan layout.');
+        setErrorNotice(null);
         setLoading(false);
         return;
       }
@@ -345,7 +422,7 @@ export const EmployeeFloorPlanPage: React.FC = () => {
       if (cached && cached.length > 0) {
         setBranches(cached);
         initHierarchySelection(cached);
-        setErrorNotice('Network unavailable — displaying cached floor plan layout.');
+        setErrorNotice(null);
       } else {
         setErrorNotice(err.message || 'Unable to retrieve floor plan layout.');
       }
@@ -1256,6 +1333,21 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                     );
                   })}
                 </div>
+
+                {/* Book Entire Meeting Room Option */}
+                <div className="mt-3 pt-3 border-t border-purple-200/60">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenWholeRoomModal(meetingRoom)}
+                    className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-purple-700 hover:bg-purple-800 active:scale-98 text-white font-bold text-xs shadow-sm hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Reserve Entire Meeting Room</span>
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center font-medium mt-1">
+                    Custom time slot (Hours &amp; Mins) • 30-day forward horizon
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-xs italic">
@@ -1958,6 +2050,317 @@ export const EmployeeFloorPlanPage: React.FC = () => {
                         Confirm Mass Booking ({bulkSelectedDesks.length} Desks
                         {selectedMassDate ? ` on ${formatDateDisplay(selectedMassDate).date}` : ''})
                       </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* WHOLE MEETING ROOM RESERVATION MODAL */}
+      {isWholeRoomModalOpen && selectedMeetingRoomForBooking &&
+        createPortal(
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsWholeRoomModalOpen(false);
+            }}
+            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          >
+            <div className="w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200 p-6 flex flex-col space-y-4 max-h-[92vh] overflow-y-auto animate-scale-up">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-purple-700 uppercase tracking-wider block">
+                      Whole Meeting Room Reservation
+                    </span>
+                    <h3 className="text-sm font-black text-slate-900">
+                      {selectedMeetingRoomForBooking.name}
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWholeRoomModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Room Specifications Banner */}
+              <div className="flex items-center justify-between bg-purple-50/70 border border-purple-200/80 rounded-2xl p-3 text-xs">
+                <div>
+                  <span className="font-bold text-purple-900 block">Entire Conference Room</span>
+                  <span className="text-[11px] text-purple-700">
+                    Capacity: {selectedMeetingRoomForBooking.capacity} Seats {selectedMeetingRoomForBooking.hasHdmi ? '• HDMI Enabled' : ''}
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-200 text-purple-800">
+                  Full Pod Access
+                </span>
+              </div>
+
+              {/* Error Notice */}
+              {wholeRoomError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-start space-x-2">
+                  <XCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">{wholeRoomError}</div>
+                </div>
+              )}
+
+              {/* Date Selection (Strict 30-Day Forward Horizon) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Reservation Date (Today to Today + 30 Days)
+                </label>
+                <input
+                  type="date"
+                  min={getTodayString()}
+                  max={getFutureDateString(30)}
+                  value={wholeRoomDate}
+                  onChange={(e) => setWholeRoomDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Single-day meeting room reservation strictly within the next 30 days.
+                </span>
+              </div>
+
+              {/* Time Slot & Custom Duration Controls */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-3">
+                <div className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+                  TIME SLOT &amp; DURATION CONTROLS
+                </div>
+
+                {/* Start Time Pickers */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Start Hour
+                    </label>
+                    <select
+                      value={wholeRoomStartHour}
+                      onChange={(e) => setWholeRoomStartHour(parseInt(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    >
+                      {Array.from({ length: 14 }).map((_, i) => {
+                        const h = 8 + i; // 8 AM to 9 PM
+                        const display = `${h > 12 ? h - 12 : h}:00 ${h >= 12 ? 'PM' : 'AM'}`;
+                        return (
+                          <option key={h} value={h}>
+                            {display} ({String(h).padStart(2, '0')}:00)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Start Minute
+                    </label>
+                    <select
+                      value={wholeRoomStartMinute}
+                      onChange={(e) => setWholeRoomStartMinute(parseInt(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    >
+                      <option value={0}>:00</option>
+                      <option value={15}>:15</option>
+                      <option value={30}>:30</option>
+                      <option value={45}>:45</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Duration Pickers: Hours and Minutes */}
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Duration (Hours)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={8}
+                      value={wholeRoomDurationHours}
+                      onChange={(e) => setWholeRoomDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                      Duration (Minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      step={5}
+                      value={wholeRoomDurationMinutes}
+                      onChange={(e) => setWholeRoomDurationMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Duration Summary Pill */}
+                {(() => {
+                  const totalM = wholeRoomDurationHours * 60 + wholeRoomDurationMinutes;
+                  const isDurationValid = totalM >= 15;
+                  const endD = new Date(2000, 0, 1, wholeRoomStartHour, wholeRoomStartMinute + totalM);
+                  const endStr = endD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                  return (
+                    <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                      isDurationValid
+                        ? 'bg-purple-100/60 border-purple-200 text-purple-900 font-medium'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <div>
+                        <span className="font-bold">Total Duration: </span>
+                        <span>{wholeRoomDurationHours}h {wholeRoomDurationMinutes}m ({totalM} mins)</span>
+                        <span className="block text-[10px] text-slate-500">
+                          Ends approximately at {endStr}
+                        </span>
+                      </div>
+                      {!isDurationValid && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                          Min 15 mins required
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Title & Attendees */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Meeting Title / Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={wholeRoomTitle}
+                    onChange={(e) => setWholeRoomTitle(e.target.value)}
+                    placeholder="e.g. Sprint Planning Session"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Expected Attendees (Max {selectedMeetingRoomForBooking.capacity})
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={selectedMeetingRoomForBooking.capacity}
+                    value={wholeRoomAttendeesCount}
+                    onChange={(e) => setWholeRoomAttendeesCount(parseInt(e.target.value) || 1)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Booking For Toggle */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Reserving For
+                </label>
+                <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setWholeRoomForMode('SELF')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      wholeRoomForMode === 'SELF'
+                        ? 'bg-white text-purple-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Myself ({user?.name})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWholeRoomForMode('COLLEAGUE')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      wholeRoomForMode === 'COLLEAGUE'
+                        ? 'bg-white text-purple-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Team Colleague
+                  </button>
+                </div>
+                {wholeRoomForMode === 'COLLEAGUE' && (
+                  <div className="mt-2">
+                    <select
+                      value={wholeRoomColleagueId}
+                      onChange={(e) => setWholeRoomColleagueId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">Select a colleague...</option>
+                      {colleaguesList.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.email}) - {c.department}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Optional Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Notes / Agenda (Optional)
+                </label>
+                <textarea
+                  value={wholeRoomNotes}
+                  onChange={(e) => setWholeRoomNotes(e.target.value)}
+                  placeholder="e.g. HDMI presentation setup, whiteboard required"
+                  rows={2}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 focus:outline-none resize-none"
+                />
+              </div>
+
+              {/* Single Active Reservation Rule Badge */}
+              <div className="p-3 bg-slate-100 rounded-xl text-[11px] text-slate-600 leading-relaxed border border-slate-200">
+                <span className="font-bold text-slate-800 block">Single Active Reservation Rule:</span>
+                Each employee can hold only <strong>1 active future meeting room reservation</strong> across the 30-day window at any given time. Once your meeting completes or is released, you can schedule another.
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsWholeRoomModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmWholeRoomBooking}
+                  disabled={
+                    isSubmittingWholeRoom ||
+                    wholeRoomDurationHours * 60 + wholeRoomDurationMinutes < 15
+                  }
+                  className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                >
+                  {isSubmittingWholeRoom ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Reserving Entire Room...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirm Whole-Room Reservation</span>
                     </>
                   )}
                 </button>

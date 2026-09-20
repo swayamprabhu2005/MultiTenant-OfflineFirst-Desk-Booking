@@ -51,15 +51,32 @@ export interface UserSummary {
   email: string;
 }
 
+export interface BookingMeetingRoom {
+  id: string;
+  name: string;
+  capacity: number;
+  sectionName?: string;
+  floorCode?: string;
+  floorName?: string;
+  buildingName?: string;
+  branchName?: string;
+}
+
 export interface BookingRecord {
   id: string;
+  resourceType?: 'DESK' | 'MEETING_ROOM';
+  sessionType?: string;
+  title?: string | null;
+  durationMinutes?: number | null;
+  attendeesCount?: number | null;
   slotType: string;
   startTime: string;
   endTime: string;
   status: 'CONFIRMED' | 'CANCELLED';
   notes?: string | null;
   createdAt: string;
-  desk: BookingDesk;
+  desk?: BookingDesk | null;
+  meetingRoom?: BookingMeetingRoom | null;
   isProxyBooking: boolean;
   user: UserSummary;
   bookedByUser?: UserSummary | null;
@@ -143,7 +160,7 @@ export const MyBookingsPage: React.FC = () => {
           setBookings(cached);
           setTotalCount(cached.length);
           setTotalPages(1);
-          setErrorNotice('Operating in Offline Mode — viewing cached bookings.');
+          setErrorNotice(null);
           setLoading(false);
           return;
         }
@@ -177,7 +194,7 @@ export const MyBookingsPage: React.FC = () => {
           setBookings(cached);
           setTotalCount(cached.length);
           setTotalPages(1);
-          setErrorNotice('Network unavailable — viewing cached bookings.');
+          setErrorNotice(null);
         } else {
           setErrorNotice(err.message || 'Unable to load your bookings history.');
         }
@@ -256,7 +273,8 @@ export const MyBookingsPage: React.FC = () => {
       });
 
       setSuccessNotice(
-        res?.message || `Reservation for Desk ${cancellingBooking.desk.deskCode} successfully cancelled.`
+        res?.message ||
+          `Reservation for ${cancellingBooking.desk?.deskCode ? `Desk ${cancellingBooking.desk.deskCode}` : (cancellingBooking.meetingRoom?.name || 'Reservation')} successfully cancelled.`
       );
       setTimeout(() => setSuccessNotice(null), 5000);
 
@@ -275,11 +293,15 @@ export const MyBookingsPage: React.FC = () => {
   const filteredBookings = bookings.filter((b) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
+    const deskCode = b.desk?.deskCode || b.meetingRoom?.name || '';
+    const branchName = b.desk?.branchName || b.meetingRoom?.branchName || '';
+    const buildingName = b.desk?.buildingName || b.meetingRoom?.buildingName || '';
+    const sectionName = b.desk?.sectionName || b.meetingRoom?.sectionName || '';
     return (
-      b.desk.deskCode.toLowerCase().includes(q) ||
-      b.desk.branchName.toLowerCase().includes(q) ||
-      b.desk.buildingName.toLowerCase().includes(q) ||
-      b.desk.sectionName.toLowerCase().includes(q) ||
+      deskCode.toLowerCase().includes(q) ||
+      branchName.toLowerCase().includes(q) ||
+      buildingName.toLowerCase().includes(q) ||
+      sectionName.toLowerCase().includes(q) ||
       b.notes?.toLowerCase().includes(q) ||
       b.user.name.toLowerCase().includes(q)
     );
@@ -659,26 +681,34 @@ export const MyBookingsPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Workstation Desk Code */}
+                      {/* Workstation Desk Code / Meeting Room Name */}
                       <td className="py-4 px-5">
                         <div className="flex items-center space-x-2">
-                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
-                            {b.desk.deskCode}
+                          <span className={`font-mono font-black text-sm px-2.5 py-1 rounded-xl border ${
+                            b.meetingRoom
+                              ? 'text-purple-900 bg-purple-50 border-purple-200'
+                              : 'text-slate-900 bg-slate-100 border-slate-200'
+                          }`}>
+                            {b.meetingRoom ? b.meetingRoom.name : b.desk?.deskCode || 'N/A'}
                           </span>
-                          {b.desk.hasHdmi && (
+                          {b.desk?.hasHdmi && (
                             <span title="HDMI Equipped Monitor" className="p-1 rounded-lg bg-emerald-50 text-emerald-700">
                               <Monitor className="w-3.5 h-3.5" />
                             </span>
                           )}
-                          {b.desk.isMeetingRoom && (
+                          {b.meetingRoom ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">
+                              Meeting Room ({b.meetingRoom.capacity} seats)
+                            </span>
+                          ) : b.desk?.isMeetingRoom ? (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold">
                               Meeting Seat
                             </span>
-                          )}
+                          ) : null}
                         </div>
-                        {b.notes && (
-                          <span className="text-[10px] text-slate-400 block mt-1 truncate max-w-xs" title={b.notes}>
-                            Note: {b.notes}
+                        {(b.title || b.notes) && (
+                          <span className="text-[10px] text-slate-400 block mt-1 truncate max-w-xs" title={b.title || b.notes || undefined}>
+                            {b.title ? `${b.title} ` : ''}{b.notes ? `(${b.notes})` : ''}
                           </span>
                         )}
                       </td>
@@ -687,12 +717,12 @@ export const MyBookingsPage: React.FC = () => {
                       <td className="py-4 px-5">
                         <div className="font-bold text-slate-800 flex items-center space-x-1">
                           <Building2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                          <span>{b.desk.branchName}</span>
+                          <span>{b.desk?.branchName || b.meetingRoom?.branchName || 'Facility'}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5">
                           <Layers className="w-3 h-3 text-slate-300 flex-shrink-0" />
                           <span>
-                            {b.desk.buildingName} &bull; {b.desk.floorName} &bull; {b.desk.sectionName}
+                            {b.desk?.buildingName || b.meetingRoom?.buildingName || ''} &bull; {b.desk?.floorName || b.meetingRoom?.floorName || ''} &bull; {b.desk?.sectionName || b.meetingRoom?.sectionName || ''}
                           </span>
                         </div>
                       </td>
@@ -836,9 +866,11 @@ export const MyBookingsPage: React.FC = () => {
 
             <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-100 space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Desk Code:</span>
+                <span className="text-slate-500 font-semibold">
+                  {cancellingBooking.meetingRoom ? 'Meeting Room:' : 'Desk Code:'}
+                </span>
                 <span className="font-extrabold text-slate-900 font-mono">
-                  {cancellingBooking.desk.deskCode}
+                  {cancellingBooking.meetingRoom ? cancellingBooking.meetingRoom.name : cancellingBooking.desk?.deskCode || 'N/A'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -851,7 +883,7 @@ export const MyBookingsPage: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-slate-500 font-semibold">Branch Facility:</span>
                 <span className="font-extrabold text-slate-800">
-                  {cancellingBooking.desk.branchName}
+                  {cancellingBooking.desk?.branchName || cancellingBooking.meetingRoom?.branchName || 'Facility'}
                 </span>
               </div>
             </div>

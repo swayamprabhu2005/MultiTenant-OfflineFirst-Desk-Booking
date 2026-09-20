@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Users, Search, Building2, MapPin, Clock, X, Loader2 } from 'lucide-react';
 import { fetchApi } from '../services/api';
+import { isAppOnline } from '../services/offlineStore';
 
 export interface OfficePresenceColleague {
   bookingId: string;
@@ -72,6 +73,7 @@ export const OfficePresenceModal: React.FC<OfficePresenceModalProps> = ({
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
   const loadPresence = async () => {
+    if (!isAppOnline()) return;
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -87,6 +89,9 @@ export const OfficePresenceModal: React.FC<OfficePresenceModalProps> = ({
 
   useEffect(() => {
     loadPresence();
+    const handleOnline = () => loadPresence();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [branchId]);
 
   const handleOpen = () => {
