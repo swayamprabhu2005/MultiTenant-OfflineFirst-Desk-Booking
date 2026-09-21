@@ -626,7 +626,7 @@ export const EmployeeRosterPage: React.FC = () => {
       {/* MODAL: ASSIGN / EDIT BRANCH ADMINISTRATOR                                 */}
       {/* ========================================================================= */}
       {showAdminModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
@@ -784,7 +784,7 @@ export const EmployeeRosterPage: React.FC = () => {
       {/* MODAL: DELETE / REVOKE BRANCH ADMINISTRATOR CONFIRMATION                  */}
       {/* ========================================================================= */}
       {deletingAdminItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
             <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
               <Trash2 className="w-6 h-6" />
@@ -828,7 +828,7 @@ export const EmployeeRosterPage: React.FC = () => {
       {/* MODAL: DEFAULT PASSWORD CONFIGURATION                                    */}
       {/* ========================================================================= */}
       {showDefaultPasswordModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b">
               <div className="flex items-center space-x-2">

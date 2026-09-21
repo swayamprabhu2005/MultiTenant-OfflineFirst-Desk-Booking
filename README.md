@@ -193,6 +193,18 @@ flowchart TD
 
 ---
 
+### 11. 🔐 Enterprise Single Sign-On (Microsoft Entra ID) & Hybrid Auth
+- **Dual Authentication Modes**: Seamless coexistence of traditional corporate email + password login and enterprise Single Sign-On (SSO) via Microsoft Entra ID (OIDC / OAuth 2.0).
+- **Microsoft Entra ID Integration**:
+  - One-click **"Sign in with Microsoft (Entra SSO)"** button with official branding.
+  - Multi-tenant application registration (`common` endpoint) supporting both corporate enterprise tenants and personal Microsoft test accounts.
+- **Zero-Password Footprint for SSO**: SSO users authenticate against their corporate directory; no user passwords are stored or hashed for SSO logins.
+- **Strict Authorization Safeguard**: Microsoft authentication strictly establishes identity; entry into the SaaS requires that the verified email is pre-registered in an organization's employee roster.
+- **Dynamic Scoping on Sign-In**: Automatically assigns tenant `organizationId`, branch `scopedBranchId`, and role upon callback, steering users to their designated platform console.
+- **SSO Sandbox Tester**: Built-in developer/demo simulation tool to test and demonstrate SSO sign-in flows with any registered corporate email without requiring external IdP sessions.
+
+---
+
 ## 📦 Project Structure
 
 ```
@@ -243,7 +255,7 @@ MultiTenant-OfflineFirst-DeskBooking/
 | **Frontend** | React 18, Vite 5, TypeScript 5, Tailwind CSS 3 |
 | **Backend** | Express.js 4, TypeScript, Node.js |
 | **ORM & Database** | Prisma ORM, PostgreSQL 16 |
-| **Auth** | JWT Bearer tokens, bcrypt password hashing |
+| **Auth** | JWT Bearer tokens, bcrypt, Microsoft Entra ID (OIDC / OAuth 2.0) |
 | **Excel Engine** | ExcelJS + JSZip — multi-sheet generation with live column formulas |
 | **Offline-First** | IndexedDB (native) — outbox queue & floor plan cache |
 | **Containerization** | Docker Compose — PostgreSQL 16 Alpine |
@@ -289,8 +301,16 @@ pnpm dev
 ### Environment Configuration
 Copy `.env.example` to `.env` and configure:
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/deskbooking_db"
-JWT_SECRET="your-secret-key"
+PORT=4000
+DATABASE_URL="postgresql://postgres:postgrespassword@localhost:5432/deskbooking_db?schema=public"
+JWT_SECRET="super-secret-jwt-key-for-multi-tenant-desk-booking-saas"
+VITE_API_BASE_URL="http://localhost:4000/api"
+
+# Microsoft Entra ID (SSO) Configuration
+AZURE_CLIENT_ID="6ae9e86b-7736-4966-a459-708953128955"
+AZURE_CLIENT_SECRET="your-azure-client-secret-value"
+AZURE_TENANT_ID="common"
+AZURE_REDIRECT_URI="http://localhost:3000/api/auth/sso/callback"
 ```
 
 ---
@@ -299,7 +319,10 @@ JWT_SECRET="your-secret-key"
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/auth/login` | Authenticate and receive JWT |
+| `POST` | `/api/auth/login` | Authenticate with email + password and receive JWT |
+| `GET` | `/api/auth/sso/microsoft` | Initiate Microsoft Entra ID OIDC login redirect |
+| `GET` | `/api/auth/sso/callback` | Microsoft OAuth callback, token exchange, and JWT issue |
+| `POST` | `/api/auth/sso/sandbox` | Quick developer/demo SSO simulation for registered emails |
 | `POST` | `/api/auth/signup` | Register new organization with admin |
 | `GET` | `/api/workspace/hierarchy` | Fetch full facility hierarchy with live bookings |
 | `GET` | `/api/roster/multi-branch-template` | Download multi-branch Excel roster |
@@ -342,7 +365,9 @@ All significant architectural decisions are documented as ADRs in the [`ADR/`](A
 | [010](ADR/010-use-expressjs-rest-api-backend.md) | Express.js REST API Backend |
 | [011](ADR/011-derive-notifications-from-domain-events.md) | Event-Derived Notifications |
 | [012](ADR/012-implement-branch-scoped-office-presence.md) | Branch-Scoped Office Presence |
+| [013](ADR/013-implement-microsoft-entra-sso.md) | Implement Hybrid Authentication with Microsoft Entra ID SSO |
 
 ---
 
 *Built with care — Multi-Tenant Offline-First Desk Booking Platform*
+

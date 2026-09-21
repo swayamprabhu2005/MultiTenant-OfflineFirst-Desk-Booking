@@ -24,6 +24,7 @@ ADRs follow the [Michael Nygard template](http://thinkrelevance.com/blog/2011/11
 | [ADR-010](010-use-expressjs-rest-api-backend.md) | Use Express.js REST API Backend | Accepted | 2026-09-01 |
 | [ADR-011](011-derive-notifications-from-domain-events.md) | Derive Notifications from Domain Events Without Dedicated Storage | Accepted | 2026-09-18 |
 | [ADR-012](012-implement-branch-scoped-office-presence.md) | Implement Branch-Scoped Office Presence from Booking Data | Accepted | 2026-09-18 |
+| [ADR-013](013-implement-microsoft-entra-sso.md) | Implement Hybrid Authentication with Microsoft Entra ID SSO | Accepted | 2026-09-21 |
 
 ---
 
