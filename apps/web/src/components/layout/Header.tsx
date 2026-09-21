@@ -32,7 +32,7 @@ export const Header: React.FC = () => {
 
   return (
     <header 
-      className={`sticky top-0 z-30 shadow-md transition-all duration-300 ${
+      className={`sticky top-0 z-50 shadow-md transition-all duration-300 ${
         isPlatformAdmin ? 'border-b border-indigo-400/20 shadow-indigo-950/30' : ''
       }`}
       style={headerStyle}

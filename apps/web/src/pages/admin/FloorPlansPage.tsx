@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { OfficePresenceModal } from '../../components/OfficePresenceModal';
 import { 
   enqueueOutboxItem, 
   isAppOnline, 
@@ -10,7 +9,7 @@ import {
   getCachedFloorPlanData,
   getPendingOutboxItems,
 } from '../../services/offlineStore';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap, Calendar, Clock, Search, Loader2, Users, Trash2, UserCheck, Lock } from 'lucide-react';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Calendar, Clock, Loader2, Trash2, UserCheck, Lock } from 'lucide-react';
 
 export interface ColleagueItem {
   id: string;
@@ -196,29 +195,10 @@ export const FloorPlansPage: React.FC = () => {
 
   // Selected Desk for Slide Drawer / Central Workstation Inspector
   const [activeDesk, setActiveDesk] = useState<DeskItem | null>(null);
-  const [bookingLoading, setBookingLoading] = useState(false);
 
-  // Workstation Inspector & Schedule Matrix State
-  const [modalSelectedDates, setModalSelectedDates] = useState<string[]>([]);
-  const [modalSlotType, setModalSlotType] = useState<'FULL_DAY' | 'MORNING' | 'AFTERNOON'>('FULL_DAY');
-  const [bookingNotes, setBookingNotes] = useState<string>('');
-  const [bookingForMode, setBookingForMode] = useState<'SELF' | 'COLLEAGUE'>('SELF');
-  const [colleagueSearch, setColleagueSearch] = useState<string>('');
-  const [colleaguesList, setColleaguesList] = useState<ColleagueItem[]>([]);
-  const [selectedColleague, setSelectedColleague] = useState<ColleagueItem | null>(null);
-  const [isLoadingColleagues, setIsLoadingColleagues] = useState<boolean>(false);
-  const [isSubmittingBooking, setIsSubmittingBooking] = useState<boolean>(false);
+  // Workstation Inspector State
   const [isCancellingBooking, setIsCancellingBooking] = useState<boolean>(false);
   const [isAssigningDedicated, setIsAssigningDedicated] = useState<boolean>(false);
-
-  // Branch Admin Mass Booking Mode State
-  const [isMassBookingMode, setIsMassBookingMode] = useState(false);
-  const [selectedDeskIds, setSelectedDeskIds] = useState<string[]>([]);
-  const [isMassBookingModalOpen, setIsMassBookingModalOpen] = useState(false);
-  const [massWeekOffset, setMassWeekOffset] = useState(0);
-  const [selectedMassDate, setSelectedMassDate] = useState<string>('');
-  const [massSlotType, setMassSlotType] = useState<'FULL_DAY' | 'MORNING' | 'AFTERNOON'>('FULL_DAY');
-  const [massNotes, setMassNotes] = useState<string>('');
 
   // In-UI Manual Cubicle State
   const [isAddCubicleOpen, setIsAddCubicleOpen] = useState(false);
@@ -349,140 +329,10 @@ export const FloorPlansPage: React.FC = () => {
   const currentFloor = currentBuilding?.floors.find(fl => fl.id === selectedFloorId) || currentBuilding?.floors[0];
   const currentSection = currentFloor?.sections.find(sec => sec.id === selectedSectionId) || currentFloor?.sections[0];
 
-  // Search active colleagues within branch for proxy booking
-  useEffect(() => {
-    if (bookingForMode !== 'COLLEAGUE') return;
-    let isMounted = true;
-    const searchColleagues = async () => {
-      try {
-        setIsLoadingColleagues(true);
-        const params = new URLSearchParams();
-        if (colleagueSearch.trim()) {
-          params.append('search', colleagueSearch.trim());
-        }
-        if (selectedBranchId) {
-          params.append('branchId', selectedBranchId);
-        }
-        const res = await fetchApi<{ colleagues: ColleagueItem[] }>(`/employee/colleagues?${params.toString()}`);
-        if (isMounted) {
-          setColleaguesList(res?.colleagues || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch colleagues:', err);
-      } finally {
-        if (isMounted) setIsLoadingColleagues(false);
-      }
-    };
-
-    const debounceTimer = setTimeout(searchColleagues, 300);
-    return () => {
-      isMounted = false;
-      clearTimeout(debounceTimer);
-    };
-  }, [bookingForMode, colleagueSearch, selectedBranchId]);
-
   // Open Workstation Inspector modal
   const openDeskInspector = (desk: DeskItem) => {
     setActiveDesk(desk);
-    setBookingForMode('SELF');
-    setSelectedColleague(null);
-    setColleagueSearch('');
-    setBookingNotes('');
-    setModalSlotType('FULL_DAY');
-    setModalSelectedDates([]);
     setModalWeekOffset(0);
-  };
-
-  // Toggle single date selection in inspector matrix
-  const toggleModalDate = (dStr: string) => {
-    setModalSelectedDates((prev) => {
-      if (prev.includes(dStr)) {
-        return prev.filter((d) => d !== dStr);
-      } else {
-        return [...prev, dStr].sort();
-      }
-    });
-  };
-
-  // Submit Reservation from Inspector
-  const handleConfirmReservation = async () => {
-    if (!activeDesk || modalSelectedDates.length === 0) return;
-
-    const payload: any = {
-      deskId: activeDesk.id,
-      bookingDates: modalSelectedDates,
-      slotType: modalSlotType,
-      notes: bookingNotes.trim() || undefined,
-    };
-
-    if (bookingForMode === 'COLLEAGUE') {
-      if (!selectedColleague) {
-        setActionNotice({
-          type: 'error',
-          text: 'Please select a colleague to complete proxy reservation.',
-        });
-        return;
-      }
-      payload.colleagueUserId = selectedColleague.id;
-    }
-
-    if (!isAppOnline()) {
-      await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
-      setActionNotice({
-        type: 'success',
-        text: `Offline Mode: Workstation ${activeDesk.deskCode} reservation queued in Outbox. Will sync once online.`,
-      });
-      setTimeout(() => setActionNotice(null), 6000);
-      setSelectedColleague(null);
-      setColleagueSearch('');
-      setBookingNotes('');
-      setActiveDesk(null);
-      return;
-    }
-
-    try {
-      setIsSubmittingBooking(true);
-
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bookings', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      setActionNotice({
-        type: 'success',
-        text: res?.message || `Workstation ${activeDesk.deskCode} reserved successfully for ${modalSelectedDates.length} day(s)!`,
-      });
-      setTimeout(() => setActionNotice(null), 5000);
-
-      setSelectedColleague(null);
-      setColleagueSearch('');
-      setBookingNotes('');
-      setActiveDesk(null);
-
-      await loadHierarchy();
-    } catch (err: any) {
-      console.error('Failed to reserve desk:', err);
-      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
-        await enqueueOutboxItem('CREATE_BOOKING', '/employee/bookings', payload);
-        setActionNotice({
-          type: 'success',
-          text: `Connection lost: Workstation ${activeDesk.deskCode} reservation saved in Outbox for auto-sync.`,
-        });
-        setTimeout(() => setActionNotice(null), 6000);
-        setSelectedColleague(null);
-        setColleagueSearch('');
-        setBookingNotes('');
-        setActiveDesk(null);
-      } else {
-        setActionNotice({
-          type: 'error',
-          text: err.message || 'Failed to complete desk reservation.',
-        });
-        setTimeout(() => setActionNotice(null), 5000);
-      }
-    } finally {
-      setIsSubmittingBooking(false);
-    }
   };
 
 
@@ -546,39 +396,6 @@ export const FloorPlansPage: React.FC = () => {
     }
   };
 
-  // Dedicated Desk Assignment Handlers for Branch Admin
-  const handleAssignDedicated = async () => {
-    if (!activeDesk || !selectedColleague) return;
-    try {
-      setIsAssigningDedicated(true);
-      const res = await fetchApi<{ success: boolean; message: string }>('/branch-roster/assign-dedicated', {
-        method: 'POST',
-        body: JSON.stringify({
-          deskId: activeDesk.id,
-          employeeId: selectedColleague.id,
-          notes: bookingNotes.trim() || `Dedicated Executive Station for ${selectedColleague.name}`,
-        }),
-      });
-
-      setActionNotice({
-        type: 'success',
-        text: res?.message || `Workstation ${activeDesk.deskCode} permanently dedicated to ${selectedColleague.name}.`,
-      });
-      setTimeout(() => setActionNotice(null), 5000);
-      setActiveDesk(null);
-      await loadHierarchy();
-    } catch (err: any) {
-      console.error('Failed to assign dedicated desk:', err);
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to assign dedicated workstation.',
-      });
-      setTimeout(() => setActionNotice(null), 5000);
-    } finally {
-      setIsAssigningDedicated(false);
-    }
-  };
-
   const handleReleaseDedicated = async () => {
     if (!activeDesk) return;
     try {
@@ -607,66 +424,6 @@ export const FloorPlansPage: React.FC = () => {
       setTimeout(() => setActionNotice(null), 5000);
     } finally {
       setIsAssigningDedicated(false);
-    }
-  };
-
-  // Mass Booking Actions for Branch Admin
-  const handleConfirmMassBooking = async () => {
-    if (selectedDeskIds.length === 0 || !selectedMassDate) return;
-    try {
-      setBookingLoading(true);
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-bookings', {
-        method: 'POST',
-        body: JSON.stringify({
-          deskIds: selectedDeskIds,
-          bookingDate: selectedMassDate,
-          slotType: massSlotType,
-          notes: massNotes.trim() || 'Branch Admin Mass Booking',
-        }),
-      });
-      await loadHierarchy();
-      const bookedCount = selectedDeskIds.length;
-      setSelectedDeskIds([]);
-      setIsMassBookingMode(false);
-      setIsMassBookingModalOpen(false);
-      setActionNotice({
-        type: 'success',
-        text: res?.message || `Successfully booked ${bookedCount} workstations on ${selectedMassDate}!`,
-      });
-      setTimeout(() => setActionNotice(null), 5000);
-    } catch (err: any) {
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to complete mass booking.',
-      });
-    } finally {
-      setBookingLoading(false);
-    }
-  };
-
-  const handleReleaseMassBooking = async () => {
-    if (selectedDeskIds.length === 0) return;
-    try {
-      setBookingLoading(true);
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-cancel', {
-        method: 'POST',
-        body: JSON.stringify({ deskIds: selectedDeskIds }),
-      });
-      await loadHierarchy();
-      setSelectedDeskIds([]);
-      setIsMassBookingMode(false);
-      setActionNotice({
-        type: 'success',
-        text: res?.message || 'Successfully released selected workstations.',
-      });
-      setTimeout(() => setActionNotice(null), 5000);
-    } catch (err: any) {
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to release selected workstations.',
-      });
-    } finally {
-      setBookingLoading(false);
     }
   };
 
@@ -934,37 +691,24 @@ export const FloorPlansPage: React.FC = () => {
             const isAvailable = !isBooked && !isPendingSync;
             const isMine = !!hasMyBooking && !isPendingSync;
             const isSelected = activeDesk?.id === desk.id;
-            const isMassSelected = selectedDeskIds.includes(desk.id);
             return (
               <button
                 key={desk.id}
-                onClick={() => {
-                  if (isMassBookingMode) {
-                    if (isMassSelected) {
-                      setSelectedDeskIds(selectedDeskIds.filter((id) => id !== desk.id));
-                    } else {
-                      setSelectedDeskIds([...selectedDeskIds, desk.id]);
-                    }
-                  } else {
-                    openDeskInspector({ ...desk, hasHdmi });
-                  }
-                }}
+                onClick={() => openDeskInspector({ ...desk, hasHdmi })}
                 className={`${deskHeightClass} rounded-xl border-2 font-bold p-1.5 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs overflow-hidden min-w-0 ${
-                  isMassSelected
-                    ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
-                    : isSelected
+                  isSelected
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
                   isDedicated
-                    ? isMassSelected ? '' : 'bg-amber-50/90 border-amber-500 text-amber-950 hover:bg-amber-100'
+                    ? 'bg-amber-50/90 border-amber-500 text-amber-950 hover:bg-amber-100'
                     : isPendingSync
-                    ? isMassSelected ? '' : 'bg-amber-100/90 border-amber-400 text-amber-900 hover:bg-amber-200'
+                    ? 'bg-amber-100/90 border-amber-400 text-amber-900 hover:bg-amber-200'
                     : isMine
-                    ? isMassSelected ? '' : 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
+                    ? 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
                     : isAvailable
-                    ? isMassSelected ? '' : 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
-                    : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
+                    ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
+                    : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
               >
                 {/* Line 1: Cubicle Code */}
@@ -1138,74 +882,43 @@ export const FloorPlansPage: React.FC = () => {
 
             {/* Action Buttons for Admins */}
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {user?.role === 'BRANCH_ADMIN' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMassBookingMode(!isMassBookingMode);
-                    setSelectedDeskIds([]);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isMassBookingMode
-                      ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400'
-                      : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'
-                  }`}
-                  title="Toggle mass cubicle selection mode for bulk booking"
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>{isMassBookingMode ? 'Exit Mass Mode' : '⚡ Mass Booking Mode'}</span>
-                  {selectedDeskIds.length > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-white text-purple-700 text-[10px] font-black flex items-center justify-center ml-0.5 shadow-xs">
-                      {selectedDeskIds.length}
-                    </span>
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleOpenAddCubicle}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Cubicle</span>
+              </button>
 
-              {/* Who is in Office Presence Trigger */}
-              <OfficePresenceModal branchId={selectedBranchId} triggerVariant="button" />
+              <button
+                type="button"
+                onClick={handleDownloadBranchTemplate}
+                disabled={isExportingPlan}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold border border-sky-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                title="Download branch floor plan Excel configuration template"
+              >
+                <Download className="w-3.5 h-3.5 text-sky-600" />
+                <span>{isExportingPlan ? 'Exporting...' : 'Export Plan'}</span>
+              </button>
 
-              {!isOrgAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleOpenAddCubicle}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Cubicle</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleDownloadBranchTemplate}
-                    disabled={isExportingPlan}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold border border-sky-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                    title="Download branch floor plan Excel configuration template"
-                  >
-                    <Download className="w-3.5 h-3.5 text-sky-600" />
-                    <span>{isExportingPlan ? 'Exporting...' : 'Export Plan'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => floorPlanInputRef.current?.click()}
-                    disabled={isImportingPlan}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                    title="Upload and apply branch floor plan layout (.xlsx)"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{isImportingPlan ? 'Applying...' : 'Import Plan'}</span>
-                  </button>
-                  <input
-                    type="file"
-                    ref={floorPlanInputRef}
-                    accept=".xlsx"
-                    onChange={handleUploadFloorPlan}
-                    className="hidden"
-                  />
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => floorPlanInputRef.current?.click()}
+                disabled={isImportingPlan}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                title="Upload and apply branch floor plan layout (.xlsx)"
+              >
+                <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{isImportingPlan ? 'Applying...' : 'Import Plan'}</span>
+              </button>
+              <input
+                type="file"
+                ref={floorPlanInputRef}
+                accept=".xlsx"
+                onChange={handleUploadFloorPlan}
+                className="hidden"
+              />
             </div>
           </div>
         </div>
@@ -1440,37 +1153,20 @@ export const FloorPlansPage: React.FC = () => {
                     const isSeatBooked = hasActiveSeatBooking || seatDesk.status === 'BOOKED';
                     const isAvailable = !isSeatBooked;
                     const isSelected = activeDesk?.id === seatDesk.id;
-                    const isMassSelected = selectedDeskIds.includes(seatDesk.id);
                     const bookedSeatUser = seatDesk.bookings?.[0]?.user || seatDesk.bookings?.[0]?.bookedByUser;
 
                     return (
                       <button
                         key={seatDesk.id}
                         type="button"
-                        onClick={() => {
-                          if (isMassBookingMode) {
-                            if (isMassSelected) {
-                              setSelectedDeskIds(selectedDeskIds.filter((id) => id !== seatDesk.id));
-                            } else {
-                              setSelectedDeskIds([...selectedDeskIds, seatDesk.id]);
-                            }
-                          } else {
-                            openDeskInspector(seatDesk);
-                          }
-                        }}
+                        onClick={() => openDeskInspector(seatDesk)}
                         className={`h-11 rounded-lg border-2 font-bold text-[10px] flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-xs ${
-                          isMassSelected
-                            ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
-                            : isSelected
+                          isSelected
                             ? 'ring-3 ring-purple-500 scale-105 z-10'
                             : 'hover:scale-102 hover:shadow-sm'
                         } ${
                           isAvailable
-                            ? isMassSelected
-                              ? ''
-                              : 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-900'
-                            : isMassSelected
-                            ? ''
+                            ? 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-900'
                             : 'bg-red-100/90 border-red-300 text-red-800'
                         }`}
                         title={`Conference Seat ${seatDesk.deskCode} (${isAvailable ? 'Available' : 'Reserved'})`}
@@ -1674,287 +1370,7 @@ export const FloorPlansPage: React.FC = () => {
         document.body
       )}
 
-      {/* Floating Mass Booking Action Bar for Branch Admin */}
-      {isMassBookingMode && selectedDeskIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[110] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center space-x-6 animate-fade-in">
-          <div className="flex items-center space-x-2">
-            <span className="w-7 h-7 rounded-xl bg-purple-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
-              {selectedDeskIds.length}
-            </span>
-            <span className="text-xs font-bold">Cubicles Selected</span>
-          </div>
 
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={() => {
-                setIsMassBookingModalOpen(true);
-                setMassWeekOffset(0);
-                setSelectedMassDate('');
-                setMassSlotType('FULL_DAY');
-                setMassNotes('');
-              }}
-              className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>Proceed to Book ({selectedDeskIds.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleReleaseMassBooking}
-              disabled={bookingLoading}
-              className="py-2 px-3 bg-red-700 hover:bg-red-600 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
-            >
-              Release Desks
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedDeskIds([])}
-              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Mass Booking Modal for Branch Admin */}
-      {isMassBookingModalOpen && createPortal(
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsMassBookingModalOpen(false);
-          }}
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-fade-in"
-        >
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="font-mono text-xs font-black tracking-wider text-slate-500 uppercase flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-purple-600" />
-                <span>MASS WORKSTATION BOOKING • CONCURRENT ALLOCATION</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsMassBookingModalOpen(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Selected Workstation Badges */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-slate-700 uppercase">
-                  Selected Workstations ({selectedDeskIds.length})
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedDeskIds([]);
-                    setIsMassBookingModalOpen(false);
-                  }}
-                  className="text-[11px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  Clear All
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2.5 bg-slate-50 rounded-2xl border border-slate-200">
-                {selectedDeskIds.map((deskId) => {
-                  const d = (currentFloor?.sections.flatMap((s) => s.desks) || []).find((item) => item.id === deskId);
-                  const code = d?.deskCode || deskId;
-                  return (
-                    <span
-                      key={deskId}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-100 text-purple-900 font-mono text-xs font-bold border border-purple-200 shadow-2xs"
-                    >
-                      <span>{code}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextIds = selectedDeskIds.filter((id) => id !== deskId);
-                          setSelectedDeskIds(nextIds);
-                          if (nextIds.length === 0) setIsMassBookingModalOpen(false);
-                        }}
-                        className="w-3.5 h-3.5 rounded-full hover:bg-purple-200 text-purple-700 flex items-center justify-center cursor-pointer text-[10px]"
-                        title={`Remove ${code}`}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Schedule & Availability Matrix for Mass Booking */}
-            {(() => {
-              const mass7Days = get7DaysWindow(startDate, massWeekOffset);
-              const allFloorDesks = currentFloor?.sections.flatMap((s) => s.desks) || [];
-              const massDesks = allFloorDesks.filter((d) => selectedDeskIds.includes(d.id));
-
-              return (
-                <div className="space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Availability Matrix &amp; Batch Date Selection
-                      </label>
-                      <p className="text-[11px] text-slate-500">
-                        Pick <span className="font-bold text-emerald-700">1 free day</span> for all {selectedDeskIds.length} cubicles. Red days indicate conflicts.
-                      </p>
-                    </div>
-
-                    {/* Strict 7-Day Sliding Window Navigator */}
-                    <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setMassWeekOffset((prev) => Math.max(0, prev - 1))}
-                        disabled={massWeekOffset <= 0}
-                        className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs disabled:opacity-30 cursor-pointer"
-                        title="Previous 7 Days"
-                      >
-                        &larr;
-                      </button>
-                      <span className="text-[10px] font-mono font-bold text-slate-700 px-1 select-none">
-                        {formatDateDisplay(mass7Days[0]).date} – {formatDateDisplay(mass7Days[6]).date}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setMassWeekOffset((prev) => prev + 1)}
-                        className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer"
-                        title="Next 7 Days"
-                      >
-                        &rarr;
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Day Strip 7-Day Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                    {mass7Days.map((dStr) => {
-                      const { day, date } = formatDateDisplay(dStr);
-                      const conflictingDesks = massDesks.filter((d) =>
-                        d.bookings?.some((b) => {
-                          const bStart = b.startTime.split('T')[0];
-                          const bEnd = b.endTime.split('T')[0];
-                          return dStr >= bStart && dStr <= bEnd;
-                        })
-                      );
-
-                      const hasConflict = conflictingDesks.length > 0;
-                      const isSelected = selectedMassDate === dStr;
-
-                      if (hasConflict) {
-                        return (
-                          <div
-                            key={dStr}
-                            className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-red-50/90 border-red-200 text-red-800"
-                            title={`Conflict: ${conflictingDesks.map((d) => d.deskCode).join(', ')} already reserved on ${dStr}`}
-                          >
-                            <span className="text-[10px] font-bold uppercase">{day}</span>
-                            <span className="text-xs font-black">{date}</span>
-                            <div className="mt-1 flex items-center space-x-0.5 text-[9px] font-black text-red-600 truncate max-w-full">
-                              <X className="w-3 h-3 text-red-600 shrink-0" />
-                              <span className="truncate">✕ Conflict</span>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <button
-                          key={dStr}
-                          type="button"
-                          onClick={() => setSelectedMassDate(dStr)}
-                          className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-2xs ${
-                            isSelected
-                              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 font-black'
-                              : 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
-                          }`}
-                        >
-                          <span className="text-[10px] uppercase">{day}</span>
-                          <span className="text-xs">{date}</span>
-                          <div className="mt-1 text-[9px] font-bold">
-                            {isSelected ? '✓ Selected' : 'Available'}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Booking Configuration: Session Dropdown & Purpose */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                  <Clock className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Session Window</span>
-                </label>
-                <select
-                  value={massSlotType}
-                  onChange={(e) => setMassSlotType(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
-                >
-                  <option value="FULL_DAY">Full Day (9:00 AM – 6:00 PM)</option>
-                  <option value="MORNING">Morning / First Half (9:00 AM – 1:30 PM)</option>
-                  <option value="AFTERNOON">Afternoon / Second Half (1:30 PM – 6:00 PM)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Allocation Notes (Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={massNotes}
-                  onChange={(e) => setMassNotes(e.target.value)}
-                  placeholder="e.g. Branch Team Allocation, Regional Summit"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsMassBookingModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmMassBooking}
-                disabled={!selectedMassDate || selectedDeskIds.length === 0 || bookingLoading}
-                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              >
-                {bookingLoading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Reserving Workstations...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    <span>
-                      Confirm Mass Booking ({selectedDeskIds.length} Desks
-                      {selectedMassDate ? ` on ${formatDateDisplay(selectedMassDate).date}` : ''})
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Central Workstation Inspector Modal with Schedule Matrix */}
       {activeDesk && createPortal(
@@ -2154,39 +1570,10 @@ export const FloorPlansPage: React.FC = () => {
                           &rarr;
                         </button>
                       </div>
-
-                      {!isOrgAdmin && (
-                        <div className="flex items-center space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const availableDates = modal7Days.filter((dStr) => {
-                                return !activeDesk.bookings?.some((b) => {
-                                  const bStart = b.startTime.split('T')[0];
-                                  const bEnd = b.endTime.split('T')[0];
-                                  return dStr >= bStart && dStr <= bEnd;
-                                });
-                              });
-                              setModalSelectedDates((prev) => Array.from(new Set([...prev, ...availableDates])));
-                            }}
-                            className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                          >
-                            Select Free
-                          </button>
-                          <span className="text-slate-300">|</span>
-                          <button
-                            type="button"
-                            onClick={() => setModalSelectedDates([])}
-                            className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {/* Day Strip Horizontal Grid */}
+                  {/* Day Strip Horizontal Grid (Read Only) */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                     {modal7Days.map((dStr) => {
                       const { day, date } = formatDateDisplay(dStr);
@@ -2197,7 +1584,6 @@ export const FloorPlansPage: React.FC = () => {
                       });
 
                       const isBooked = !!conflictingBooking;
-                      const isDateSelected = modalSelectedDates.includes(dStr);
 
                       if (isBooked) {
                         const bookedPerson = conflictingBooking?.user || conflictingBooking?.bookedByUser;
@@ -2217,36 +1603,15 @@ export const FloorPlansPage: React.FC = () => {
                         );
                       }
 
-                      if (isOrgAdmin) {
-                        return (
-                          <div
-                            key={dStr}
-                            className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-emerald-50/70 border-emerald-300 text-emerald-900 font-bold"
-                          >
-                            <span className="text-[10px] uppercase">{day}</span>
-                            <span className="text-xs">{date}</span>
-                            <div className="mt-1 text-[9px] font-bold text-emerald-700">Free</div>
-                          </div>
-                        );
-                      }
-
                       return (
-                        <button
+                        <div
                           key={dStr}
-                          type="button"
-                          onClick={() => toggleModalDate(dStr)}
-                          className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-2xs ${
-                            isDateSelected
-                              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400 font-black'
-                              : 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
-                          }`}
+                          className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-emerald-50/70 border-emerald-300 text-emerald-900 font-bold"
                         >
                           <span className="text-[10px] uppercase">{day}</span>
                           <span className="text-xs">{date}</span>
-                          <div className="mt-1 text-[9px] font-bold">
-                            {isDateSelected ? '✓ Selected' : 'Free'}
-                          </div>
-                        </button>
+                          <div className="mt-1 text-[9px] font-bold text-emerald-700">Free</div>
+                        </div>
                       );
                     })}
                   </div>
@@ -2254,217 +1619,29 @@ export const FloorPlansPage: React.FC = () => {
               );
             })()}
 
-            {/* Booking Configuration: Session Dropdown & Notes (Hidden for Global Org Admin) */}
-            {!isOrgAdmin && (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                  {/* Session Window Dropdown */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                      <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Session Window</span>
-                    </label>
-                    <select
-                      value={modalSlotType}
-                      onChange={(e) => setModalSlotType(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="FULL_DAY">Full Day (9:00 AM – 6:00 PM)</option>
-                      <option value="MORNING">Morning / First Half (9:00 AM – 1:30 PM)</option>
-                      <option value="AFTERNOON">Afternoon / Second Half (1:30 PM – 6:00 PM)</option>
-                    </select>
-                  </div>
-
-                  {/* Optional Purpose / Notes */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center space-x-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Booking Purpose (Optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={bookingNotes}
-                      onChange={(e) => setBookingNotes(e.target.value)}
-                      placeholder="e.g. Branch Admin allocation, Onsite visit"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Beneficiary: For Myself vs For Colleague (Proxy Booking) */}
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">Reservation Beneficiary:</span>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBookingForMode('SELF');
-                          setSelectedColleague(null);
-                        }}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          bookingForMode === 'SELF'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        For Myself
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBookingForMode('COLLEAGUE')}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
-                          bookingForMode === 'COLLEAGUE'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Users className="w-3 h-3" />
-                        <span>For Colleague / Staff</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {bookingForMode === 'COLLEAGUE' && (
-                    <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                      <div className="relative">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder="Search colleagues by name, email, or department..."
-                          value={colleagueSearch}
-                          onChange={(e) => setColleagueSearch(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                        />
-                        {isLoadingColleagues && (
-                          <Loader2 className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5 animate-spin" />
-                        )}
-                      </div>
-
-                      {selectedColleague ? (
-                        <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900">
-                          <div>
-                            <span className="font-bold">{selectedColleague.name}</span>
-                            <span className="text-slate-500 ml-2">({selectedColleague.email})</span>
-                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 font-mono">
-                              {selectedColleague.department}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedColleague(null)}
-                            className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : colleaguesList.length > 0 ? (
-                        <div className="max-h-36 overflow-y-auto space-y-1 bg-white p-1 rounded-xl border border-slate-200">
-                          {colleaguesList.map((colleague) => (
-                            <button
-                              key={colleague.id}
-                              type="button"
-                              onClick={() => setSelectedColleague(colleague)}
-                              className="w-full text-left p-2 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
-                            >
-                              <div>
-                                <div className="font-bold text-slate-800">{colleague.name}</div>
-                                <div className="text-[10px] text-slate-500">
-                                  {colleague.email} &bull; {colleague.department}
-                                </div>
-                              </div>
-                              {colleague.hasActiveBookingToday && (
-                                <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
-                                  Booked Today ({colleague.reservedDeskCode})
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      ) : colleagueSearch.trim() ? (
-                        <div className="text-center py-3 text-xs text-slate-400">
-                          No matching colleagues found in this branch.
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
             {/* Modal Actions */}
             <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
-              {isOrgAdmin ? (
-                <div className="flex items-center justify-end w-full">
-                  <button
-                    type="button"
-                    onClick={() => setActiveDesk(null)}
-                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Close Inspector
-                  </button>
-                </div>
+              {user?.role === 'BRANCH_ADMIN' && activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
+                <button
+                  type="button"
+                  disabled={isAssigningDedicated}
+                  onClick={handleReleaseDedicated}
+                  className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
+                </button>
               ) : (
-                <>
-                  {user?.role === 'BRANCH_ADMIN' && (
-                    <div>
-                      {activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
-                        <button
-                          type="button"
-                          disabled={isAssigningDedicated}
-                          onClick={handleReleaseDedicated}
-                          className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isAssigningDedicated || !selectedColleague}
-                          onClick={handleAssignDedicated}
-                          className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
-                          title={!selectedColleague ? 'Search and select a colleague above to assign as dedicated desk' : 'Permanently assign this desk to the selected executive'}
-                        >
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>{isAssigningDedicated ? 'Assigning...' : '🔒 Assign as Dedicated Desk'}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2.5 ml-auto">
-                    <button
-                      type="button"
-                      onClick={() => setActiveDesk(null)}
-                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleConfirmReservation}
-                      disabled={modalSelectedDates.length === 0 || isSubmittingBooking || (bookingForMode === 'COLLEAGUE' && !selectedColleague)}
-                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-                    >
-                      {isSubmittingBooking ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Reserving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>
-                            Reserve Workstation
-                            {modalSelectedDates.length > 0 ? ` (${modalSelectedDates.length} Day${modalSelectedDates.length > 1 ? 's' : ''})` : ''}
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </>
+                <div />
               )}
+
+              <button
+                type="button"
+                onClick={() => setActiveDesk(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close Inspector
+              </button>
             </div>
           </div>
         </div>,

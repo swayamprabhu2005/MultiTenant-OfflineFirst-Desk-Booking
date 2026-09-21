@@ -15,6 +15,7 @@ import {
   Menu,
   ChevronLeft,
   ShieldAlert,
+  Layers,
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
@@ -55,7 +56,10 @@ export const Sidebar: React.FC = () => {
     : isBranchAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
+        { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
+        { name: 'Outlook Calendar', to: '/employee/calendar', icon: CalendarDays },
+        { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
+        { name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers },
         { name: 'Employee Directory', to: '/branch/employees', icon: Users },
         { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
       ]
@@ -164,12 +168,6 @@ export const Sidebar: React.FC = () => {
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-1">
             <div className="font-bold text-slate-700 flex items-center justify-between">
               <span>Control Plane</span>
-              {showOnlineStatus && (
-                <span className="flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[10px] text-emerald-700 font-bold">ONLINE</span>
-                </span>
-              )}
             </div>
             <p className="text-[11px] leading-tight text-slate-400">
               Multi-tenant isolation &amp; dynamic white-label tokens.

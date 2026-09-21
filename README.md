@@ -40,8 +40,11 @@ flowchart TD
 
     subgraph Tier3["Tier 3 - Branch Administrator (e.g. Goa HQ / Pune HQ)"]
         BA["Branch Administrator\n(Scoped via scopedBranchId)"]:::branch
-        BA -->|"Floor Plan Re-Ingestion"| FP_EXP["Export & Import Floor Plan"]:::branch
+        BA -->|"Floor Plan Management"| FP_EXP["Floor Plan Editor (Layout Only)"]:::branch
         BA -->|"In-UI Workstation Creation"| ADD_CUB["+ Add Cubicle Modal"]:::branch
+        BA -->|"Spatial Workstation Booking"| BA_RES["Reserve Workstation (Floor Plan)"]:::branch
+        BA -->|"Calendar Orchestration"| BA_CAL["Outlook Workspace Calendar"]:::branch
+        BA -->|"Personal & Proxy History"| BA_BK["My Bookings Hub"]:::branch
         BA -->|"Direct Inline Hub"| PWD_HUB["Default Temporary Password Hub"]:::branch
         BA -->|"3-Column Dynamic Template"| BATCH["Formula Excel Ingestion"]:::branch
         BA -->|"Facility-Scoped Access"| BA_AUDIT["Branch Audit Logs"]:::branch
@@ -90,12 +93,14 @@ flowchart TD
 
 ---
 
-### 3. 🏗️ Branch Admin Floor Plan Tools & In-UI Cubicle Creation
+### 3. 🏗️ Branch Admin Floor Plan Editor & Layout Tools
+- **Strict Separation of Concerns**: `/admin/floor-plans` is purely an administrative layout editor and facility manager for Branch Admins and Organization Admins — eliminating conflicting booking overlays from layout management.
 - **Branch-Scoped Floor Plan Export & Re-Ingest**:
   - `GET /api/branch-roster/floor-plan-template`: Branch-specific workbook pre-populated with buildings, floors, sections, and workstations.
   - `POST /api/branch-roster/floor-plan-import`: Validates and synchronizes workstation data from spreadsheet uploads.
 - **In-UI `+ Add Cubicle` Modal**: Direct workstation creation from the Branch Floor Plans UI with real-time pod recalculation, dynamic zoom adjustment, and symmetrical HDMI redistribution.
-- **Clickable Conference Pod Seats**: Meeting room seats (M-01 to M-10) are independently bookable from the employee floor plan explorer.
+- **View-Only Workstation Inspector**: Inspect desk code, amenities (HDMI included), current active reservations, and 7-day occupancy strip without booking form clutter.
+- **Dedicated Desk Management**: Direct authority to view and release dedicated executive desk assignments.
 
 ---
 
@@ -111,14 +116,15 @@ flowchart TD
 
 ---
 
-### 5. 👨‍💼 Employee Self-Service Workplace Portal
-- **Employee Dashboard** (`/` for Role `EMPLOYEE`):
+### 5. 👨‍💼 Employee & Branch Admin Workspace Portal
+- **Role-Unified Booking Access**: Both Employees and Branch Admins enjoy full access to Reserve Workstation, Outlook Calendar, and My Bookings.
+- **Employee Dashboard** (`/`):
   - Personalized greeting with facility metrics (Total Desks, Available Desks, HDMI Monitors, Meeting Rooms).
   - Active Booking Hero Card with desk code, slot window, location hierarchy, and instant **Release Workstation** action.
 - **Workstation Reservation** (`/employee/floor-plan`):
-  - **3 Time Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
-  - **Multi-Day Availability Matrix**: View and select booking dates across a weekly grid.
-  - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live `hasActiveBookingToday` indicator.
+  - **3 Shift Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
+  - **Whole Meeting Room Booking**: Reserve entire conference rooms with start time, duration in hours & minutes (minimum 15m enforced), title, and attendee headcount.
+  - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live directory search.
 - **Team Pod Mode (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click with an atomic sprint batch confirmation.
 - **My Bookings History** (`/employee/my-bookings`):
   - Tabbed filtering: `ALL`, `CONFIRMED`, `PAST`, `CANCELLED`.
@@ -127,7 +133,27 @@ flowchart TD
 
 ---
 
-### 6. 📝 Audit Logs & Security Governance
+### 6. 📅 Outlook Workspace Calendar & Dynamic Cascade Booking Engine
+- **Streamlined Outlook Ribbon**:
+  - Clean calendar navigation with Month/Year picker arrows (`< Month Year >`).
+  - Resource type toggles (`All` | `Cubicles` | `Meeting Rooms`).
+  - Live filter search across event codes, colleague names, meeting titles, and buildings.
+  - Non-overlapping sticky layout ensuring ribbon controls remain neatly underneath the navigation bar.
+- **Date-Click Single-Day Reservation Modal**:
+  - Clicking any date cell in the Month view opens a focused reservation modal pre-set to that single day.
+  - **Horizontal Cascade Bar**: `[ Building ▾ ]  [ Floor ▾ ]  [ Section ▾ ]` with intelligent defaults.
+  - **Dynamic Availability Filtering**:
+    - **Cubicles Dropdown**: Displays **ONLY** cubicles with zero confirmed bookings on that clicked date. If completely booked, an informative alert is displayed: `"No cubicles available in this section on [Date]"`.
+    - **Meeting Rooms Dropdown**: Displays available conference rooms with capacity and HDMI specifications, or warns if already booked on that date.
+  - **Shift Slots & Durations**:
+    - Cubicle slots: `Full Day (09:00 - 18:00)`, `Morning Half (09:00 - 13:30)`, `Evening Half (13:30 - 18:00)`.
+    - Meeting room reservations: Start time picker + numeric hours & minutes duration (strictly requiring at least 15 minutes).
+  - **Beneficiary Selection**: Seamlessly choose `For Myself` or `On Behalf of Colleague` with live directory search.
+  - **Single Event Inspector**: Clicking an event chip reveals full reservation details, proxy attribution, and provides instant single-click cancellation authority for personal or branch bookings.
+
+---
+
+### 7. 📝 Audit Logs & Security Governance
 
 | Audit Event | Description |
 |---|---|
@@ -142,7 +168,7 @@ flowchart TD
 
 ---
 
-### 7. 📡 Offline-First Engine & Background Sync
+### 8. 📡 Offline-First Engine & Background Sync
 - **Role-Gated Offline Support**: Offline capabilities are exclusively available to **Employee** and **Branch Admin** roles. Platform and Organization Admins remain strictly online for governance integrity.
 - **IndexedDB Outbox Queue**: Desk reservations and cancellations made while offline are queued in an IndexedDB `outbox_queue` store with FIFO replay upon reconnection.
 - **Floor Plan Cache**: Complete workspace hierarchies are cached in IndexedDB `floorplan_cache`, enabling desk browsing without network connectivity.
@@ -151,7 +177,7 @@ flowchart TD
 
 ---
 
-### 8. 🔔 In-App Notification Center
+### 9. 🔔 In-App Notification Center
 - **Event-Derived Activity Stream**: Notifications are dynamically projected from `Booking` and `AuditLog` tables — no dedicated notification storage table required.
 - **Bell Icon with Unread Badge**: Real-time unread count badge with 25-second polling interval.
 - **Domain-Categorized Notifications**: Visual categorization with dedicated icons for booking confirmations, proxy reservations, cancellations, and admin broadcasts.
@@ -159,7 +185,7 @@ flowchart TD
 
 ---
 
-### 9. 👥 Branch-Scoped Office Presence ("Who is in Office")
+### 10. 👥 Branch-Scoped Office Presence ("Who is in Office")
 - **Software-Inferred Presence**: Derives real-time office occupancy from confirmed desk bookings for the current day — no hardware badges or RFID required.
 - **Branch Isolation**: Employees and Branch Admins can only see presence within their assigned branch.
 - **Searchable Colleague Directory**: Instant client-side search across name, email, department, and desk code with department-level count groupings.
@@ -200,7 +226,7 @@ MultiTenant-OfflineFirst-DeskBooking/
 │           ├── pages/
 │           │   ├── admin/             # FloorPlans, Workforce, BranchAdmins, AuditLogs
 │           │   ├── branch/            # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
-│           │   └── employee/          # EmployeeFloorPlanPage, MyBookingsPage, Dashboard
+│           │   └── employee/          # EmployeeFloorPlanPage, OutlookCalendarPage, MyBookingsPage, Dashboard
 │           └── services/
 │               ├── api.ts             # Centralized fetchApi client with retry
 │               └── offlineStore.ts    # IndexedDB outbox queue & floor plan cache
@@ -283,8 +309,10 @@ JWT_SECRET="your-secret-key"
 | `POST` | `/api/branch-roster/cubicle` | Add a new workstation in-UI |
 | `GET` | `/api/employee/dashboard-summary` | Employee dashboard stats |
 | `GET` | `/api/employee/presence` | Branch-scoped office presence |
-| `POST` | `/api/employee/bookings` | Create a desk reservation |
+| `GET` | `/api/employee/calendar-bookings` | Fetch month bookings for Outlook calendar |
+| `POST` | `/api/employee/bookings` | Create a workstation or meeting room reservation |
 | `POST` | `/api/employee/bulk-bookings` | Bulk pod reservation |
+| `POST` | `/api/employee/mass-booking` | Multi-day / multi-desk booking (Max 30d) |
 | `POST` | `/api/employee/cancel-booking` | Cancel a single booking |
 | `POST` | `/api/employee/cancel-selected` | Cancel selected bookings |
 | `POST` | `/api/employee/bulk-cancel` | Bulk cancel all future bookings |
