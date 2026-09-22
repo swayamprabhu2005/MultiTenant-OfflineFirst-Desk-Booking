@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ShieldAlert,
   Layers,
+  Lock,
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
@@ -81,6 +82,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
         { name: 'Branch Admins', to: '/admin/roster', icon: Users },
         { name: 'Workforce', to: '/admin/workforce', icon: Contact },
+        { name: 'Permissions', to: '/admin/permissions', icon: Lock },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
         ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
