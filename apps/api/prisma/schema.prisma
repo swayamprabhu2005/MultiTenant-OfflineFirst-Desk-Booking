@@ -43,6 +43,11 @@ model Organization {
   defaultBranchAdminPassword  String?
   defaultEmployeePassword     String?
   defaultDomain               String?
+  operatingMode               String       @default("DELEGATED") // "CENTRALIZED" | "DELEGATED"
+  allowBranchFloorPlanEdit    Boolean      @default(true)
+  allowBranchRosterManagement Boolean      @default(true)
+  allowBranchProxyBooking     Boolean      @default(true)
+  allowBranchIssueResolution  Boolean      @default(true)
   createdAt                   DateTime     @default(now())
   updatedAt                   DateTime     @updatedAt
   branches                    Branch[]
@@ -115,6 +120,7 @@ model User {
   proxyBookingsMade  Booking[]    @relation("BookedByProxy")
   issueReports       IssueReport[] @relation("IssueReporter")
   resolvedIssues     IssueReport[] @relation("IssueResolver")
+  issueMessages      IssueMessage[]
 }
 
 model AuditLog {
@@ -226,17 +232,21 @@ model Booking {
 }
 
 model IssueReport {
-  id             String        @id @default(uuid())
-  title          String
-  description    String
-  category       String?       @default("GENERAL")
-  priority       IssuePriority @default(MEDIUM)
-  screenshotUrl  String?
-  clientVersion  String?       @default("1.0.0")
-  deviceInfo     String?
-  systemDiagnostics Json?
-  status         IssueStatus   @default(OPEN)
-  resolutionNote String?
+  id                 String        @id @default(uuid())
+  title              String
+  description        String
+  category           String?       @default("GENERAL")
+  priority           IssuePriority @default(MEDIUM)
+  screenshotUrl      String?
+  clientVersion      String?       @default("1.0.0")
+  deviceInfo         String?
+  systemDiagnostics  Json?
+  status             IssueStatus   @default(OPEN)
+  targetLevel        String        @default("BRANCH_ADMIN") // "BRANCH_ADMIN" | "ORGANIZATION_ADMIN" | "PLATFORM_ADMIN"
+  branchId           String?
+  resolutionNote     String?
+  commendationNote   String?
+  commendationAuthor String?
 
   reporterId     String
   reporter       User          @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Cascade)
@@ -247,11 +257,28 @@ model IssueReport {
   resolvedById   String?
   resolvedBy     User?         @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
+  messages       IssueMessage[]
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([organizationId, status])
   @@index([reporterId])
   @@index([status, createdAt])
+  @@index([targetLevel])
+}
+
+model IssueMessage {
+  id            String       @id @default(uuid())
+  issueReportId String
+  issueReport   IssueReport  @relation(fields: [issueReportId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderName    String
+  senderRole    String
+  message       String
+  createdAt     DateTime     @default(now())
+
+  @@index([issueReportId, createdAt])
 }
 
