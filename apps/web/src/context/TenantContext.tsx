@@ -9,6 +9,11 @@ export interface TenantInfo {
   logoUrl?: string | null;
   themeColor: string;
   status?: string;
+  operatingMode?: 'CENTRALIZED' | 'DELEGATED';
+  allowBranchFloorPlanEdit?: boolean;
+  allowBranchRosterManagement?: boolean;
+  allowBranchProxyBooking?: boolean;
+  allowBranchIssueResolution?: boolean;
 }
 
 interface TenantContextType {

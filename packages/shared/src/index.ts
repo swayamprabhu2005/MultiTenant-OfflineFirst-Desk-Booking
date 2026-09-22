@@ -17,6 +17,11 @@ export interface OrganizationDTO {
   status: string;
   workspaceSetupAt?: string | null;
   defaultBranchAdminPassword?: string | null;
+  operatingMode?: 'CENTRALIZED' | 'DELEGATED';
+  allowBranchFloorPlanEdit?: boolean;
+  allowBranchRosterManagement?: boolean;
+  allowBranchProxyBooking?: boolean;
+  allowBranchIssueResolution?: boolean;
   createdAt: string;
   updatedAt: string;
 }

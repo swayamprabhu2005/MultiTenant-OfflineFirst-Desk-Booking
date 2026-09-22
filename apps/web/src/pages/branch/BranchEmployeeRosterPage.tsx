@@ -360,9 +360,24 @@ export const BranchEmployeeRosterPage: React.FC = () => {
     (emp.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const isRosterLocked = activeOrg?.operatingMode === 'CENTRALIZED' || activeOrg?.allowBranchRosterManagement === false;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-0 py-4 animate-fade-in">
       
+      {/* Centralized Mode Compliance Banner */}
+      {isRosterLocked && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-3 text-amber-900 text-xs shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-sm">Centralized HQ Governance Active (Read-Only Mode)</p>
+            <p className="text-amber-700 mt-0.5 leading-relaxed">
+              Workforce provisioning and employee directory modifications are strictly managed by organization headquarters under your current compliance policy.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -376,18 +391,22 @@ export const BranchEmployeeRosterPage: React.FC = () => {
             </span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage your facility's personnel with formula-assisted batch Excel ingestion or single additions. Passwords and branch codes are protected.
+            {isRosterLocked
+              ? 'View facility staff records and assignments. Directory edits are centrally controlled.'
+              : "Manage your facility's personnel with formula-assisted batch Excel ingestion or single additions. Passwords and branch codes are protected."}
           </p>
         </div>
 
-        {/* Quick Add Button */}
-        <button
-          onClick={handleOpenAddModal}
-          className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition-all cursor-pointer flex-shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Employee</span>
-        </button>
+        {/* Quick Add Button (Visible only when autonomous) */}
+        {!isRosterLocked && (
+          <button
+            onClick={handleOpenAddModal}
+            className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition-all cursor-pointer flex-shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Employee</span>
+          </button>
+        )}
       </div>
 
       {/* Alert Feedback Banner */}
@@ -414,149 +433,137 @@ export const BranchEmployeeRosterPage: React.FC = () => {
         </div>
       )}
 
-      {/* Option A Dynamic Formula Ingestion Hub */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center space-x-2">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-sm font-black text-slate-900">
-              Automated Dynamic Formula Excel Ingestion
-            </h2>
-          </div>
-          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-            Zero Manual Email / Password Entry
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-          
-          {/* Corporate Domain Input */}
-          <div className="lg:col-span-3 space-y-1">
-            <label className="block text-[11px] font-bold text-slate-600">
-              Corporate Email Domain
-            </label>
-            <div className="relative">
-              <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={domain}
-                onChange={e => setDomain(e.target.value)}
-                placeholder="acme.com"
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+      {/* Option A Dynamic Formula Ingestion Hub (Autonomous Delegated Mode Only) */}
+      {!isRosterLocked && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-sm font-black text-slate-900">
+                Automated Dynamic Formula Excel Ingestion
+              </h2>
             </div>
-            <p className="text-[10px] text-slate-400">
-              Injected into Excel formula so typing "Mohit Kumar" auto-generates "mohit.kumar@{domain || defaultDomain}".
-            </p>
+            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+              Zero Manual Email / Password Entry
+            </span>
           </div>
 
-          {/* Default Temporary Password (Inline Direct Editing) */}
-          <div className="lg:col-span-3 space-y-1">
-            <label className="block text-[11px] font-bold text-slate-600">
-              Default Temporary Password
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            
+            {/* Corporate Domain Input */}
+            <div className="lg:col-span-3 space-y-1">
+              <label className="block text-[11px] font-bold text-slate-600">
+                Corporate Email Domain
+              </label>
+              <div className="relative">
+                <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  placeholder="e.g. acme.com"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+            </div>
+
+            {/* Default Employee Password (Inline Configuration) */}
+            <div className="lg:col-span-3 space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-slate-600">
+                  Default Temporary Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleSaveConfig()}
+                  disabled={savingConfig}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                >
+                  {savingConfig ? 'Saving...' : 'Save Default'}
+                </button>
+              </div>
+              <div className="relative">
                 <Key className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   value={defaultPassword}
-                  onChange={e => setDefaultPassword(e.target.value)}
-                  placeholder={defaultFallbackPassword}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  onChange={(e) => setDefaultPassword(e.target.value)}
+                  placeholder="e.g. Acme2026!"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => handleSaveConfig()}
-                disabled={savingConfig}
-                className="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50 flex items-center space-x-1"
-                title="Save Configuration"
-              >
-                {savingConfig ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Configure</span>
-                )}
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-400">
-              Initial fallback is organization name. Auto-fills in column C upon entering employee name.
-            </p>
-          </div>
-
-          {/* Action Hub Buttons: Two-Row Layout */}
-          <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2 lg:ml-auto">
-            {/* Row 1: Download Ingestion Template & Upload Completed Roster (Side-by-Side) */}
-            <div className="flex flex-row items-center justify-start lg:justify-end gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-              {/* Download Template Button */}
-              <button
-                onClick={handleDownloadTemplate}
-                disabled={downloadingTemplate}
-                className="py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-              >
-                {downloadingTemplate ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Preparing Template...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    <span>Download Ingestion Template</span>
-                  </>
-                )}
-              </button>
-
-              {/* Upload Completed Roster Button */}
-              <label className="py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap">
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                />
-                {uploading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Upserting Roster...</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    <span>Upload Completed Roster</span>
-                  </>
-                )}
-              </label>
             </div>
 
-            {/* Row 2: Export Directory (.xlsx) placed cleanly underneath */}
-            <div className="flex items-center justify-start lg:justify-end w-full sm:w-auto">
-              <button
-                onClick={handleExportDirectory}
-                disabled={exportingDirectory}
-                className="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-              >
-                {exportingDirectory ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Exporting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4 text-slate-600" />
-                    <span>Export Directory (.xlsx)</span>
-                  </>
-                )}
-              </button>
+            {/* Action Hub Buttons: Two-Row Layout */}
+            <div className="lg:col-span-6 flex flex-col items-start lg:items-end justify-center gap-2 lg:ml-auto">
+              {/* Row 1: Download Ingestion Template & Upload Completed Roster (Side-by-Side) */}
+              <div className="flex flex-row items-center justify-start lg:justify-end gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                {/* Download Template Button */}
+                <button
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Preparing Template...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>Download Ingestion Template</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Upload Completed Roster Button */}
+                <label className="py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 shadow-xs transition-all cursor-pointer whitespace-nowrap">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                  />
+                  {uploading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Upserting Roster...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Upload Completed Roster</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* Row 2: Export Directory (.xlsx) placed cleanly underneath */}
+              <div className="flex items-center justify-start lg:justify-end w-full sm:w-auto">
+                <button
+                  onClick={handleExportDirectory}
+                  disabled={exportingDirectory}
+                  className="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center space-x-2 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                >
+                  {exportingDirectory ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 text-slate-600" />
+                      <span>Export Directory (.xlsx)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Directory Table Console */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">

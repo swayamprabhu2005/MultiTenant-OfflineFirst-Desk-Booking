@@ -71,7 +71,9 @@ export const Sidebar: React.FC = () => {
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
         { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
-        { name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers },
+        ...(activeOrg?.allowBranchFloorPlanEdit !== false && activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers }]
+          : []),
         { name: 'Employee Directory', to: '/branch/employees', icon: Users },
         { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
         ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
