@@ -46,7 +46,7 @@ export const SignupPage: React.FC = () => {
               S
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Register Organization Tenant
+              Create Organization
             </h1>
             <p className="text-slate-500 text-xs mt-1">
               Set up your dedicated multi-tenant workspace and organization administrator account
@@ -170,13 +170,13 @@ export const SignupPage: React.FC = () => {
               disabled={loading}
               className="w-full mt-4 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
             >
-              <span>{loading ? 'Registering Workspace...' : 'Register Workspace & Admin'}</span>
+              <span>{loading ? 'Setting up Organization...' : 'Create Organization & Workspace'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
           <div className="mt-5 text-center text-xs text-slate-500">
-            Already have an organization?{' '}
+            Already have an organization workspace?{' '}
             <Link to="/login" className="font-bold text-emerald-600 hover:text-emerald-500 transition-colors">
               Sign In
             </Link>

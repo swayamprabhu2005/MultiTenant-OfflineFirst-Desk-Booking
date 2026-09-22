@@ -258,9 +258,9 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <div className="mt-5 text-center text-xs text-slate-500">
-            Need to register a new tenant organization?{' '}
-            <Link to="/signup" className="font-bold text-emerald-600 hover:text-emerald-500 transition-colors">
-              Sign Up Here
+            Need to launch a new workspace?{' '}
+            <Link to="/register" className="font-bold text-emerald-600 hover:text-emerald-500 transition-colors">
+              Create Organization
             </Link>
           </div>
         </div>
