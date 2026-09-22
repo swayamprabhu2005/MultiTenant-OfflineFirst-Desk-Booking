@@ -187,6 +187,16 @@ export enum IssuePriority {
   CRITICAL = 'CRITICAL',
 }
 
+export interface IssueMessageDTO {
+  id: string;
+  issueReportId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  message: string;
+  createdAt: string;
+}
+
 export interface IssueReportDTO {
   id: string;
   title: string;
@@ -198,7 +208,11 @@ export interface IssueReportDTO {
   deviceInfo?: string | null;
   systemDiagnostics?: Record<string, any> | null;
   status: IssueStatus;
+  targetLevel?: string | null; // "BRANCH_ADMIN" | "ORGANIZATION_ADMIN" | "PLATFORM_ADMIN"
+  branchId?: string | null;
   resolutionNote?: string | null;
+  commendationNote?: string | null;
+  commendationAuthor?: string | null;
   reporterId: string;
   reporter?: {
     id: string;
@@ -219,6 +233,7 @@ export interface IssueReportDTO {
     name: string;
     email: string;
   } | null;
+  messages?: IssueMessageDTO[];
   createdAt: string;
   updatedAt: string;
 }
