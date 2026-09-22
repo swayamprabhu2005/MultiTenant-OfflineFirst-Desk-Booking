@@ -210,6 +210,41 @@ flowchart TD
 
 ---
 
+### 12. 🛡️ 3-Tier Enterprise Issue Governance & Threaded Resolution
+- **Hierarchical Escalation Pipeline**: Structured resolution flow spanning 3 corporate tiers:
+  1. **Tier 1 (Branch Facility)**: Employee files clean issue ticket (facility, hardware, cleanliness) directly to Branch Administrator without hardware/OS dumps.
+  2. **Tier 2 (Global Organization)**: Branch Admin escalates unresolved or cross-facility incidents to Organization Global Administration.
+  3. **Tier 3 (Platform Superadmin)**: Global Organization Admin escalates platform-level, infrastructure, or critical SaaS issues directly to Platform Superadmin (`system`).
+- **Bi-Directional Resolution Threads**: Real-time two-way messaging between reporting employees and handling administrators with role badges and audit timestamps.
+- **Commendation & Appreciation Notes**: Resolving administrators can attach a formal commendation note acknowledging employee cooperation upon closing the issue.
+- **Dynamic Navigation Link**: The "Issue Reports" sidebar navigation link dynamically displays only when active, non-closed issues exist in the user's scope.
+- **Offline Outbox Support**: Issues reported while offline are automatically queued in IndexedDB and synchronized once connectivity resumes.
+
+---
+
+### 13. ⚙️ Dual-Mode Governance Policy Architecture (Bank Mode vs Enterprise Mode)
+- **Centralized "Bank Mode"**: Designed for financial institutions and regulated enterprises. Restricts branch autonomy — floor plans, employee rosters, and proxy bookings are strictly managed at global headquarters.
+- **Delegated "Enterprise Mode"**: Grants branch managers operational autonomy over local floor plans, rapid employee roster ingestion, and local issue resolutions.
+- **Granular Policy Overrides**: Global Admins can toggle individual operational capabilities (`allowBranchFloorPlanEdit`, `allowBranchRosterManagement`, `allowBranchProxyBooking`, `allowBranchIssueResolution`) from the dedicated `/admin/permissions` console.
+
+---
+
+### 14. 🌐 Modern Corporate SaaS Landing Page & Subdomain-Aware Root Routing
+- **Corporate Landing Experience** (`/`): High-performance SaaS landing page powered by Framer Motion animations with enterprise architectural pillars, operational telemetry stats, and zero-trust security trust indicators.
+- **Subdomain-Aware Navigation**:
+  - Root unauthenticated visitors arrive at the public landing page with "Sign In" and "Create Organization" call-to-action paths.
+  - Authenticated sessions dynamically route directly to the user's role-scoped dashboard (Platform Admin, Org Admin, Branch Admin, or Employee).
+  - Explicit `/login`, `/register`, and `/signup` routes ensure smooth multi-tenant onboarding.
+
+---
+
+### 15. 🎨 Multi-Tenant Isolated Brand Theming Engine
+- **Strict Tenant Style Isolation**: Organization brand colors are dynamically mapped to CSS tokens (`--brand-primary`, `--brand-subtle`, `--brand-light`, `--brand-border`, `--brand-text`) exclusively within that organization's authenticated session.
+- **Platform Superadmin & Public Immunity**: The Platform Superadmin portal, public landing page, login page, and organization creation pages strictly retain the default corporate slate/indigo theme and are never tainted by tenant customizations.
+- **Zero-Reload Live Propagation**: Theme color changes applied in `/admin/branding` take effect instantly across active components without browser reload.
+
+---
+
 ## 📦 Project Structure
 
 ```
@@ -347,6 +382,15 @@ AZURE_REDIRECT_URI="http://localhost:3000/api/auth/sso/callback"
 | `GET` | `/api/notifications` | Fetch notification activity stream |
 | `POST` | `/api/notifications/mark-read` | Mark all notifications as read |
 | `POST` | `/api/notifications/clear` | Clear notification history |
+| `GET` | `/api/issues` | Fetch issue reports scoped by role and active tenant |
+| `POST` | `/api/issues` | Submit a new clean issue report |
+| `POST` | `/api/issues/:id/escalate` | Escalate issue up hierarchy (Branch -> Org -> Platform) |
+| `POST` | `/api/issues/:id/resolve` | Resolve an issue with an optional commendation note |
+| `GET` | `/api/issues/:id/messages` | Fetch threaded discussion messages for an issue |
+| `POST` | `/api/issues/:id/messages` | Send a new message in an issue discussion thread |
+| `GET` | `/api/organizations/:id/permissions` | Fetch organization governance and permission policies |
+| `PATCH` | `/api/organizations/:id/permissions` | Update centralized/delegated policies and branch permissions |
+| `PATCH` | `/api/organizations/:id/branding` | Update white-label brand colors and corporate logo |
 | `GET` | `/api/audit` | Fetch organization audit logs |
 | `GET` | `/api/health` | API health check |
 
