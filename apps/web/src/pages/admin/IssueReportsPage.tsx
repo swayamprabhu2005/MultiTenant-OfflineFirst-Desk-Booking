@@ -4,13 +4,15 @@ import {
   ShieldAlert, Search, RefreshCw, AlertCircle, CheckCircle2, 
   Clock, Image as ImageIcon, Eye, Trash2, 
   ChevronRight, Building2, User, Shield, X, 
-  Save, Loader2, Cpu, Server, Database, Copy, Check, Terminal, Box, Download
+  Save, Loader2, ArrowUpRight, MessageSquare, Send, Star
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { showToast } from '../../components/common/Toast';
-import { IssueStatus, IssuePriority, IssueReportDTO } from '@deskbooking/shared';
+import { useAuth } from '../../context/AuthContext';
+import { IssueStatus, IssuePriority, IssueReportDTO, IssueMessageDTO, Role } from '@deskbooking/shared';
 
 export const IssueReportsPage: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const [issues, setIssues] = useState<IssueReportDTO[]>([]);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0, critical: 0 });
@@ -28,9 +30,12 @@ export const IssueReportsPage: React.FC = () => {
   const [selectedIssue, setSelectedIssue] = useState<IssueReportDTO | null>(null);
   const [editStatus, setEditStatus] = useState<IssueStatus>(IssueStatus.OPEN);
   const [resolutionNote, setResolutionNote] = useState('');
+  const [commendationNote, setCommendationNote] = useState('');
+  const [messages, setMessages] = useState<IssueMessageDTO[]>([]);
+  const [newMessageText, setNewMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [copiedManifest, setCopiedManifest] = useState(false);
 
   // Lightbox modal for screenshot
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -79,27 +84,86 @@ export const IssueReportsPage: React.FC = () => {
     setSelectedIssue(issue);
     setEditStatus(issue.status);
     setResolutionNote(issue.resolutionNote || '');
+    setCommendationNote(issue.commendationNote || '');
+    setMessages(issue.messages || []);
+
+    // Load live message thread
+    fetchApi<{ messages: IssueMessageDTO[] }>(`/issues/${issue.id}/messages`)
+      .then((res) => {
+        if (res.messages) setMessages(res.messages);
+      })
+      .catch((err) => console.warn('Could not fetch issue messages:', err));
   };
 
-  const handleCopyManifest = (manifest: any) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIssue || !newMessageText.trim()) return;
+
     try {
-      navigator.clipboard.writeText(JSON.stringify(manifest, null, 2));
-      setCopiedManifest(true);
-      showToast('System diagnostics manifest copied to clipboard!', 'success');
-      setTimeout(() => setCopiedManifest(false), 2500);
-    } catch {
-      showToast('Failed to copy manifest to clipboard', 'error');
+      setIsSendingMessage(true);
+      const res = await fetchApi<{ success: boolean; message: IssueMessageDTO }>(
+        `/issues/${selectedIssue.id}/messages`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ message: newMessageText.trim() }),
+        }
+      );
+
+      if (res.message) {
+        setMessages((prev) => [...prev, res.message]);
+        setNewMessageText('');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to send message', 'error');
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
-  const handleDownloadReportFile = (issue: IssueReportDTO) => {
-    if (issue.systemDiagnostics?.fileUrl) {
-      window.open(issue.systemDiagnostics.fileUrl, '_blank');
-      showToast('Opening diagnostics file...', 'success');
-      return;
+  const handleEscalateToOrg = async () => {
+    if (!selectedIssue) return;
+    const note = prompt('Optional escalation note for Organization Administration:');
+    try {
+      setIsUpdating(true);
+      const res = await fetchApi<{ success: boolean; issue: IssueReportDTO }>(
+        `/issues/${selectedIssue.id}/escalate-to-org`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ note: note || '' }),
+        }
+      );
+      showToast('Issue escalated to Global Organization Administration.', 'success');
+      setSelectedIssue(res.issue);
+      if (res.issue.messages) setMessages(res.issue.messages);
+      await loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to escalate issue', 'error');
+    } finally {
+      setIsUpdating(false);
     }
-    window.open('http://localhost:4000/api/system/download-report', '_blank');
-    showToast('Downloading diagnostics file...', 'success');
+  };
+
+  const handleEscalateToPlatform = async () => {
+    if (!selectedIssue) return;
+    const note = prompt('Optional escalation note for Platform Superadmin:');
+    try {
+      setIsUpdating(true);
+      const res = await fetchApi<{ success: boolean; issue: IssueReportDTO }>(
+        `/issues/${selectedIssue.id}/escalate-to-platform`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ note: note || '' }),
+        }
+      );
+      showToast('Issue escalated to Platform Superadmin.', 'success');
+      setSelectedIssue(res.issue);
+      if (res.issue.messages) setMessages(res.issue.messages);
+      await loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to escalate issue', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleUpdateStatus = async () => {
@@ -114,12 +178,14 @@ export const IssueReportsPage: React.FC = () => {
           body: JSON.stringify({
             status: editStatus,
             resolutionNote: resolutionNote.trim(),
+            commendationNote: editStatus === IssueStatus.RESOLVED ? commendationNote.trim() : undefined,
           }),
         }
       );
 
       showToast(`Issue status updated to ${editStatus}.`, 'success');
       setSelectedIssue(res.issue);
+      if (res.issue.messages) setMessages(res.issue.messages);
       await loadData();
     } catch (err: any) {
       console.error('Failed to update issue:', err);
@@ -584,160 +650,64 @@ export const IssueReportsPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Client Software & Environment Versions */}
-                <div className="sm:col-span-2 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
-                        <Cpu className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 block">
-                          Client Software &amp; System Version Diagnostics
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Captured at time of report escalation
-                        </span>
-                      </div>
+                {/* Escalation Level & Commendation Banner */}
+                <div className="sm:col-span-2 space-y-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                        Hierarchical Escalation Tier
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs mt-0.5">
+                        {selectedIssue.targetLevel === 'PLATFORM_ADMIN'
+                          ? 'Escalated to Platform Superadmin'
+                          : selectedIssue.targetLevel === 'ORGANIZATION_ADMIN'
+                          ? 'Escalated to Global Organization HQ'
+                          : 'Assigned to Branch Administration'}
+                      </p>
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
-                        Version: {selectedIssue.clientVersion || 'v1.0.0'}
-                      </span>
-                      {selectedIssue.systemDiagnostics && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadReportFile(selectedIssue)}
-                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-[10px] font-bold text-slate-700 inline-flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
-                            title="Download system-diagnostics.txt report file"
-                          >
-                            <Download className="w-3 h-3 text-indigo-600" />
-                            <span>Download Log (.txt)</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyManifest(selectedIssue.systemDiagnostics)}
-                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-[10px] font-bold text-slate-700 inline-flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
-                            title="Copy entire system diagnostics JSON to clipboard"
-                          >
-                            {copiedManifest ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-600" />
-                                <span className="text-emerald-700">Copied!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3 text-slate-500" />
-                                <span>Copy JSON</span>
-                              </>
-                            )}
-                          </button>
-                        </>
+                      {/* Branch Admin can escalate to Org Admin */}
+                      {currentUser?.role === Role.BRANCH_ADMIN && selectedIssue.targetLevel === 'BRANCH_ADMIN' && selectedIssue.status !== IssueStatus.RESOLVED && (
+                        <button
+                          type="button"
+                          onClick={handleEscalateToOrg}
+                          disabled={isUpdating}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center space-x-1 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span>Escalate to Org Admin</span>
+                        </button>
+                      )}
+
+                      {/* Org Admin can escalate to Platform Admin */}
+                      {currentUser?.role === Role.ORGANIZATION_ADMIN && selectedIssue.targetLevel !== 'PLATFORM_ADMIN' && selectedIssue.status !== IssueStatus.RESOLVED && (
+                        <button
+                          type="button"
+                          onClick={handleEscalateToPlatform}
+                          disabled={isUpdating}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center space-x-1 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span>Escalate to Platform Admin</span>
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Browser / Device Info */}
-                  <div className="p-2.5 bg-white border border-slate-200/90 rounded-lg">
-                    <span className="text-[9px] font-black uppercase text-slate-400 block mb-0.5">
-                      Reporter Browser &amp; Operating Environment
-                    </span>
-                    <p className="text-slate-800 text-xs font-mono font-medium">
-                      {selectedIssue.deviceInfo || 'No client environment string available.'}
-                    </p>
-                  </div>
-
-                  {/* Complete Stack Grid (Docker, Postgres, OS, Node, Frameworks) */}
-                  {selectedIssue.systemDiagnostics && (
-                    <div className="space-y-2 pt-1 border-t border-slate-200/60">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                        Server &amp; Infrastructure Runtime Manifest
-                      </span>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {/* Docker & Containerization */}
-                        <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-500 flex items-center space-x-1">
-                              <Box className="w-3 h-3 text-blue-600" />
-                              <span>Docker &amp; Containers</span>
-                            </span>
-                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
-                              selectedIssue.systemDiagnostics.runtimes?.dockerDaemonActive
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {selectedIssue.systemDiagnostics.runtimes?.dockerDaemonActive ? 'DAEMON ACTIVE' : 'DAEMON OFFLINE'}
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-800 font-bold">
-                            {selectedIssue.systemDiagnostics.runtimes?.docker || 'Docker CLI'}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {selectedIssue.systemDiagnostics.runtimes?.dockerCompose || 'Docker Compose'}
-                          </div>
-                        </div>
-
-                        {/* Database Engine */}
-                        <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-500 flex items-center space-x-1">
-                              <Database className="w-3 h-3 text-indigo-600" />
-                              <span>Database Engine</span>
-                            </span>
-                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
-                              selectedIssue.systemDiagnostics.database?.status === 'HEALTHY'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}>
-                              {selectedIssue.systemDiagnostics.database?.status || 'HEALTHY'}
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-800 font-bold truncate" title={selectedIssue.systemDiagnostics.database?.version}>
-                            {selectedIssue.systemDiagnostics.database?.version || 'PostgreSQL 16'}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            Port {selectedIssue.systemDiagnostics.database?.port || 5432} • Latency: {selectedIssue.systemDiagnostics.database?.latencyMs ?? 0}ms
-                          </div>
-                        </div>
-
-                        {/* Host OS & Hardware */}
-                        <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-500 flex items-center space-x-1">
-                              <Server className="w-3 h-3 text-amber-600" />
-                              <span>Host Operating System</span>
-                            </span>
-                            <span className="text-[9px] font-mono font-bold text-slate-500">
-                              {selectedIssue.systemDiagnostics.os?.arch}
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-800 font-bold">
-                            {selectedIssue.systemDiagnostics.os?.humanName || selectedIssue.systemDiagnostics.os?.type}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            RAM: {selectedIssue.systemDiagnostics.os?.freeMemoryGB} free / {selectedIssue.systemDiagnostics.os?.totalMemoryGB} • CPU: {selectedIssue.systemDiagnostics.os?.cpuCores} Cores
-                          </div>
-                        </div>
-
-                        {/* Runtimes & Frameworks */}
-                        <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-500 flex items-center space-x-1">
-                              <Terminal className="w-3 h-3 text-emerald-600" />
-                              <span>Runtimes &amp; Frameworks</span>
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-800 font-bold">
-                            Node {selectedIssue.systemDiagnostics.runtimes?.node} • pnpm {selectedIssue.systemDiagnostics.runtimes?.pnpm}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono truncate" title="Express, React, Vite, Prisma, TypeScript">
-                            Express 4.22 • React 18.3 • Vite 5.4 • Prisma 5.22
-                          </div>
-                        </div>
+                  {/* Commendation Note / Appreciation Banner (if resolved with commendation) */}
+                  {selectedIssue.commendationNote && (
+                    <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl space-y-1 shadow-xs">
+                      <div className="flex items-center space-x-1.5 text-amber-800 font-bold text-xs">
+                        <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                        <span>Administrator Commendation &amp; Appreciation Note</span>
                       </div>
+                      <p className="text-slate-800 text-xs font-medium italic">
+                        "{selectedIssue.commendationNote}"
+                      </p>
+                      <p className="text-[10px] text-amber-700 font-bold">
+                        — Awarded by {selectedIssue.commendationAuthor || 'Administration'}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -785,108 +755,202 @@ export const IssueReportsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Resolution & Status Management Panel */}
-              <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-2xl space-y-3">
+              {/* Threaded Two-Way Discussion */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center space-x-1.5">
-                    <Shield className="w-4 h-4 text-indigo-600" />
-                    <span>Superadmin Resolution Action</span>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
+                    <MessageSquare className="w-4 h-4 text-indigo-600" />
+                    <span>Issue Discussion Thread</span>
                   </h4>
-                  {selectedIssue.resolvedBy && (
-                    <span className="text-[10px] text-indigo-700 font-semibold">
-                      Resolved by: {selectedIssue.resolvedBy.name}
-                    </span>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    {messages.length} {messages.length === 1 ? 'Message' : 'Messages'}
+                  </span>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto space-y-2.5 p-3 bg-white border border-slate-200 rounded-xl">
+                  {messages.length === 0 ? (
+                    <div className="text-center py-4 text-slate-400 text-xs">
+                      No messages in this discussion thread yet. Post an update below.
+                    </div>
+                  ) : (
+                    messages.map((msg) => {
+                      const isMe = currentUser?.id === msg.senderId;
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`p-2.5 rounded-xl border text-xs space-y-1 ${
+                            isMe
+                              ? 'bg-indigo-50/60 border-indigo-200 ml-4'
+                              : 'bg-slate-50 border-slate-200 mr-4'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-bold text-slate-900">{msg.senderName}</span>
+                              <span className="px-1.5 py-0.2 rounded font-bold text-[9px] bg-slate-200 text-slate-700">
+                                {msg.senderRole}
+                              </span>
+                            </div>
+                            <span className="text-slate-400">
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-slate-800 font-normal whitespace-pre-wrap">{msg.message}</p>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
 
-                {/* Status Switcher Buttons */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                    Set Operational Status
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditStatus(IssueStatus.OPEN)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
-                        editStatus === IssueStatus.OPEN
-                          ? 'bg-rose-500 text-white border-rose-600 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      🔴 OPEN / PENDING
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditStatus(IssueStatus.IN_PROGRESS)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
-                        editStatus === IssueStatus.IN_PROGRESS
-                          ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      🔵 IN PROGRESS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditStatus(IssueStatus.RESOLVED)}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
-                        editStatus === IssueStatus.RESOLVED
-                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      🟢 MARK RESOLVED
-                    </button>
-                  </div>
-                </div>
-
-                {/* Resolution Note */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Resolution Notes / Corrective Actions
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={resolutionNote}
-                    onChange={(e) => setResolutionNote(e.target.value)}
-                    placeholder="Document the root cause and steps taken to resolve (e.g., cleared corrupt reservation lock, adjusted branch quota, reset password)..."
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium placeholder:text-slate-400"
+                {/* Post Message Input Form */}
+                <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={newMessageText}
+                    onChange={(e) => setNewMessageText(e.target.value)}
+                    placeholder="Type an update or question for this issue..."
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium placeholder:text-slate-400"
                   />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
                   <button
-                    type="button"
-                    onClick={handleDeleteIssue}
-                    disabled={isDeleting}
-                    className="text-rose-600 hover:text-rose-700 font-bold text-xs inline-flex items-center space-x-1 cursor-pointer p-1.5 rounded-lg hover:bg-rose-50"
+                    type="submit"
+                    disabled={isSendingMessage || !newMessageText.trim()}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold inline-flex items-center space-x-1 cursor-pointer transition-colors disabled:opacity-40"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Test Report</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleUpdateStatus}
-                    disabled={isUpdating}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {isUpdating ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Updating Status...</span>
-                      </>
+                    {isSendingMessage ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <>
-                        <Save className="w-3.5 h-3.5" />
-                        <span>Save Resolution</span>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send</span>
                       </>
                     )}
                   </button>
-                </div>
-
+                </form>
               </div>
+
+              {/* Resolution & Status Management Panel (Admin Roles Only) */}
+              {currentUser?.role !== Role.EMPLOYEE && (
+                <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center space-x-1.5">
+                      <Shield className="w-4 h-4 text-indigo-600" />
+                      <span>Resolution &amp; Lifecycle Management</span>
+                    </h4>
+                    {selectedIssue.resolvedBy && (
+                      <span className="text-[10px] text-indigo-700 font-semibold">
+                        Resolved by: {selectedIssue.resolvedBy.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Status Switcher Buttons */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      Set Operational Status
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditStatus(IssueStatus.OPEN)}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
+                          editStatus === IssueStatus.OPEN
+                            ? 'bg-rose-500 text-white border-rose-600 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        🔴 OPEN / PENDING
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditStatus(IssueStatus.IN_PROGRESS)}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
+                          editStatus === IssueStatus.IN_PROGRESS
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        🔵 IN PROGRESS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditStatus(IssueStatus.RESOLVED)}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
+                          editStatus === IssueStatus.RESOLVED
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        🟢 MARK RESOLVED
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Resolution Note */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Resolution Notes / Corrective Actions
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={resolutionNote}
+                      onChange={(e) => setResolutionNote(e.target.value)}
+                      placeholder="Document the root cause and steps taken to resolve..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Appreciation / Commendation Note Input when Resolving */}
+                  {editStatus === IssueStatus.RESOLVED && (
+                    <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1">
+                      <label className="block text-xs font-bold text-amber-900 flex items-center space-x-1">
+                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-600" />
+                        <span>Reporter Appreciation / Commendation Note (Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={commendationNote}
+                        onChange={(e) => setCommendationNote(e.target.value)}
+                        placeholder="e.g. Great catch! Thank you for helping keep the branch running smoothly."
+                        className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium placeholder:text-slate-400"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    {currentUser?.role === Role.PLATFORM_ADMIN ? (
+                      <button
+                        type="button"
+                        onClick={handleDeleteIssue}
+                        disabled={isDeleting}
+                        className="text-rose-600 hover:text-rose-700 font-bold text-xs inline-flex items-center space-x-1 cursor-pointer p-1.5 rounded-lg hover:bg-rose-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Test Report</span>
+                      </button>
+                    ) : <div />}
+
+                    <button
+                      type="button"
+                      onClick={handleUpdateStatus}
+                      disabled={isUpdating}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isUpdating ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Updating Status...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Save Resolution</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                </div>
+              )}
 
             </div>
 
