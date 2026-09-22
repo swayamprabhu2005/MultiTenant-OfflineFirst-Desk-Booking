@@ -604,15 +604,16 @@ router.post(
   }
 );
 
-// 4. Update Issue Report Status and Resolution Note (Superadmin Only)
+// 4. Update Issue Report Status, Resolution Note, and Commendation
 router.patch(
   '/:id/status',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
       const { id } = req.params;
-      const { status, resolutionNote } = req.body;
+      const { status, resolutionNote, commendationNote } = req.body;
 
       if (!status || !Object.values(IssueStatus).includes(status)) {
         return res.status(400).json({ error: 'Valid status (OPEN, IN_PROGRESS, RESOLVED) is required.' });
@@ -620,20 +621,40 @@ router.patch(
 
       const existing = await prisma.issueReport.findUnique({
         where: { id },
+        include: { organization: true },
       });
 
       if (!existing) {
         return res.status(404).json({ error: 'Issue report not found.' });
       }
 
+      // Check organization governance and permissions
+      if (user.role === Role.BRANCH_ADMIN) {
+        if (existing.organizationId !== user.organizationId) {
+          return res.status(403).json({ error: 'Access denied: issue belongs to another organization.' });
+        }
+        if (existing.organization.allowBranchIssueResolution === false) {
+          return res.status(403).json({ error: 'Branch issue resolution is disabled by organization governance policy.' });
+        }
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        if (existing.organizationId !== user.organizationId) {
+          return res.status(403).json({ error: 'Access denied: issue belongs to another organization.' });
+        }
+      }
+
       const isResolving = status === IssueStatus.RESOLVED;
+      const trimmedCommendation = commendationNote && typeof commendationNote === 'string' && commendationNote.trim()
+        ? commendationNote.trim()
+        : null;
 
       const updated = await prisma.issueReport.update({
         where: { id },
         data: {
           status,
           resolutionNote: resolutionNote !== undefined ? String(resolutionNote).trim() : existing.resolutionNote,
-          resolvedById: isResolving ? req.user!.id : (status === IssueStatus.OPEN ? null : existing.resolvedById),
+          resolvedById: isResolving ? user.id : (status === IssueStatus.OPEN ? null : existing.resolvedById),
+          commendationNote: isResolving ? (trimmedCommendation || existing.commendationNote) : existing.commendationNote,
+          commendationAuthor: isResolving && trimmedCommendation ? user.name : existing.commendationAuthor,
         },
         include: {
           reporter: {
@@ -645,14 +666,30 @@ router.patch(
           resolvedBy: {
             select: { id: true, name: true, email: true },
           },
+          messages: {
+            orderBy: { createdAt: 'asc' },
+          },
         },
       });
+
+      // If commendation was provided upon resolution, record it in thread as well
+      if (isResolving && trimmedCommendation) {
+        await prisma.issueMessage.create({
+          data: {
+            issueReportId: id,
+            senderId: user.id,
+            senderName: user.name,
+            senderRole: user.role,
+            message: `⭐ [Admin Commendation]: "${trimmedCommendation}"`,
+          },
+        });
+      }
 
       // Audit Log status transition
       await prisma.auditLog.create({
         data: {
           organizationId: updated.organizationId,
-          actorUserId: req.user!.id,
+          actorUserId: user.id,
           action: isResolving ? 'RESOLVE_ISSUE' : 'UPDATE_ISSUE_STATUS',
           entityType: 'IssueReport',
           entityId: updated.id,
@@ -660,6 +697,7 @@ router.patch(
             previousStatus: existing.status,
             newStatus: updated.status,
             resolutionNote: updated.resolutionNote,
+            commendationNote: updated.commendationNote,
           },
         },
       });
