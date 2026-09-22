@@ -31,20 +31,30 @@ export const Sidebar: React.FC = () => {
   const isEmployee = user?.role === 'EMPLOYEE' || user?.role === 'TECH_LEAD';
   const showOnlineStatus = isBranchAdmin || isEmployee;
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openIssuesCount, setOpenIssuesCount] = useState<number | null>(null);
+  const [issueCount, setIssueCount] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     if (isPlatformAdmin) {
       fetchApi<{ open: number }>('/issues/stats')
-        .then(data => setOpenIssuesCount(data.open))
+        .then(data => setIssueCount(data.open))
+        .catch(() => {});
+    } else {
+      fetchApi<{ pagination?: { totalCount?: number } }>('/issues?limit=1')
+        .then(data => {
+          const count = data.pagination?.totalCount ?? 0;
+          setIssueCount(count);
+        })
         .catch(() => {});
     }
-  }, [isPlatformAdmin]);
+  }, [user?.id, user?.role, isPlatformAdmin]);
+
+  const hasIssues = issueCount !== null && issueCount > 0;
 
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: openIssuesCount },
+        { name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount },
       ]
     : isEmployee
     ? [
@@ -52,6 +62,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
         { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
+        ...(hasIssues ? [{ name: 'Issues', to: '/employee/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ]
     : isBranchAdmin
     ? [
@@ -62,6 +73,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers },
         { name: 'Employee Directory', to: '/branch/employees', icon: Users },
         { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
+        ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -71,6 +83,7 @@ export const Sidebar: React.FC = () => {
         { name: 'Workforce', to: '/admin/workforce', icon: Contact },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
+        ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ];
 
   const headerTitle = isPlatformAdmin
