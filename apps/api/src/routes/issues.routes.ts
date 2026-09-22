@@ -200,13 +200,14 @@ router.get(
 router.get(
   '/',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
       const {
         status,
         priority,
         organizationId,
+        targetLevel,
         q,
         page = '1',
         limit = '15',
@@ -218,6 +219,37 @@ router.get(
 
       const where: any = {};
 
+      if (user.role === Role.PLATFORM_ADMIN) {
+        if (organizationId && organizationId !== 'ALL') {
+          where.organizationId = String(organizationId);
+        }
+        if (targetLevel && targetLevel !== 'ALL') {
+          where.targetLevel = String(targetLevel);
+        }
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        where.organizationId = user.organizationId;
+        if (targetLevel && targetLevel !== 'ALL') {
+          where.targetLevel = String(targetLevel);
+        }
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        where.organizationId = user.organizationId;
+        const adminUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { baseBranchId: true, scopedBranchId: true },
+        });
+        const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+        if (branchId) {
+          where.OR = [
+            { branchId },
+            { targetLevel: 'BRANCH_ADMIN' },
+            { reporterId: user.id },
+          ];
+        }
+      } else {
+        // EMPLOYEE or TECH_LEAD sees only their submitted reports
+        where.reporterId = user.id;
+      }
+
       if (status && status !== 'ALL') {
         where.status = status;
       }
@@ -226,19 +258,21 @@ router.get(
         where.priority = priority;
       }
 
-      if (organizationId && organizationId !== 'ALL') {
-        where.organizationId = String(organizationId);
-      }
-
       if (q && typeof q === 'string' && q.trim()) {
         const query = q.trim();
-        where.OR = [
+        const searchConditions = [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { reporter: { name: { contains: query, mode: 'insensitive' } } },
           { reporter: { email: { contains: query, mode: 'insensitive' } } },
           { organization: { name: { contains: query, mode: 'insensitive' } } },
         ];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+          delete where.OR;
+        } else {
+          where.OR = searchConditions;
+        }
       }
 
       const [totalCount, issues] = await Promise.all([
@@ -261,6 +295,9 @@ router.get(
             resolvedBy: {
               select: { id: true, name: true, email: true },
             },
+            messages: {
+              orderBy: { createdAt: 'asc' },
+            },
           },
         }),
       ]);
@@ -279,6 +316,86 @@ router.get(
     } catch (error: any) {
       console.error('Failed to query issue reports:', error);
       return res.status(500).json({ error: error.message || 'Failed to query reports.' });
+    }
+  }
+);
+
+// 3.5. Escalate Issue from Branch Admin to Global Organization Admin
+router.post(
+  '/:id/escalate-to-org',
+  authMiddleware,
+  requireRole([Role.BRANCH_ADMIN, Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { note } = req.body;
+
+      const existing = await prisma.issueReport.findUnique({
+        where: { id },
+        include: { organization: true },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Issue report not found.' });
+      }
+
+      if (existing.organizationId !== user.organizationId) {
+        return res.status(403).json({ error: 'Unauthorized to escalate issues from other organizations.' });
+      }
+
+      if (existing.status === IssueStatus.RESOLVED) {
+        return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
+      }
+
+      const updated = await prisma.issueReport.update({
+        where: { id },
+        data: {
+          targetLevel: 'ORGANIZATION_ADMIN',
+          status: IssueStatus.IN_PROGRESS,
+        },
+        include: {
+          reporter: { select: { id: true, name: true, email: true, role: true } },
+          organization: { select: { id: true, name: true, code: true, subdomain: true } },
+          resolvedBy: { select: { id: true, name: true, email: true } },
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
+      // Add system message capturing escalation
+      const msgContent = note && typeof note === 'string' && note.trim()
+        ? `[Escalated to Global Org Admin] ${note.trim()}`
+        : `[Escalated to Global Organization Administration by Branch Admin ${user.name}]`;
+
+      await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: msgContent,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: user.organizationId,
+          actorUserId: user.id,
+          action: 'ESCALATE_ISSUE_TO_ORG',
+          entityType: 'IssueReport',
+          entityId: id,
+          metadata: { note: msgContent },
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Issue escalated to Global Organization Administration.',
+        issue: updated,
+      });
+    } catch (error: any) {
+      console.error('Failed to escalate issue to organization:', error);
+      return res.status(500).json({ error: error.message || 'Failed to escalate issue.' });
     }
   }
 );
