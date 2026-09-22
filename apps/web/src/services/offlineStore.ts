@@ -11,7 +11,7 @@ const DB_VERSION = 2;
 
 export interface OutboxItem {
   id: string;
-  action: 'CREATE_BOOKING' | 'CANCEL_BOOKING' | 'BULK_BOOKING';
+  action: 'CREATE_BOOKING' | 'CANCEL_BOOKING' | 'BULK_BOOKING' | 'REPORT_ISSUE';
   endpoint: string;
   payload: any;
   createdAt: string;
