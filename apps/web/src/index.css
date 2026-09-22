@@ -7,5 +7,10 @@
     --primary-color: #16a34a;
     --primary-accent: #15803d;
     --primary-dark: #14532d;
+    --brand-subtle: #f0fdf4;
+    --brand-light: #dcfce7;
+    --brand-border: #bbf7d0;
+    --brand-text: #166534;
+    --brand-primary: #16a34a;
   }
 }
