@@ -400,6 +400,107 @@ router.post(
   }
 );
 
+// 3.6. Escalate Issue from Global Organization Admin to Platform Superadmin (Exclusive Tenant Gateway)
+router.post(
+  '/:id/escalate-to-platform',
+  authMiddleware,
+  requireRole([Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { note } = req.body;
+
+      const existing = await prisma.issueReport.findUnique({
+        where: { id },
+        include: { organization: true, reporter: true },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Issue report not found.' });
+      }
+
+      if (existing.organizationId !== user.organizationId) {
+        return res.status(403).json({ error: 'Unauthorized to escalate issues from other organizations.' });
+      }
+
+      if (existing.status === IssueStatus.RESOLVED) {
+        return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
+      }
+
+      const updated = await prisma.issueReport.update({
+        where: { id },
+        data: {
+          targetLevel: 'PLATFORM_ADMIN',
+          status: IssueStatus.IN_PROGRESS,
+        },
+        include: {
+          reporter: { select: { id: true, name: true, email: true, role: true } },
+          organization: { select: { id: true, name: true, code: true, subdomain: true } },
+          resolvedBy: { select: { id: true, name: true, email: true } },
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
+      // Add system message documenting platform escalation
+      const msgContent = note && typeof note === 'string' && note.trim()
+        ? `[Escalated to Platform Superadmin] ${note.trim()}`
+        : `[Escalated to Platform Superadmin by Organization Admin ${user.name}]`;
+
+      await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: msgContent,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: user.organizationId,
+          actorUserId: user.id,
+          action: 'ESCALATE_ISSUE_TO_PLATFORM',
+          entityType: 'IssueReport',
+          entityId: id,
+          metadata: { note: msgContent },
+        },
+      });
+
+      // Dispatch notification to Platform Superadmin
+      EmailService.sendIssueNotification({
+        issueId: updated.id,
+        title: `[ESCALATED] ${updated.title}`,
+        description: `${msgContent}\n\nOriginal Description:\n${updated.description}`,
+        category: updated.category,
+        priority: updated.priority,
+        reporterName: updated.reporter.name,
+        reporterEmail: updated.reporter.email,
+        reporterRole: updated.reporter.role,
+        organizationName: existing.organization.name,
+        organizationSubdomain: existing.organization.subdomain,
+        screenshotUrl: updated.screenshotUrl,
+        clientVersion: updated.clientVersion,
+        deviceInfo: updated.deviceInfo,
+        systemDiagnostics: null,
+        diagnosticsFileUrl: null,
+        diagnosticsText: null,
+        createdAt: updated.createdAt,
+      }).catch((err) => console.error('Error dispatching platform escalation notification:', err));
+
+      return res.json({
+        success: true,
+        message: 'Issue escalated to Platform Superadmin.',
+        issue: updated,
+      });
+    } catch (error: any) {
+      console.error('Failed to escalate issue to platform superadmin:', error);
+      return res.status(500).json({ error: error.message || 'Failed to escalate issue.' });
+    }
+  }
+);
+
 // 4. Update Issue Report Status and Resolution Note (Superadmin Only)
 router.patch(
   '/:id/status',
