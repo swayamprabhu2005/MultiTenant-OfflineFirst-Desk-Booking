@@ -170,6 +170,18 @@ export const OutlookCalendarPage: React.FC = () => {
   const [isSubmittingBooking, setIsSubmittingBooking] = useState<boolean>(false);
   const [modalErrorNotice, setModalErrorNotice] = useState<string | null>(null);
 
+  // Multi-Day Range Reservation State (Up to 30 Days)
+  const [bookingDurationMode, setBookingDurationMode] = useState<'SINGLE' | 'RANGE'>('SINGLE');
+  const [rangeStartDate, setRangeStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [rangeEndDate, setRangeEndDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [rangeWeekdaysOnly, setRangeWeekdaysOnly] = useState<boolean>(true);
+  const [rangeSmartSkip, setRangeSmartSkip] = useState<boolean>(false);
+  const [showCalendarSmartSkipPrompt, setShowCalendarSmartSkipPrompt] = useState<boolean>(false);
+
   // Inspected Event Modal (Click on event chip)
   const [inspectedEvent, setInspectedEvent] = useState<CalendarEventItem | null>(null);
   const [isCancellingSingle, setIsCancellingSingle] = useState<boolean>(false);
@@ -423,6 +435,77 @@ export const OutlookCalendarPage: React.FC = () => {
     return cubicles.filter((d) => !bookedDeskIdsOnDate.has(d.id));
   }, [currentSection, events, bookingModalDate]);
 
+  // All Section Cubicles (for range selection)
+  const allSectionCubicles = useMemo(() => {
+    if (!currentSection) return [];
+    return (currentSection.desks || []).filter((d) => !d.isMeetingRoom && !d.deskCode?.startsWith('M-'));
+  }, [currentSection]);
+
+  // Dynamic Range Dates Array (Capped at 30 Days)
+  const calendarRangeDates = useMemo(() => {
+    if (!rangeStartDate || !rangeEndDate) return [];
+    const start = new Date(rangeStartDate + 'T00:00:00');
+    const end = new Date(rangeEndDate + 'T00:00:00');
+    if (end < start) return [];
+
+    const maxEnd = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const effectiveEnd = end > maxEnd ? maxEnd : end;
+
+    const dates: string[] = [];
+    const cur = new Date(start);
+    while (cur <= effectiveEnd) {
+      const dayOfWeek = cur.getDay();
+      if (!rangeWeekdaysOnly || (dayOfWeek !== 0 && dayOfWeek !== 6)) {
+        dates.push(cur.toISOString().split('T')[0]);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
+  }, [rangeStartDate, rangeEndDate, rangeWeekdaysOnly]);
+
+  // Dynamic Conflict Detection for selectedDeskId across calendarRangeDates
+  const { availableCalendarDates, conflictedCalendarDates } = useMemo(() => {
+    if (!selectedDeskId || calendarRangeDates.length === 0) {
+      return { availableCalendarDates: [], conflictedCalendarDates: [] };
+    }
+    const available: string[] = [];
+    const conflicted: { date: string; reason: string }[] = [];
+
+    const targetDesk = currentSection?.desks?.find((d) => d.id === selectedDeskId);
+
+    for (const dStr of calendarRangeDates) {
+      const eventConflict = events.find(
+        (ev) => ev.resourceType === 'DESK' && ev.resourceId === selectedDeskId && ev.bookingDate === dStr && ev.status === 'CONFIRMED'
+      );
+      if (eventConflict) {
+        conflicted.push({
+          date: dStr,
+          reason: `Reserved by ${eventConflict.user?.name || 'another colleague'}`,
+        });
+        continue;
+      }
+
+      const deskBookingConflict = targetDesk?.bookings?.find((b) => {
+        if (b.status === 'CANCELLED') return false;
+        const bStart = b.startTime?.split('T')[0];
+        const bEnd = b.endTime?.split('T')[0];
+        return dStr >= bStart && dStr <= bEnd;
+      });
+
+      if (deskBookingConflict) {
+        conflicted.push({
+          date: dStr,
+          reason: `Reserved by ${(deskBookingConflict as any)?.user?.name || 'another colleague'}`,
+        });
+        continue;
+      }
+
+      available.push(dStr);
+    }
+
+    return { availableCalendarDates: available, conflictedCalendarDates: conflicted };
+  }, [selectedDeskId, calendarRangeDates, events, currentSection]);
+
   // Dynamic Meeting Room Availability in Current Section on Selected Date
   const sectionMeetingRoom = currentSection?.meetingRoom || null;
   const isMeetingRoomBookedOnDate = useMemo(() => {
@@ -448,18 +531,28 @@ export const OutlookCalendarPage: React.FC = () => {
     return false;
   }, [sectionMeetingRoom, events, bookingModalDate]);
 
-  // Auto-sync selected desk ID when available cubicles change
+  // Auto-sync selected desk ID
   useEffect(() => {
     if (bookingResourceType === 'DESK') {
-      if (availableCubicles.length > 0) {
-        if (!selectedDeskId || !availableCubicles.some((d) => d.id === selectedDeskId)) {
-          setSelectedDeskId(availableCubicles[0].id);
+      if (bookingDurationMode === 'RANGE') {
+        if (allSectionCubicles.length > 0) {
+          if (!selectedDeskId || !allSectionCubicles.some((d) => d.id === selectedDeskId)) {
+            setSelectedDeskId(allSectionCubicles[0].id);
+          }
+        } else {
+          setSelectedDeskId('');
         }
       } else {
-        setSelectedDeskId('');
+        if (availableCubicles.length > 0) {
+          if (!selectedDeskId || !availableCubicles.some((d) => d.id === selectedDeskId)) {
+            setSelectedDeskId(availableCubicles[0].id);
+          }
+        } else {
+          setSelectedDeskId('');
+        }
       }
     }
-  }, [availableCubicles, bookingResourceType, selectedDeskId]);
+  }, [availableCubicles, allSectionCubicles, bookingDurationMode, bookingResourceType, selectedDeskId]);
 
   // Auto-sync selected meeting room ID
   useEffect(() => {
@@ -478,6 +571,14 @@ export const OutlookCalendarPage: React.FC = () => {
   // Open Date-Click Single-Day Booking Modal
   const handleOpenDateBooking = (dateStr: string) => {
     setBookingModalDate(dateStr);
+    setBookingDurationMode('SINGLE');
+    setRangeStartDate(dateStr);
+    const d14 = new Date(dateStr + 'T00:00:00');
+    d14.setDate(d14.getDate() + 14);
+    setRangeEndDate(d14.toISOString().split('T')[0]);
+    setRangeWeekdaysOnly(true);
+    setRangeSmartSkip(false);
+    setShowCalendarSmartSkipPrompt(false);
     setBookingResourceType('DESK');
     setDeskSlotType('FULL_DAY');
     setRoomStartHour(9);
@@ -493,23 +594,47 @@ export const OutlookCalendarPage: React.FC = () => {
   };
 
   // Submit Reservation
-  const handleConfirmReservation = async () => {
+  const handleConfirmReservation = async (forceSmartSkip?: boolean) => {
     try {
       setIsSubmittingBooking(true);
       setModalErrorNotice(null);
 
+      const isSmartSkipActive = forceSmartSkip !== undefined ? forceSmartSkip : rangeSmartSkip;
+
       const payload: any = {
-        bookingDate: bookingModalDate,
         notes: bookingNotes.trim() || undefined,
       };
 
       if (bookingResourceType === 'DESK') {
         if (!selectedDeskId) {
-          throw new Error('Please select an available cubicle.');
+          throw new Error('Please select a cubicle.');
         }
         payload.deskId = selectedDeskId;
         payload.slotType = deskSlotType;
+
+        if (bookingDurationMode === 'RANGE') {
+          if (calendarRangeDates.length === 0) {
+            throw new Error('Please select a valid date range.');
+          }
+
+          if (conflictedCalendarDates.length > 0 && !isSmartSkipActive) {
+            setShowCalendarSmartSkipPrompt(true);
+            setIsSubmittingBooking(false);
+            return;
+          }
+
+          const targetDates = isSmartSkipActive ? availableCalendarDates : calendarRangeDates;
+          if (targetDates.length === 0) {
+            throw new Error('All dates in the selected range have conflicts and cannot be reserved.');
+          }
+
+          payload.bookingDates = targetDates;
+          payload.skipConflicts = isSmartSkipActive;
+        } else {
+          payload.bookingDate = bookingModalDate;
+        }
       } else {
+        payload.bookingDate = bookingModalDate;
         if (!sectionMeetingRoom) {
           throw new Error('No meeting room configured in this section.');
         }
@@ -545,7 +670,7 @@ export const OutlookCalendarPage: React.FC = () => {
         return;
       }
 
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bookings', {
+      const res = await fetchApi<{ success: boolean; message: string; skippedDates?: any[] }>('/employee/bookings', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -998,31 +1123,234 @@ export const OutlookCalendarPage: React.FC = () => {
 
               {/* Resource Configuration Form */}
               {bookingResourceType === 'DESK' ? (
-                <div className="space-y-4 p-4 bg-slate-50/70 border border-slate-200 rounded-2xl">
-                  {/* Cubicles Dropdown (Shows ONLY unbooked cubicles) */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                      Available Cubicles on {bookingModalDate}
-                    </label>
-                    {availableCubicles.length > 0 ? (
-                      <select
-                        value={selectedDeskId}
-                        onChange={(e) => setSelectedDeskId(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                <div className="space-y-3.5 p-4 bg-slate-50/70 border border-slate-200 rounded-2xl">
+                  {/* Duration Mode Switcher: Single Day vs Date Range (Up to 30 Days) */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 block">
+                        Reservation Horizon
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Select single date or multi-day range up to 30 days.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setBookingDurationMode('SINGLE')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          bookingDurationMode === 'SINGLE'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       >
-                        {availableCubicles.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            Workstation {d.deskCode} {d.hasHdmi ? '• [HDMI Included]' : '• [Standard]'}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>No cubicles available in this section on {bookingModalDate}.</span>
-                      </div>
-                    )}
+                        Single Day
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBookingDurationMode('RANGE')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          bookingDurationMode === 'RANGE'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <CalendarIcon className="w-3.5 h-3.5" />
+                        <span>Date Range (Up to 30d)</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Range Mode Configuration */}
+                  {bookingDurationMode === 'RANGE' ? (
+                    <div className="space-y-3 p-3.5 bg-indigo-50/70 border border-indigo-200/70 rounded-xl animate-fade-in">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">
+                          Date Range Parameters
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const s = new Date(rangeStartDate + 'T00:00:00');
+                              const e = new Date(s);
+                              e.setDate(e.getDate() + 7);
+                              setRangeEndDate(e.toISOString().split('T')[0]);
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                          >
+                            +7d
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const s = new Date(rangeStartDate + 'T00:00:00');
+                              const e = new Date(s);
+                              e.setDate(e.getDate() + 14);
+                              setRangeEndDate(e.toISOString().split('T')[0]);
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                          >
+                            +14d
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const s = new Date(rangeStartDate + 'T00:00:00');
+                              const e = new Date(s);
+                              e.setDate(e.getDate() + 30);
+                              setRangeEndDate(e.toISOString().split('T')[0]);
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                          >
+                            +30d (Max)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Start Date</label>
+                          <input
+                            type="date"
+                            value={rangeStartDate}
+                            min={new Date().toISOString().split('T')[0]}
+                            onChange={(e) => {
+                              setRangeStartDate(e.target.value);
+                              if (e.target.value > rangeEndDate) setRangeEndDate(e.target.value);
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5">End Date (Max 30d)</label>
+                          <input
+                            type="date"
+                            value={rangeEndDate}
+                            min={rangeStartDate}
+                            max={(() => {
+                              const s = new Date(rangeStartDate + 'T00:00:00');
+                              s.setDate(s.getDate() + 30);
+                              return s.toISOString().split('T')[0];
+                            })()}
+                            onChange={(e) => setRangeEndDate(e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="pb-1.5">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={rangeWeekdaysOnly}
+                              onChange={(e) => setRangeWeekdaysOnly(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                            />
+                            <span className="text-[11px] font-bold text-slate-700">Weekdays Only (Mon – Fri)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Cubicle Selector in Section */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                          Select Cubicle in {currentSection?.name || 'Section'}
+                        </label>
+                        {allSectionCubicles.length > 0 ? (
+                          <select
+                            value={selectedDeskId}
+                            onChange={(e) => setSelectedDeskId(e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                          >
+                            {allSectionCubicles.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                Workstation {d.deskCode} {d.hasHdmi ? '• [HDMI Included]' : '• [Standard]'}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
+                            No cubicles configured in this section.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Conflict and Availability Live Pill */}
+                      <div className="p-2.5 bg-white rounded-lg border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-bold text-slate-700">Total Days: {calendarRangeDates.length}</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{availableCalendarDates.length} Available</span>
+                          </span>
+                          {conflictedCalendarDates.length > 0 && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <span className="font-bold text-rose-700 flex items-center gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                                <span>{conflictedCalendarDates.length} Conflicted</span>
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {conflictedCalendarDates.length > 0 && (
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none bg-amber-50 px-2.5 py-1 rounded border border-amber-300">
+                            <input
+                              type="checkbox"
+                              checked={rangeSmartSkip}
+                              onChange={(e) => setRangeSmartSkip(e.target.checked)}
+                              className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                            />
+                            <span className="text-[10px] font-black text-amber-900">
+                              Smart Skip ({availableCalendarDates.length} Free Days)
+                            </span>
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Conflict details banner */}
+                      {conflictedCalendarDates.length > 0 && (
+                        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 max-h-24 overflow-y-auto space-y-1">
+                          <div className="font-bold flex items-center gap-1 text-amber-950">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Conflicts on {conflictedCalendarDates.length} date(s):</span>
+                          </div>
+                          {conflictedCalendarDates.map((c) => (
+                            <div key={c.date} className="flex items-center justify-between border-b border-amber-200/50 pb-0.5">
+                              <span className="font-mono font-bold">{c.date}</span>
+                              <span className="text-amber-700">{c.reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Single Day Cubicles Dropdown (Shows ONLY unbooked cubicles) */
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Available Cubicles on {bookingModalDate}
+                      </label>
+                      {availableCubicles.length > 0 ? (
+                        <select
+                          value={selectedDeskId}
+                          onChange={(e) => setSelectedDeskId(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
+                        >
+                          {availableCubicles.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              Workstation {d.deskCode} {d.hasHdmi ? '• [HDMI Included]' : '• [Standard]'}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>No cubicles available in this section on {bookingModalDate}.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Shift Slots */}
                   <div>
@@ -1280,10 +1608,15 @@ export const OutlookCalendarPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmReservation}
+                  onClick={() => handleConfirmReservation()}
                   disabled={
                     isSubmittingBooking ||
-                    (bookingResourceType === 'DESK' && (!selectedDeskId || availableCubicles.length === 0)) ||
+                    (bookingResourceType === 'DESK' &&
+                      bookingDurationMode === 'SINGLE' &&
+                      (!selectedDeskId || availableCubicles.length === 0)) ||
+                    (bookingResourceType === 'DESK' &&
+                      bookingDurationMode === 'RANGE' &&
+                      (!selectedDeskId || availableCalendarDates.length === 0)) ||
                     (bookingResourceType === 'MEETING_ROOM' && (!sectionMeetingRoom || isMeetingRoomBookedOnDate)) ||
                     (bookingForMode === 'COLLEAGUE' && !selectedColleague)
                   }
@@ -1297,12 +1630,74 @@ export const OutlookCalendarPage: React.FC = () => {
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Confirm Reservation</span>
+                      <span>
+                        {bookingResourceType === 'DESK' && bookingDurationMode === 'RANGE'
+                          ? availableCalendarDates.length === 0
+                            ? 'No Free Days in Range'
+                            : rangeSmartSkip || conflictedCalendarDates.length === 0
+                            ? `Confirm Reservation (${availableCalendarDates.length} Days${
+                                rangeSmartSkip && conflictedCalendarDates.length > 0 ? ' • Smart Skip' : ''
+                              })`
+                            : `Confirm (${availableCalendarDates.length} Free Days • Conflicts Exist)`
+                          : 'Confirm Reservation'}
+                      </span>
                     </>
                   )}
                 </button>
               </div>
             </div>
+
+            {/* Smart Skip Confirmation Modal for Calendar */}
+            {showCalendarSmartSkipPrompt && (
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
+                <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">Conflicts Detected in Range</h4>
+                      <p className="text-xs text-slate-500">{conflictedCalendarDates.length} day(s) already booked</p>
+                    </div>
+                  </div>
+
+                  <div className="max-h-32 overflow-y-auto space-y-1.5 p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs">
+                    {conflictedCalendarDates.map((c) => (
+                      <div key={c.date} className="flex items-center justify-between text-amber-900">
+                        <span className="font-mono font-bold">{c.date}</span>
+                        <span className="text-[11px] text-amber-700">{c.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Would you like to use <strong>Smart Skip</strong> to bypass these {conflictedCalendarDates.length} conflicting day(s) and reserve the remaining <strong>{availableCalendarDates.length} available day(s)</strong> for {bookingForMode === 'COLLEAGUE' && selectedColleague ? selectedColleague.name : 'this reservation'}?
+                  </p>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowCalendarSmartSkipPrompt(false)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancel / Adjust Dates
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCalendarSmartSkipPrompt(false);
+                        setRangeSmartSkip(true);
+                        handleConfirmReservation(true);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Yes, Smart Skip & Book ({availableCalendarDates.length} Days)</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>,
           document.body
         )}

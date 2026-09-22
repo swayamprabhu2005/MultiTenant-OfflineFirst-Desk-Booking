@@ -123,6 +123,8 @@ flowchart TD
   - Active Booking Hero Card with desk code, slot window, location hierarchy, and instant **Release Workstation** action.
 - **Workstation Reservation** (`/employee/floor-plan`):
   - **3 Shift Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
+  - **30-Day Range Reservations**: Flexible date range booking mode allowing up to 30 consecutive days in a single action, complete with quick-select chips (`+7d`, `+14d`, `+30d`) and a `Weekdays Only (Mon-Fri)` filter.
+  - **Smart Skip Conflict Resolution**: Real-time conflict engine that detects existing reservations across the range. When conflicts occur, the user or branch admin is prompted whether to perform a **Smart Skip** to automatically book all remaining conflict-free days or adjust dates.
   - **Whole Meeting Room Booking**: Reserve entire conference rooms with start time, duration in hours & minutes (minimum 15m enforced), title, and attendee headcount.
   - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live directory search.
 - **Team Pod Mode (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click with an atomic sprint batch confirmation.
@@ -139,12 +141,15 @@ flowchart TD
   - Resource type toggles (`All` | `Cubicles` | `Meeting Rooms`).
   - Live filter search across event codes, colleague names, meeting titles, and buildings.
   - Non-overlapping sticky layout ensuring ribbon controls remain neatly underneath the navigation bar.
-- **Date-Click Single-Day Reservation Modal**:
-  - Clicking any date cell in the Month view opens a focused reservation modal pre-set to that single day.
+- **Date-Click Multi-Day Reservation Modal**:
+  - Clicking any date cell in the Month view opens a focused reservation modal with choice of **Single Day** or **Date Range (Up to 30 Days)**.
   - **Horizontal Cascade Bar**: `[ Building ▾ ]  [ Floor ▾ ]  [ Section ▾ ]` with intelligent defaults.
   - **Dynamic Availability Filtering**:
     - **Cubicles Dropdown**: Displays **ONLY** cubicles with zero confirmed bookings on that clicked date. If completely booked, an informative alert is displayed: `"No cubicles available in this section on [Date]"`.
     - **Meeting Rooms Dropdown**: Displays available conference rooms with capacity and HDMI specifications, or warns if already booked on that date.
+  - **Multi-Day Horizon & Smart Skip**:
+    - Choose arbitrary multi-day ranges up to 30 days with `Weekdays Only` toggle.
+    - Live conflict checking across the range with prompted Smart Skip confirmation to reserve conflict-free dates seamlessly.
   - **Shift Slots & Durations**:
     - Cubicle slots: `Full Day (09:00 - 18:00)`, `Morning Half (09:00 - 13:30)`, `Evening Half (13:30 - 18:00)`.
     - Meeting room reservations: Start time picker + numeric hours & minutes duration (strictly requiring at least 15 minutes).
