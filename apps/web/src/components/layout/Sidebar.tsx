@@ -50,14 +50,14 @@ export const Sidebar: React.FC = () => {
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
-        { name: 'Outlook Calendar', to: '/employee/calendar', icon: CalendarDays },
+        { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
       ]
     : isBranchAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
-        { name: 'Outlook Calendar', to: '/employee/calendar', icon: CalendarDays },
+        { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
         { name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers },
         { name: 'Employee Directory', to: '/branch/employees', icon: Users },

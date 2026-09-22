@@ -759,7 +759,7 @@ export const OutlookCalendarPage: React.FC = () => {
                 <CalendarIcon className="w-5 h-5" />
               </div>
               <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>Outlook Workspace Calendar</span>
+                <span>Calendar</span>
                 {loading && <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />}
               </h1>
             </div>
