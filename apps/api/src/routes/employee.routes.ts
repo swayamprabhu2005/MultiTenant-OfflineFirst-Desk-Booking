@@ -1047,7 +1047,8 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
       title,
       attendeesCount,
       notes, 
-      colleagueUserId 
+      colleagueUserId,
+      skipConflicts = false,
     } = req.body;
 
     if (!deskId && !meetingRoomId) {
@@ -1287,6 +1288,8 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
       return res.status(404).json({ error: 'Selected workstation desk not found.' });
     }
 
+    const skippedDates: { date: string; reason: string }[] = [];
+
     // Atomic transaction for multi-day reservation creation
     const createdBookings = await prisma.$transaction(async (tx) => {
       const bookingsList: any[] = [];
@@ -1306,6 +1309,13 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
         });
 
         if (conflictingDeskBooking) {
+          if (skipConflicts) {
+            skippedDates.push({
+              date: dStr,
+              reason: `Desk ${desk.deskCode} is already reserved for ${normalizedSlotType.replace('_', ' ')} on ${dStr}`,
+            });
+            continue;
+          }
           throw new Error(
             `Desk ${desk.deskCode} is already reserved on ${dStr} for the ${normalizedSlotType.replace('_', ' ')} slot.`
           );
@@ -1324,6 +1334,13 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
         });
 
         if (conflictingUserBooking) {
+          if (skipConflicts) {
+            skippedDates.push({
+              date: dStr,
+              reason: `Target user already has an active reservation for ${conflictingUserBooking.desk ? `Desk ${conflictingUserBooking.desk.deskCode}` : 'a resource'} on ${dStr}`,
+            });
+            continue;
+          }
           throw new Error(
             `User already has an active reservation for ${conflictingUserBooking.desk ? `Desk ${conflictingUserBooking.desk.deskCode}` : 'a resource'} on ${dStr}.`
           );
@@ -1372,9 +1389,18 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
         bookingsList.push(bk);
       }
 
+      if (bookingsList.length === 0) {
+        throw new Error(
+          skipConflicts && skippedDates.length > 0
+            ? `All ${skippedDates.length} selected date(s) have conflicts and could not be booked.`
+            : 'No valid booking dates could be scheduled.'
+        );
+      }
+
       // Update desk status to BOOKED if reservation includes current date
       const todayStr = new Date().toISOString().split('T')[0];
-      if (uniqueDates.includes(todayStr)) {
+      const bookedDatesList = bookingsList.map((b) => b.startTime.toISOString().split('T')[0]);
+      if (bookedDatesList.includes(todayStr)) {
         await tx.desk.update({
           where: { id: deskId },
           data: { status: 'BOOKED' },
@@ -1396,16 +1422,22 @@ router.post('/bookings', authMiddleware, async (req: AuthenticatedRequest, res: 
           deskCode: desk.deskCode,
           slotType: slotType.toUpperCase(),
           targetUserId,
-          dates: uniqueDates,
-          totalDays: uniqueDates.length,
+          dates: createdBookings.map((b) => b.startTime.toISOString().split('T')[0]),
+          totalDays: createdBookings.length,
+          skippedDates,
         },
       },
     });
 
     const firstBooking = createdBookings[0];
+    const message = skippedDates.length > 0
+      ? `Workstation ${desk.deskCode} reserved for ${createdBookings.length} day(s). Skipped ${skippedDates.length} conflicting day(s).`
+      : `Workstation ${desk.deskCode} reserved successfully for ${createdBookings.length} day(s).`;
+
     return res.status(201).json({
       success: true,
-      message: `Workstation ${desk.deskCode} reserved successfully for ${uniqueDates.length} day(s).`,
+      message,
+      skippedDates,
       bookings: createdBookings.map((b) => ({
         id: b.id,
         slotType: b.slotType,
