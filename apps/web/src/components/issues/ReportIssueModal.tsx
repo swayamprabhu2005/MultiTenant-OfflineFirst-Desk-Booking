@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, AlertCircle, UploadCloud, Trash2, 
-  Send, Loader2, ShieldAlert, Cpu,
-  ChevronDown, ChevronUp, CheckCircle2, Download
+  Send, Loader2, ShieldAlert
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { showToast } from '../common/Toast';
@@ -31,36 +30,10 @@ const PRIORITIES = [
   { id: IssuePriority.CRITICAL, label: 'Critical', color: 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100' },
 ];
 
-// Helper to auto-detect client runtime environment
-function detectClientEnvironment(): string {
-  const ua = navigator.userAgent;
-  let browser = 'Browser';
-  if (ua.includes('Firefox')) browser = 'Firefox';
-  else if (ua.includes('Edg/')) browser = 'Edge';
-  else if (ua.includes('Chrome')) browser = 'Chrome';
-  else if (ua.includes('Safari')) browser = 'Safari';
-
-  let os = 'OS';
-  if (ua.includes('Windows')) os = 'Windows';
-  else if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
-  else if (ua.includes('Linux')) os = 'Linux';
-  else if (ua.includes('Android')) os = 'Android';
-  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-
-  const resolution = `${window.screen.width}x${window.screen.height}`;
-  const route = window.location.pathname;
-
-  return `${os} • ${browser} • ${resolution} • Route: ${route}`;
-}
-
 export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('BOOKING');
   const [priority, setPriority] = useState<IssuePriority>(IssuePriority.MEDIUM);
-  const [clientVersion, setClientVersion] = useState('v1.0.0');
-  const [deviceInfo] = useState<string>(detectClientEnvironment);
-  const [systemManifest, setSystemManifest] = useState<any | null>(null);
-  const [showManifestDetails, setShowManifestDetails] = useState(false);
   const [description, setDescription] = useState('');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
@@ -68,15 +41,6 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch live system version manifest when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchApi<any>('/system/versions')
-        .then((data) => setSystemManifest(data))
-        .catch((err) => console.warn('Could not pre-fetch system versions:', err));
-    }
-  }, [isOpen]);
 
   // Close on Escape
   useEffect(() => {
@@ -97,25 +61,6 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
       }
     };
   }, [screenshotPreview]);
-
-  const handleDownloadDiagnosticsFile = async () => {
-    try {
-      const response = await fetch('http://localhost:4000/api/system/download-report');
-      if (!response.ok) throw new Error('Failed to download report');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `system-diagnostics-${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      showToast('Diagnostics file downloaded (system-diagnostics.txt)!', 'success');
-    } catch {
-      showToast('Could not download diagnostics report', 'error');
-    }
-  };
 
   // Support pasting image directly from clipboard
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -205,21 +150,7 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
       formData.append('title', title.trim());
       formData.append('category', category);
       formData.append('priority', priority);
-      formData.append('clientVersion', clientVersion.trim() || 'v1.0.0');
-      formData.append('deviceInfo', deviceInfo);
       formData.append('description', description.trim());
-
-      if (systemManifest) {
-        formData.append('systemDiagnostics', JSON.stringify({
-          ...systemManifest,
-          client: {
-            version: clientVersion.trim() || 'v1.0.0',
-            deviceInfo,
-            userAgent: navigator.userAgent,
-            screen: `${window.screen.width}x${window.screen.height}`,
-          },
-        }));
-      }
 
       if (screenshotFile) {
         formData.append('screenshot', screenshotFile);
@@ -230,7 +161,7 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
         body: formData,
       });
 
-      showToast('Issue report filed successfully. Platform Superadmin notified.', 'success');
+      showToast('Issue report filed successfully. Branch administrator notified.', 'success');
 
       // Reset form
       setTitle('');
@@ -269,7 +200,7 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
             </div>
             <div>
               <h3 className="text-base font-bold tracking-tight">Report an Operational Issue</h3>
-              <p className="text-xs text-slate-300">Direct escalation to Platform Superadmin (`admin@deskbooking.com`)</p>
+              <p className="text-xs text-slate-300">Escalate facility, desk, or workspace issues to branch management</p>
             </div>
           </div>
           <button
@@ -350,111 +281,6 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
                 })}
               </div>
             </div>
-          </div>
-
-          {/* Client Version & System Diagnostics */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-                <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Client &amp; Environment Diagnostics</span>
-              </label>
-              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center space-x-1">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Auto-Captured</span>
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="sm:col-span-1">
-                <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-0.5">
-                  App / Client Version
-                </label>
-                <input
-                  type="text"
-                  value={clientVersion}
-                  onChange={(e) => setClientVersion(e.target.value)}
-                  placeholder="e.g. v1.0.0"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 text-xs font-mono font-bold focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-[10px] font-extrabold text-slate-500 uppercase mb-0.5">
-                  OS &amp; Browser Environment
-                </label>
-                <div className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 text-[11px] font-medium truncate" title={deviceInfo}>
-                  {deviceInfo}
-                </div>
-              </div>
-            </div>
-
-            {/* Live Detected System Versions (Docker, PostgreSQL, Node, Host OS) */}
-            {systemManifest && (
-              <div className="pt-2 border-t border-slate-200/60">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                    Infrastructure &amp; Runtime Versions
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={handleDownloadDiagnosticsFile}
-                      className="text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-md inline-flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
-                      title="Download clean system-diagnostics.txt file to your computer"
-                    >
-                      <Download className="w-3 h-3 text-indigo-600" />
-                      <span>Download File (.txt)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowManifestDetails(!showManifestDetails)}
-                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 inline-flex items-center space-x-0.5 cursor-pointer"
-                    >
-                      <span>{showManifestDetails ? 'Hide Details' : 'View Full Manifest'}</span>
-                      {showManifestDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px]">
-                  <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 font-bold block text-[9px]">DOCKER</span>
-                    <span className="font-mono font-bold text-slate-800 truncate block" title={systemManifest.runtimes?.docker}>
-                      {systemManifest.runtimes?.docker?.split(',')[0] || 'Available'}
-                    </span>
-                  </div>
-                  <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 font-bold block text-[9px]">DATABASE</span>
-                    <span className="font-mono font-bold text-slate-800 truncate block" title={systemManifest.database?.version}>
-                      PostgreSQL 16
-                    </span>
-                  </div>
-                  <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 font-bold block text-[9px]">RUNTIME</span>
-                    <span className="font-mono font-bold text-slate-800 truncate block">
-                      Node {systemManifest.runtimes?.node}
-                    </span>
-                  </div>
-                  <div className="p-1.5 bg-white border border-slate-200 rounded-lg">
-                    <span className="text-slate-400 font-bold block text-[9px]">HOST OS</span>
-                    <span className="font-mono font-bold text-slate-800 truncate block" title={systemManifest.os?.humanName}>
-                      {systemManifest.os?.platform} {systemManifest.os?.arch}
-                    </span>
-                  </div>
-                </div>
-
-                {showManifestDetails && (
-                  <div className="mt-2 p-2 bg-slate-900 text-slate-200 rounded-lg font-mono text-[10px] space-y-1 overflow-x-auto">
-                    <div><span className="text-indigo-400">Docker:</span> {systemManifest.runtimes?.docker} (Compose: {systemManifest.runtimes?.dockerCompose})</div>
-                    <div><span className="text-indigo-400">Daemon Status:</span> {systemManifest.runtimes?.dockerDaemonActive ? 'Active / Running' : 'Offline'}</div>
-                    <div><span className="text-indigo-400">Database:</span> {systemManifest.database?.version} (Latency: {systemManifest.database?.latencyMs}ms)</div>
-                    <div><span className="text-indigo-400">Hardware:</span> {systemManifest.os?.cpuModel} ({systemManifest.os?.cpuCores} cores) • RAM: {systemManifest.os?.freeMemoryGB} / {systemManifest.os?.totalMemoryGB}</div>
-                    <div><span className="text-indigo-400">Frameworks:</span> {systemManifest.frameworks?.backend} • {systemManifest.frameworks?.frontend} • {systemManifest.frameworks?.orm}</div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Detailed Description */}
@@ -555,12 +381,12 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Escalating Report...</span>
+                  <span>Submitting...</span>
                 </>
               ) : (
                 <>
                   <Send className="w-3.5 h-3.5" />
-                  <span>Submit to Superadmin</span>
+                  <span>Submit Issue</span>
                 </>
               )}
             </button>

@@ -6,7 +6,6 @@ import { prisma } from '../prisma';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../middleware/auth.middleware';
 import { Role, IssueStatus, IssuePriority } from '@deskbooking/shared';
 import { EmailService } from '../services/email.service';
-import { SystemService } from '../services/system.service';
 
 const router = Router();
 
@@ -80,36 +79,6 @@ router.post(
         }
       }
 
-      // Capture / Merge complete System Diagnostics (Docker, Postgres, OS, Node, Browser)
-      let parsedDiagnostics: any = null;
-      if (systemDiagnostics) {
-        try {
-          parsedDiagnostics = typeof systemDiagnostics === 'string'
-            ? JSON.parse(systemDiagnostics)
-            : systemDiagnostics;
-        } catch {
-          parsedDiagnostics = null;
-        }
-      }
-
-      // If client didn't supply full host manifest, automatically query SystemService
-      if (!parsedDiagnostics || !parsedDiagnostics.runtimes) {
-        try {
-          const manifest = await SystemService.getSystemManifest();
-          parsedDiagnostics = {
-            ...manifest,
-            client: {
-              version: clientVersion || 'v1.0.0',
-              deviceInfo: deviceInfo || null,
-              userAgent: req.headers['user-agent'] || null,
-              ip: req.ip || req.socket.remoteAddress || null,
-            },
-          };
-        } catch (diagErr) {
-          console.warn('⚠️ [SystemService] Failed to auto-gather system manifest for issue report:', diagErr);
-        }
-      }
-
       // Valid priority check
       const validPriority = Object.values(IssuePriority).includes(priority as IssuePriority)
         ? (priority as IssuePriority)
@@ -125,7 +94,22 @@ router.post(
         return res.status(404).json({ error: 'Organization not found for reporter.' });
       }
 
-      // Create issue report in database with client versions & diagnostics
+      // Fetch reporter branch context for hierarchical escalation
+      const reporterUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { id: true, baseBranchId: true, scopedBranchId: true, role: true },
+      });
+
+      const effectiveBranchId = reporterUser?.scopedBranchId || reporterUser?.baseBranchId || null;
+      let targetLevel = 'BRANCH_ADMIN';
+      if (user.role === Role.BRANCH_ADMIN || !effectiveBranchId) {
+        targetLevel = 'ORGANIZATION_ADMIN';
+      }
+      if (user.role === Role.ORGANIZATION_ADMIN || user.role === Role.PLATFORM_ADMIN) {
+        targetLevel = 'PLATFORM_ADMIN';
+      }
+
+      // Create issue report in database with clean metadata
       const issueReport = await prisma.issueReport.create({
         data: {
           title: title.trim(),
@@ -133,9 +117,8 @@ router.post(
           category: category ? String(category).trim() : 'GENERAL',
           priority: validPriority,
           screenshotUrl,
-          clientVersion: clientVersion ? String(clientVersion).trim() : 'v1.0.0',
-          deviceInfo: deviceInfo ? String(deviceInfo).trim() : null,
-          systemDiagnostics: parsedDiagnostics ?? undefined,
+          targetLevel,
+          branchId: effectiveBranchId,
           status: IssueStatus.OPEN,
           reporterId: user.id,
           organizationId: userOrg.id,
@@ -150,33 +133,6 @@ router.post(
         },
       });
 
-      // Generate and persist diagnostics text file on disk
-      let diagnosticsText: string | null = null;
-      let diagnosticsFileUrl: string | null = null;
-
-      if (parsedDiagnostics) {
-        try {
-          diagnosticsText = SystemService.formatManifestAsText(parsedDiagnostics, parsedDiagnostics.client);
-          const diagFilename = `diagnostics-${issueReport.id}.txt`;
-          const diagFilePath = path.join(uploadDir, diagFilename);
-          fs.writeFileSync(diagFilePath, diagnosticsText, 'utf8');
-          diagnosticsFileUrl = `/uploads/screenshots/${diagFilename}`;
-
-          // Update record with direct downloadable file URL
-          await prisma.issueReport.update({
-            where: { id: issueReport.id },
-            data: {
-              systemDiagnostics: {
-                ...parsedDiagnostics,
-                fileUrl: diagnosticsFileUrl,
-              },
-            },
-          });
-        } catch (diagFileErr) {
-          console.warn('⚠️ Could not write diagnostics text file to disk:', diagFileErr);
-        }
-      }
-
       // Audit Log for the issue submission
       await prisma.auditLog.create({
         data: {
@@ -189,39 +145,15 @@ router.post(
             title: issueReport.title,
             priority: issueReport.priority,
             category: issueReport.category,
-            diagnosticsFileUrl,
+            targetLevel: issueReport.targetLevel,
           },
         },
       });
 
-      // Notify Platform Superadmin via EmailService (real or simulated)
-      EmailService.sendIssueNotification({
-        issueId: issueReport.id,
-        title: issueReport.title,
-        description: issueReport.description,
-        category: issueReport.category,
-        priority: issueReport.priority,
-        reporterName: user.name,
-        reporterEmail: user.email,
-        reporterRole: user.role,
-        organizationName: userOrg.name,
-        organizationSubdomain: userOrg.subdomain,
-        screenshotUrl: issueReport.screenshotUrl,
-        clientVersion: issueReport.clientVersion,
-        deviceInfo: issueReport.deviceInfo,
-        systemDiagnostics: parsedDiagnostics,
-        diagnosticsFileUrl,
-        diagnosticsText,
-        createdAt: issueReport.createdAt,
-      }).catch((err) => console.error('Error dispatching issue notification:', err));
-
       return res.status(201).json({
         success: true,
         message: 'Issue report submitted successfully.',
-        issue: {
-          ...issueReport,
-          diagnosticsFileUrl,
-        },
+        issue: issueReport,
       });
     } catch (error: any) {
       console.error('Failed to submit issue report:', error);
