@@ -22,6 +22,7 @@ interface TenantContextType {
   setTenantSubdomain: (subdomain: string) => void;
   isLoading: boolean;
   applyThemeColor: (color: string) => void;
+  resetDefaultTheme: () => void;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -63,9 +64,24 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
+  const resetDefaultTheme = () => {
+    const root = document.documentElement;
+    root.style.setProperty('--primary-color', '#16a34a');
+    root.style.setProperty('--primary-accent', '#15803d');
+    root.style.setProperty('--primary-dark', '#14532d');
+    root.style.setProperty('--brand-subtle', '#f0fdf4');
+    root.style.setProperty('--brand-light', '#dcfce7');
+    root.style.setProperty('--brand-border', '#bbf7d0');
+    root.style.setProperty('--brand-text', '#166534');
+    root.style.setProperty('--brand-primary', '#16a34a');
+  };
+
   // Apply CSS Custom Variables for dynamic white-label brand colors
   const applyThemeColor = (color: string) => {
-    if (!color) return;
+    if (!color) {
+      resetDefaultTheme();
+      return;
+    }
     try {
       const { h, s, l } = hexToHsl(color);
       const root = document.documentElement;
@@ -73,8 +89,14 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       root.style.setProperty('--primary-color', `hsl(${h}, ${s}%, ${l}%)`);
       root.style.setProperty('--primary-accent', `hsl(${h}, ${s}%, ${Math.max(0, l - 6)}%)`);
       root.style.setProperty('--primary-dark', `hsl(${h}, ${s}%, ${Math.max(0, l - 12)}%)`);
+      root.style.setProperty('--brand-subtle', `hsl(${h}, ${Math.min(s, 70)}%, 97%)`);
+      root.style.setProperty('--brand-light', `hsl(${h}, ${Math.min(s, 60)}%, 92%)`);
+      root.style.setProperty('--brand-border', `hsl(${h}, ${Math.min(s, 50)}%, 82%)`);
+      root.style.setProperty('--brand-text', `hsl(${h}, ${Math.min(100, s + 10)}%, 25%)`);
+      root.style.setProperty('--brand-primary', `hsl(${h}, ${s}%, ${l}%)`);
     } catch (e) {
       console.error('Failed to parse hex brand color:', color, e);
+      resetDefaultTheme();
     }
   };
 
@@ -139,6 +161,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setTenantSubdomain,
         isLoading,
         applyThemeColor,
+        resetDefaultTheme,
       }}
     >
       {children}
