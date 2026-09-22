@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
 import { showToast } from '../common/Toast';
+import { isAppOnline, enqueueOutboxItem } from '../../services/offlineStore';
 import { IssuePriority } from '@deskbooking/shared';
 
 interface ReportIssueModalProps {
@@ -142,6 +143,53 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
       return;
     }
 
+    // Helper to read file as base64 string
+    const getBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+      });
+    };
+
+    // If device is offline, enqueue directly to IndexedDB outbox queue
+    if (!isAppOnline()) {
+      try {
+        setIsSubmitting(true);
+        let base64Screenshot: string | null = null;
+        if (screenshotFile) {
+          base64Screenshot = await getBase64(screenshotFile);
+        }
+
+        await enqueueOutboxItem('REPORT_ISSUE', '/issues/report', {
+          title: title.trim(),
+          category,
+          priority,
+          description: description.trim(),
+          base64Screenshot,
+        });
+
+        showToast('You are currently offline. Issue saved to outbox and will sync once reconnected.', 'info');
+
+        // Reset form
+        setTitle('');
+        setCategory('BOOKING');
+        setPriority(IssuePriority.MEDIUM);
+        setDescription('');
+        removeScreenshot();
+
+        onSuccess?.();
+        onClose();
+        return;
+      } catch (e: any) {
+        setErrorMsg('Failed to queue issue in offline store.');
+        return;
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
@@ -173,6 +221,32 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
       onSuccess?.();
       onClose();
     } catch (err: any) {
+      if (err.message && (err.message.includes('fetch') || err.message.includes('NetworkError') || !isAppOnline())) {
+        try {
+          let base64Screenshot: string | null = null;
+          if (screenshotFile) {
+            base64Screenshot = await getBase64(screenshotFile);
+          }
+          await enqueueOutboxItem('REPORT_ISSUE', '/issues/report', {
+            title: title.trim(),
+            category,
+            priority,
+            description: description.trim(),
+            base64Screenshot,
+          });
+          showToast('Network unavailable. Issue queued in offline outbox.', 'info');
+          setTitle('');
+          setCategory('BOOKING');
+          setPriority(IssuePriority.MEDIUM);
+          setDescription('');
+          removeScreenshot();
+          onSuccess?.();
+          onClose();
+          return;
+        } catch {
+          // fall through to standard error handler
+        }
+      }
       console.error('Failed to submit issue report:', err);
       setErrorMsg(err.message || 'Failed to submit issue report. Please try again.');
     } finally {
