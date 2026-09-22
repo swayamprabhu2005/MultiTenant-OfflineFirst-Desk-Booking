@@ -501,6 +501,109 @@ router.post(
   }
 );
 
+// Helper to verify issue access permission
+async function verifyIssueAccess(issueId: string, user: { id: string; role: Role; organizationId: string }) {
+  const issue = await prisma.issueReport.findUnique({
+    where: { id: issueId },
+    include: { organization: true },
+  });
+  if (!issue) return { error: 'Issue not found', status: 404, issue: null };
+
+  if (user.role === Role.PLATFORM_ADMIN) return { error: null, issue };
+
+  if (issue.organizationId !== user.organizationId) {
+    return { error: 'Access denied: different organization', status: 403, issue: null };
+  }
+
+  if (user.role === Role.ORGANIZATION_ADMIN) return { error: null, issue };
+
+  if (user.role === Role.BRANCH_ADMIN) {
+    const adminUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { baseBranchId: true, scopedBranchId: true },
+    });
+    const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+    if (!branchId || issue.branchId === branchId || issue.targetLevel === 'BRANCH_ADMIN' || issue.reporterId === user.id) {
+      return { error: null, issue };
+    }
+    return { error: 'Access denied: issue is outside your branch', status: 403, issue: null };
+  }
+
+  // EMPLOYEE / TECH_LEAD can only access if they are the reporter
+  if (issue.reporterId === user.id) {
+    return { error: null, issue };
+  }
+
+  return { error: 'Access denied to this issue report', status: 403, issue: null };
+}
+
+// 3.7. Get Messages for an Issue (Threaded Discussion)
+router.get(
+  '/:id/messages',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+
+      const { error, status } = await verifyIssueAccess(id, user);
+      if (error) {
+        return res.status(status || 403).json({ error });
+      }
+
+      const messages = await prisma.issueMessage.findMany({
+        where: { issueReportId: id },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      return res.json({ messages });
+    } catch (err: any) {
+      console.error('Failed to fetch issue messages:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch messages' });
+    }
+  }
+);
+
+// 3.8. Post a Message to an Issue Discussion Thread
+router.post(
+  '/:id/messages',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { message } = req.body;
+
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ error: 'Message text is required.' });
+      }
+
+      const { error, status } = await verifyIssueAccess(id, user);
+      if (error) {
+        return res.status(status || 403).json({ error });
+      }
+
+      const newMessage = await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: message.trim(),
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: newMessage,
+      });
+    } catch (err: any) {
+      console.error('Failed to post issue message:', err);
+      return res.status(500).json({ error: err.message || 'Failed to send message' });
+    }
+  }
+);
+
 // 4. Update Issue Report Status and Resolution Note (Superadmin Only)
 router.patch(
   '/:id/status',
