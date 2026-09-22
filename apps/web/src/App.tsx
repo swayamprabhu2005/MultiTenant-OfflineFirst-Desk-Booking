@@ -25,6 +25,7 @@ import { EmployeeFloorPlanPage } from './pages/employee/EmployeeFloorPlanPage';
 import { MyBookingsPage } from './pages/employee/MyBookingsPage';
 import { OutlookCalendarPage } from './pages/employee/OutlookCalendarPage';
 import { IssueReportsPage } from './pages/admin/IssueReportsPage';
+import { PermissionsPage } from './pages/admin/PermissionsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +103,7 @@ export const App: React.FC = () => {
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
                 <Route path="admin/workforce" element={<WorkforcePage />} />
+                <Route path="admin/permissions" element={<PermissionsPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
                 <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
