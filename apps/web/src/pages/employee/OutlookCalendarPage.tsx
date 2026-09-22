@@ -10,6 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Check,
+  ChevronDown,
   X,
   Search,
   Monitor,
@@ -156,6 +158,7 @@ export const OutlookCalendarPage: React.FC = () => {
   const [bookingModalDate, setBookingModalDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [bookingResourceType, setBookingResourceType] = useState<'DESK' | 'MEETING_ROOM'>('DESK');
   const [selectedDeskId, setSelectedDeskId] = useState<string>('');
+  const [isCubicleDropdownOpen, setIsCubicleDropdownOpen] = useState<boolean>(false);
   const [deskSlotType, setDeskSlotType] = useState<'FULL_DAY' | 'MORNING' | 'AFTERNOON'>('FULL_DAY');
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [roomStartHour, setRoomStartHour] = useState<number>(9);
@@ -579,6 +582,7 @@ export const OutlookCalendarPage: React.FC = () => {
     setRangeWeekdaysOnly(true);
     setRangeSmartSkip(false);
     setShowCalendarSmartSkipPrompt(false);
+    setIsCubicleDropdownOpen(false);
     setBookingResourceType('DESK');
     setDeskSlotType('FULL_DAY');
     setRoomStartHour(9);
@@ -1251,22 +1255,85 @@ export const OutlookCalendarPage: React.FC = () => {
                       </div>
 
                       {/* Cubicle Selector in Section */}
-                      <div>
+                      <div className="relative">
                         <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                           Select Cubicle in {currentSection?.name || 'Section'}
                         </label>
                         {allSectionCubicles.length > 0 ? (
-                          <select
-                            value={selectedDeskId}
-                            onChange={(e) => setSelectedDeskId(e.target.value)}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
-                          >
-                            {allSectionCubicles.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                Workstation {d.deskCode} {d.hasHdmi ? '• [HDMI Included]' : '• [Standard]'}
-                              </option>
-                            ))}
-                          </select>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setIsCubicleDropdownOpen(!isCubicleDropdownOpen)}
+                              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 hover:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none flex items-center justify-between cursor-pointer transition-all shadow-xs"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-black">
+                                  {allSectionCubicles.find(d => d.id === selectedDeskId)?.deskCode || '•'}
+                                </span>
+                                <span className="truncate">
+                                  Workstation {allSectionCubicles.find(d => d.id === selectedDeskId)?.deskCode || 'Select Cubicle'}
+                                </span>
+                                {allSectionCubicles.find(d => d.id === selectedDeskId)?.hasHdmi && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-extrabold uppercase shrink-0">
+                                    HDMI
+                                  </span>
+                                )}
+                              </div>
+                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isCubicleDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isCubicleDropdownOpen && (
+                              <>
+                                <div className="fixed inset-0 z-30" onClick={() => setIsCubicleDropdownOpen(false)} />
+                                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                                  <div className="p-2 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 flex items-center justify-between">
+                                    <span>Section Cubicles ({allSectionCubicles.length})</span>
+                                    <span>Click to select</span>
+                                  </div>
+                                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                                    {allSectionCubicles.map((d, idx) => {
+                                      const isSelected = selectedDeskId === d.id;
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={d.id}
+                                          onClick={() => {
+                                            setSelectedDeskId(d.id);
+                                            setIsCubicleDropdownOpen(false);
+                                          }}
+                                          className={`w-full text-left px-3 py-2.5 flex items-center justify-between text-xs transition-colors cursor-pointer ${
+                                            isSelected ? 'bg-indigo-50/80 text-indigo-950 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5">
+                                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${
+                                              isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700'
+                                            }`}>
+                                              {d.deskCode}
+                                            </span>
+                                            <div>
+                                              <div className="font-bold text-slate-800">Cubicle {idx + 1} ({d.deskCode})</div>
+                                              <div className="text-[10px] text-slate-400 font-medium">
+                                                {d.hasHdmi ? 'HDMI Monitor Included' : 'Standard Workstation'}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            {d.hasHdmi && (
+                                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                                HDMI
+                                              </span>
+                                            )}
+                                            {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </>
                         ) : (
                           <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
                             No cubicles configured in this section.
@@ -1327,22 +1394,85 @@ export const OutlookCalendarPage: React.FC = () => {
                     </div>
                   ) : (
                     /* Single Day Cubicles Dropdown (Shows ONLY unbooked cubicles) */
-                    <div>
+                    <div className="relative">
                       <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                         Available Cubicles on {bookingModalDate}
                       </label>
                       {availableCubicles.length > 0 ? (
-                        <select
-                          value={selectedDeskId}
-                          onChange={(e) => setSelectedDeskId(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
-                        >
-                          {availableCubicles.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              Workstation {d.deskCode} {d.hasHdmi ? '• [HDMI Included]' : '• [Standard]'}
-                            </option>
-                          ))}
-                        </select>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setIsCubicleDropdownOpen(!isCubicleDropdownOpen)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none flex items-center justify-between cursor-pointer transition-all shadow-xs"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="w-5 h-5 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center text-[10px] font-black">
+                                {availableCubicles.find(d => d.id === selectedDeskId)?.deskCode || '•'}
+                              </span>
+                              <span className="truncate">
+                                Workstation {availableCubicles.find(d => d.id === selectedDeskId)?.deskCode || 'Select Cubicle'}
+                              </span>
+                              {availableCubicles.find(d => d.id === selectedDeskId)?.hasHdmi && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-extrabold uppercase shrink-0">
+                                  HDMI
+                                </span>
+                              )}
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isCubicleDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {isCubicleDropdownOpen && (
+                            <>
+                              <div className="fixed inset-0 z-30" onClick={() => setIsCubicleDropdownOpen(false)} />
+                              <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                                <div className="p-2 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 flex items-center justify-between">
+                                  <span>Available Cubicles ({availableCubicles.length})</span>
+                                  <span>Click to select</span>
+                                </div>
+                                <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                                  {availableCubicles.map((d, idx) => {
+                                    const isSelected = selectedDeskId === d.id;
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={d.id}
+                                        onClick={() => {
+                                          setSelectedDeskId(d.id);
+                                          setIsCubicleDropdownOpen(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2.5 flex items-center justify-between text-xs transition-colors cursor-pointer ${
+                                          isSelected ? 'bg-blue-50/80 text-blue-950 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2.5">
+                                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${
+                                            isSelected ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700'
+                                          }`}>
+                                            {d.deskCode}
+                                          </span>
+                                          <div>
+                                            <div className="font-bold text-slate-800">Cubicle {idx + 1} ({d.deskCode})</div>
+                                            <div className="text-[10px] text-slate-400 font-medium">
+                                              {d.hasHdmi ? 'HDMI Monitor Included' : 'Standard Workstation'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          {d.hasHdmi && (
+                                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                              HDMI
+                                            </span>
+                                          )}
+                                          {isSelected && <Check className="w-4 h-4 text-blue-600" />}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </>
                       ) : (
                         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
