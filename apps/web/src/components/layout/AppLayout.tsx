@@ -6,7 +6,7 @@ import { ToastContainer } from '../common/Toast';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { ReportIssueButton } from '../issues/ReportIssueButton';
 
-export const AppLayout: React.FC = () => {
+export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <Header />
@@ -15,7 +15,7 @@ export const AppLayout: React.FC = () => {
         <Sidebar />
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
           <ErrorBoundary>
-            <Outlet />
+            {children || <Outlet />}
           </ErrorBoundary>
         </main>
       </div>
