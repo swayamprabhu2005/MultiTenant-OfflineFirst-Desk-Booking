@@ -97,6 +97,7 @@ export const App: React.FC = () => {
                 <Route index element={<DashboardRoute />} />
                 <Route path="admin/organizations" element={<Navigate to="/" replace />} />
                 <Route path="admin/issues" element={<IssueReportsPage />} />
+                <Route path="employee/issues" element={<IssueReportsPage />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
                 <Route path="admin/roster" element={<EmployeeRosterPage />} />
