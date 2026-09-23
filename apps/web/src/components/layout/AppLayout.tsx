@@ -46,8 +46,8 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
         </main>
       </div>
 
-      {/* Global Floating Issue Report Trigger */}
-      <ReportIssueButton />
+      {/* Global Floating Issue Report Trigger (Scoped to tenant roles: Employee, Branch Admin, Org Admin) */}
+      {user?.role !== 'PLATFORM_ADMIN' && <ReportIssueButton />}
 
       <ToastContainer />
     </div>
