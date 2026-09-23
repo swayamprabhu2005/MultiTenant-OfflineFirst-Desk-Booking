@@ -65,23 +65,9 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
         isActive: user.isActive,
         status: user.status,
         organizationId: user.organizationId,
-        organization: {
-          id: user.organization.id,
-          name: user.organization.name,
-          code: user.organization.code,
-          subdomain: user.organization.subdomain,
-          logoUrl: user.organization.logoUrl,
-          themeColor: user.organization.themeColor,
-        },
+        organization: user.organization,
       },
-      organization: {
-        id: user.organization.id,
-        name: user.organization.name,
-        code: user.organization.code,
-        subdomain: user.organization.subdomain,
-        logoUrl: user.organization.logoUrl,
-        themeColor: user.organization.themeColor,
-      },
+      organization: user.organization,
     });
   } catch (error: any) {
     console.error('Login error:', error);
@@ -246,6 +232,11 @@ router.get('/organizations', async (req: TenantRequest, res: Response) => {
         subdomain: true,
         logoUrl: true,
         themeColor: true,
+        operatingMode: true,
+        allowBranchFloorPlanEdit: true,
+        allowBranchRosterManagement: true,
+        allowBranchProxyBooking: true,
+        allowBranchIssueResolution: true,
       },
     });
     return res.json(orgs);
