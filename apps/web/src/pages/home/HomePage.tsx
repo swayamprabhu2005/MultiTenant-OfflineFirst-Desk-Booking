@@ -49,9 +49,10 @@ export const HomePage: React.FC = () => {
       description:
         'Cryptographically segmented organization boundaries, tenant schema isolation, and autonomous administrative authority.',
       badge: 'Architecture',
-      gradient: 'from-blue-500/10 via-indigo-500/10 to-transparent',
-      borderColor: 'group-hover:border-blue-500/40',
-      iconColor: 'text-blue-500',
+      gradient: 'from-emerald-500/10 via-teal-500/5 to-transparent',
+      borderColor: 'group-hover:border-emerald-500/40',
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-50 border-emerald-100',
     },
     {
       icon: Zap,
@@ -59,9 +60,10 @@ export const HomePage: React.FC = () => {
       description:
         'Local SQLite client storage with background bidirectional replication and deterministic conflict resolution for zero-latency operations.',
       badge: 'Performance',
-      gradient: 'from-emerald-500/10 via-teal-500/10 to-transparent',
-      borderColor: 'group-hover:border-emerald-500/40',
-      iconColor: 'text-emerald-500',
+      gradient: 'from-teal-500/10 via-emerald-500/5 to-transparent',
+      borderColor: 'group-hover:border-teal-500/40',
+      iconColor: 'text-teal-600',
+      iconBg: 'bg-teal-50 border-teal-100',
     },
     {
       icon: Layers,
@@ -69,9 +71,10 @@ export const HomePage: React.FC = () => {
       description:
         'Interactive spatial canvas editor for desks, cubicles, meeting hubs, and amenities with real-time occupancy telemetry.',
       badge: 'Spatial Workspace',
-      gradient: 'from-violet-500/10 via-purple-500/10 to-transparent',
-      borderColor: 'group-hover:border-violet-500/40',
-      iconColor: 'text-violet-500',
+      gradient: 'from-indigo-500/10 via-purple-500/5 to-transparent',
+      borderColor: 'group-hover:border-indigo-500/40',
+      iconColor: 'text-indigo-600',
+      iconBg: 'bg-indigo-50 border-indigo-100',
     },
     {
       icon: Shield,
@@ -79,19 +82,21 @@ export const HomePage: React.FC = () => {
       description:
         'Structured escalation pipeline from Employee to Branch Admin, Organization Global Admin, and Platform Superadmin with bi-directional resolution threads.',
       badge: 'Operations',
-      gradient: 'from-amber-500/10 via-orange-500/10 to-transparent',
+      gradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
       borderColor: 'group-hover:border-amber-500/40',
-      iconColor: 'text-amber-500',
+      iconColor: 'text-amber-600',
+      iconBg: 'bg-amber-50 border-amber-100',
     },
     {
       icon: Sliders,
       title: 'Dual Governance Policy',
       description:
-        'Seamless toggle between Centralized Bank Mode (strict corporate control) and Delegated Enterprise Mode (autonomous branch branch management).',
+        'Seamless toggle between Centralized Mode (strict corporate control) and Delegated Mode (autonomous branch management).',
       badge: 'Compliance',
-      gradient: 'from-rose-500/10 via-pink-500/10 to-transparent',
-      borderColor: 'group-hover:border-rose-500/40',
-      iconColor: 'text-rose-500',
+      gradient: 'from-blue-500/10 via-cyan-500/5 to-transparent',
+      borderColor: 'group-hover:border-blue-500/40',
+      iconColor: 'text-blue-600',
+      iconBg: 'bg-blue-50 border-blue-100',
     },
     {
       icon: Calendar,
@@ -99,9 +104,10 @@ export const HomePage: React.FC = () => {
       description:
         '30-day continuous horizon desk reservations, intelligent multi-day smart skip conflict handling, and synchronized resource dispatch.',
       badge: 'Scheduling',
-      gradient: 'from-cyan-500/10 via-sky-500/10 to-transparent',
+      gradient: 'from-cyan-500/10 via-teal-500/5 to-transparent',
       borderColor: 'group-hover:border-cyan-500/40',
-      iconColor: 'text-cyan-500',
+      iconColor: 'text-cyan-600',
+      iconBg: 'bg-cyan-50 border-cyan-100',
     },
   ];
 
@@ -113,46 +119,46 @@ export const HomePage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white relative overflow-hidden font-sans">
-      {/* Background Decorative Gradients & Mesh */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-emerald-500 selection:text-white relative overflow-hidden font-sans">
+      {/* Background Decorative Gradients & Mesh (Light Corporate Theme) */}
       <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px]" />
-        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-purple-600/15 rounded-full blur-[140px]" />
-        <div className="absolute -bottom-40 left-1/3 w-[32rem] h-[32rem] bg-emerald-600/10 rounded-full blur-[160px]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b0a_1px,transparent_1px),linear-gradient(to_bottom,#1e293b0a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
+        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-teal-500/10 rounded-full blur-[140px]" />
+        <div className="absolute -bottom-40 left-1/3 w-[32rem] h-[32rem] bg-emerald-600/5 rounded-full blur-[160px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f080_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f080_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-60" />
       </div>
 
-      {/* Corporate Top Navigation Bar */}
-      <header className="relative z-20 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl sticky top-0">
+      {/* Corporate Top Navigation Bar (Light Theme) */}
+      <header className="relative z-20 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl sticky top-0 shadow-xs">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 border border-indigo-400/30">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-600/20 border border-emerald-500/20">
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-xl font-black tracking-tight text-white">WorkSpaceOS</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                <span className="text-xl font-black tracking-tight text-slate-900">WorkSpaceOS</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                   Enterprise
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Multi-Tenant Resource & Desk Governance</p>
+              <p className="text-xs text-slate-500 hidden sm:block">Multi-Tenant Resource &amp; Desk Governance</p>
             </div>
           </div>
 
           <div className="flex items-center space-x-3 sm:space-x-4">
             <Link
               to="/login"
-              className="px-4 py-2 text-sm font-semibold text-slate-300 hover:text-white hover:bg-slate-900/80 rounded-xl border border-transparent hover:border-slate-800 transition-all"
+              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
             >
               Sign In
             </Link>
             <Link
               to="/register"
-              className="px-4 sm:px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-600/30 border border-indigo-400/30 flex items-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
+              className="px-4 sm:px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-md shadow-emerald-600/20 flex items-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
             >
               <span>Create Organization</span>
-              <ChevronRight className="w-4 h-4 text-indigo-200" />
+              <ChevronRight className="w-4 h-4 text-emerald-200" />
             </Link>
           </div>
         </div>
@@ -170,8 +176,8 @@ export const HomePage: React.FC = () => {
           >
             {/* Pill Badge */}
             <motion.div variants={itemVariants} className="mb-6">
-              <span className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-xs font-semibold text-indigo-300 backdrop-blur-md shadow-xs">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 backdrop-blur-md shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Next-Gen Autonomous Hybrid Workplace Architecture</span>
               </span>
             </motion.div>
@@ -179,10 +185,10 @@ export const HomePage: React.FC = () => {
             {/* Headline */}
             <motion.h1
               variants={itemVariants}
-              className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6"
+              className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-slate-900 leading-[1.1] mb-6"
             >
               Intelligent Workspace Governance for{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700">
                 Global Enterprises
               </span>
             </motion.h1>
@@ -190,7 +196,7 @@ export const HomePage: React.FC = () => {
             {/* Subtitle */}
             <motion.p
               variants={itemVariants}
-              className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed mb-10 font-normal"
+              className="text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed mb-10 font-normal"
             >
               Empower your multi-branch enterprise with offline-first desk booking, precision spatial floor plans,
               strict multi-tenant isolation, and automated 3-tier issue resolution.
@@ -204,39 +210,39 @@ export const HomePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-base shadow-xl shadow-indigo-600/30 border border-indigo-400/40 flex items-center justify-center space-x-3 transition-all hover:scale-[1.02] cursor-pointer"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base shadow-lg shadow-emerald-600/25 flex items-center justify-center space-x-3 transition-all hover:scale-[1.02] cursor-pointer"
               >
                 <span>Sign In to Portal</span>
-                <ArrowRight className="w-5 h-5 text-indigo-200" />
+                <ArrowRight className="w-5 h-5 text-emerald-200" />
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/register')}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 text-slate-200 hover:text-white font-bold text-base border border-slate-700/80 hover:border-slate-600 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer backdrop-blur-md"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-base border border-slate-200/90 shadow-sm flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
               >
-                <Building className="w-4 h-4 text-slate-400" />
+                <Building className="w-4 h-4 text-slate-500" />
                 <span>Create Organization</span>
               </button>
             </motion.div>
 
             {/* Enterprise Credentials Direct Note */}
-            <motion.div variants={itemVariants} className="mt-8 flex items-center space-x-2 text-xs text-slate-400">
-              <UserCheck className="w-4 h-4 text-emerald-400" />
+            <motion.div variants={itemVariants} className="mt-8 flex items-center space-x-2 text-xs text-slate-500 font-medium">
+              <UserCheck className="w-4 h-4 text-emerald-600" />
               <span>Branch admins and employees can sign in directly using organization credentials</span>
             </motion.div>
           </motion.div>
         </section>
 
         {/* Live Metrics Strip */}
-        <section className="border-y border-slate-800/80 bg-slate-900/40 backdrop-blur-md">
+        <section className="border-y border-slate-200/90 bg-white/70 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-6 py-10">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               {metrics.map((m, idx) => (
                 <div key={idx} className="space-y-1">
-                  <div className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-300">
+                  <div className="text-3xl sm:text-4xl font-extrabold text-slate-900">
                     {m.value}
                   </div>
-                  <div className="text-xs sm:text-sm font-medium text-slate-400">{m.label}</div>
+                  <div className="text-xs sm:text-sm font-semibold text-slate-500">{m.label}</div>
                 </div>
               ))}
             </div>
@@ -246,14 +252,14 @@ export const HomePage: React.FC = () => {
         {/* Architectural Pillars Section */}
         <section className="py-24 max-w-7xl mx-auto px-6">
           <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
-            <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-indigo-400 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+            <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-700 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200">
               <Activity className="w-3.5 h-3.5" />
               <span>Enterprise Platform Capabilities</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
               Engineered for Scalable Governance
             </h2>
-            <p className="text-slate-400 text-base">
+            <p className="text-slate-600 text-base">
               Every layer of the platform is designed with fault-tolerance, zero-latency client synchronization, and
               hierarchical corporate control.
             </p>
@@ -266,7 +272,7 @@ export const HomePage: React.FC = () => {
                 <motion.div
                   key={idx}
                   whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                  className={`group relative p-8 rounded-3xl bg-slate-900/60 border border-slate-800/80 ${pillar.borderColor} hover:bg-slate-900/90 transition-all duration-300 backdrop-blur-xl shadow-xl flex flex-col justify-between overflow-hidden`}
+                  className={`group relative p-8 rounded-3xl bg-white border border-slate-200/80 ${pillar.borderColor} hover:bg-white transition-all duration-300 shadow-sm hover:shadow-xl flex flex-col justify-between overflow-hidden`}
                 >
                   <div
                     className={`absolute inset-0 bg-gradient-to-b ${pillar.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`}
@@ -275,20 +281,20 @@ export const HomePage: React.FC = () => {
                   <div className="relative z-10 space-y-4">
                     <div className="flex items-center justify-between">
                       <div
-                        className={`w-12 h-12 rounded-2xl bg-slate-800/90 border border-slate-700/60 flex items-center justify-center ${pillar.iconColor} shadow-inner`}
+                        className={`w-12 h-12 rounded-2xl ${pillar.iconBg} border flex items-center justify-center ${pillar.iconColor} shadow-xs`}
                       >
                         <Icon className="w-6 h-6" />
                       </div>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/50">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200">
                         {pillar.badge}
                       </span>
                     </div>
 
-                    <h3 className="text-xl font-bold text-white tracking-tight">{pillar.title}</h3>
-                    <p className="text-sm text-slate-400 leading-relaxed">{pillar.description}</p>
+                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">{pillar.title}</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{pillar.description}</p>
                   </div>
 
-                  <div className="relative z-10 pt-6 mt-6 border-t border-slate-800/60 flex items-center text-xs font-semibold text-slate-400 group-hover:text-indigo-300 transition-colors">
+                  <div className="relative z-10 pt-6 mt-6 border-t border-slate-100 flex items-center text-xs font-semibold text-slate-500 group-hover:text-emerald-700 transition-colors">
                     <span>Learn platform architecture</span>
                     <ChevronRight className="w-3.5 h-3.5 ml-1 transition-transform group-hover:translate-x-1" />
                   </div>
@@ -299,52 +305,52 @@ export const HomePage: React.FC = () => {
         </section>
 
         {/* Security & Reliability Tier */}
-        <section className="py-20 border-t border-slate-800/80 bg-slate-900/30">
+        <section className="py-20 border-t border-slate-200/90 bg-slate-100/50">
           <div className="max-w-7xl mx-auto px-6">
-            <div className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-950/90 p-8 sm:p-12 relative overflow-hidden backdrop-blur-xl">
+            <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/50 p-8 sm:p-12 relative overflow-hidden shadow-sm">
               <div className="max-w-2xl space-y-4 relative z-10">
-                <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-400 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-800 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200">
                   <Lock className="w-3.5 h-3.5" />
-                  <span>Enterprise Security & Trust</span>
+                  <span>Enterprise Security &amp; Trust</span>
                 </div>
-                <h3 className="text-3xl font-extrabold text-white">
+                <h3 className="text-3xl font-extrabold text-slate-900">
                   Zero Trust Boundary Architecture
                 </h3>
-                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
                   Strict tenant subdomains guarantee that database transactions, offline synchronization journals, and
                   roster inventories never cross organizational boundaries. Complete audit trails record administrative
                   interventions with immutable timestamps.
                 </p>
-                <div className="pt-4 flex flex-wrap gap-4 text-xs font-semibold text-slate-300">
+                <div className="pt-4 flex flex-wrap gap-4 text-xs font-semibold text-slate-700">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Per-Tenant Dynamic Theming</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Offline Sync Engine</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Role-Based Access Control</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-xs text-slate-400">
+              <div className="mt-8 pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs text-slate-500 font-medium">
                   Ready to deploy WorkSpaceOS for your branches and corporate headquarters?
                 </div>
                 <div className="flex items-center space-x-3 w-full sm:w-auto">
                   <Link
                     to="/register"
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all text-center"
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all text-center"
                   >
                     Create Organization
                   </Link>
                   <Link
                     to="/login"
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all text-center"
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all text-center border border-slate-200"
                   >
                     Sign In
                   </Link>
@@ -355,28 +361,10 @@ export const HomePage: React.FC = () => {
         </section>
       </main>
 
-      {/* Corporate Minimal Footer */}
-      <footer className="border-t border-slate-800/80 py-8 bg-slate-950 text-slate-400 text-xs">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center">
-              <Building2 className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-bold text-slate-300">WorkSpaceOS</span>
-            <span className="text-slate-400">© 2026 WorkSpaceOS Inc. All rights reserved.</span>
-          </div>
-
-          <div className="flex items-center space-x-6 text-slate-400">
-            <Link to="/login" className="hover:text-slate-300 transition-colors">
-              Platform Admin
-            </Link>
-            <Link to="/login" className="hover:text-slate-300 transition-colors">
-              Organization Portal
-            </Link>
-            <Link to="/register" className="hover:text-slate-300 transition-colors">
-              Create Organization
-            </Link>
-          </div>
+      {/* Corporate Minimal Footer (Centered Copyright, Clean) */}
+      <footer className="border-t border-slate-200 py-8 bg-white text-slate-400 text-xs">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <span>© 2026 WorkSpaceOS Inc. All rights reserved.</span>
         </div>
       </footer>
     </div>
