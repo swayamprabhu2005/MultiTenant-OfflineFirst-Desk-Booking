@@ -127,11 +127,11 @@ flowchart TD
   - **Smart Skip Conflict Resolution**: Real-time conflict engine that detects existing reservations across the range. When conflicts occur, the user or branch admin is prompted whether to perform a **Smart Skip** to automatically book all remaining conflict-free days or adjust dates.
   - **Whole Meeting Room Booking**: Reserve entire conference rooms with start time, duration in hours & minutes (minimum 15m enforced), title, and attendee headcount.
   - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live directory search.
-- **Team Pod Mode (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click with an atomic sprint batch confirmation.
+- **Team Pod Mode & Assignee Allocation (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click. The mass workstation booking modal allows designating each desk individually to `[ Myself ]` or assigning to a specific `[ Colleague / Teammate ]` with live branch directory search, department tags, and conflict detection across a sliding 7-day window.
 - **My Bookings History** (`/employee/my-bookings`):
   - Tabbed filtering: `ALL`, `CONFIRMED`, `PAST`, `CANCELLED`.
-  - **Cancel Selected**: Checkbox-based multi-select for selective cancellation.
-  - **Bulk Cancel**: One-click cancellation of all future confirmed bookings.
+  - **Cancel Selected**: Checkbox-based multi-select for selective mass cancellation.
+  - **Role-Scoped Mass Cancellation (`POST /api/employee/bulk-cancel`)**: Secured with JWT authentication middleware and multi-tenant scoping. Employees can only cancel their own or proxy-booked reservations; Branch Admins can cancel any booking across their branch; Global Organization Admins retain tenant-wide cancellation authority.
 
 ---
 
@@ -223,9 +223,11 @@ flowchart TD
 ---
 
 ### 13. ⚙️ Dual-Mode Governance Policy Architecture (Bank Mode vs Enterprise Mode)
-- **Centralized "Bank Mode"**: Designed for financial institutions and regulated enterprises. Restricts branch autonomy — floor plans, employee rosters, and proxy bookings are strictly managed at global headquarters.
-- **Delegated "Enterprise Mode"**: Grants branch managers operational autonomy over local floor plans, rapid employee roster ingestion, and local issue resolutions.
-- **Granular Policy Overrides**: Global Admins can toggle individual operational capabilities (`allowBranchFloorPlanEdit`, `allowBranchRosterManagement`, `allowBranchProxyBooking`, `allowBranchIssueResolution`) from the dedicated `/admin/permissions` console.
+- **Centralized "Bank Mode"**: Designed for financial institutions and regulated corporate headquarters. Enforces strict global administrative governance:
+  - Dynamically hides the **Branch Admins** module from the global navigation sidebar.
+  - Locks and disables granular branch privilege toggles on the Permissions console (`/admin/permissions`) with an advisory notice.
+  - Secures the `/admin/roster` route with a reactive guard that redirects callers to `/admin/permissions`.
+- **Delegated "Enterprise Mode"**: Grants branch managers operational autonomy over local floor plans, rapid employee roster ingestion, and facility issue resolutions. The **Branch Admins** module is accessible in the sidebar, and granular privilege toggles (`allowBranchFloorPlanEdit`, `allowBranchRosterManagement`, `allowBranchProxyBooking`, `allowBranchIssueResolution`) can be configured by the global organization administrator.
 
 ---
 
@@ -245,6 +247,15 @@ flowchart TD
 
 ---
 
+### 16. 📖 OpenAPI 3.0 Platform Specification
+- **Contract-First Standardization**: The entire REST API surface is formally defined using OpenAPI 3.0.3 standards, located in the [`openapi/`](openapi/) directory.
+- **Artifacts Provided**:
+  - [`openapi/openapi.yaml`](openapi/openapi.yaml) — Human-readable master OpenAPI 3.0 specification.
+  - [`openapi/openapi.json`](openapi/openapi.json) — Formatted JSON schema for Swagger UI, Redoc, Postman, and automated SDK generation.
+  - [`openapi/README.md`](openapi/README.md) — Documentation covering local Swagger preview, Docker execution, and collection imports.
+
+---
+
 ## 📦 Project Structure
 
 ```
@@ -261,10 +272,12 @@ MultiTenant-OfflineFirst-DeskBooking/
 │   │       │   ├── branches.routes.ts
 │   │       │   ├── buildings.routes.ts
 │   │       │   ├── employee.routes.ts
+│   │       │   ├── issues.routes.ts
 │   │       │   ├── notification.routes.ts
 │   │       │   ├── organizations.routes.ts
 │   │       │   ├── roster.routes.ts
 │   │       │   ├── branch-roster.routes.ts
+│   │       │   ├── system.routes.ts
 │   │       │   └── workspace.routes.ts
 │   │       └── services/              # Excel engines, hashing, auth services
 │   └── web/                           # React 18 + Vite + Tailwind CSS Frontend
@@ -276,12 +289,16 @@ MultiTenant-OfflineFirst-DeskBooking/
 │           │   ├── NotificationBell.tsx
 │           │   └── OfficePresenceModal.tsx
 │           ├── pages/
-│           │   ├── admin/             # FloorPlans, Workforce, BranchAdmins, AuditLogs
+│           │   ├── admin/             # FloorPlans, Workforce, BranchAdmins, AuditLogs, Permissions
 │           │   ├── branch/            # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
 │           │   └── employee/          # EmployeeFloorPlanPage, OutlookCalendarPage, MyBookingsPage, Dashboard
 │           └── services/
 │               ├── api.ts             # Centralized fetchApi client with retry
 │               └── offlineStore.ts    # IndexedDB outbox queue & floor plan cache
+├── openapi/                           # OpenAPI 3.0 REST contracts & documentation
+│   ├── openapi.yaml
+│   ├── openapi.json
+│   └── README.md
 └── packages/
     └── shared/                        # Shared TypeScript interfaces, Role & Slot enums
 ```
@@ -356,6 +373,8 @@ AZURE_REDIRECT_URI="http://localhost:3000/api/auth/sso/callback"
 ---
 
 ## 📋 API Endpoints Overview
+
+> 📖 **OpenAPI 3.0 Documentation**: The complete interactive REST schema, request/response models, and auth security schemes are specified in [`openapi/openapi.yaml`](openapi/openapi.yaml) and [`openapi/openapi.json`](openapi/openapi.json). See [`openapi/README.md`](openapi/README.md) for Swagger UI, Redoc, and Postman import instructions.
 
 | Method | Route | Description |
 |---|---|---|
