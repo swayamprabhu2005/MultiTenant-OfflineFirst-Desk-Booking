@@ -1,0 +1,1823 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Multi-Tenant Offline-First Desk Booking & Pod Allocation API",
+    "version": "1.0.0",
+    "description": "Enterprise-grade REST API powering multi-tenant workspace management, offline-first SQLite sync,\ninteractive 2D SVG workstation booking, agile team pod allocations, role-scoped bulk cancellations,\nand Centralized vs. Delegated governance architectures.\n",
+    "contact": {
+      "name": "Platform Engineering Team",
+      "email": "support@deskbooking.enterprise.internal"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://api.deskbooking.enterprise.internal/api",
+      "description": "Production Environment"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "JWT authentication, session issuance, and identity verification"
+    },
+    {
+      "name": "Organizations & Tenancy",
+      "description": "Multi-tenant organization isolation, dynamic branding, and governance modes"
+    },
+    {
+      "name": "Workspace Ingestion & Hierarchy",
+      "description": "Excel batch ingestion, branches, buildings, floors, and sections"
+    },
+    {
+      "name": "Workstations & Floor Plans",
+      "description": "Real-time 2D floor plans, multi-day availability matrix, and desk status"
+    },
+    {
+      "name": "Reservations & Pod Bookings",
+      "description": "Single-day, multi-day range, and atomic team pod allocations"
+    },
+    {
+      "name": "Cancellations & Bulk Ops",
+      "description": "Individual and role-scoped mass booking cancellations"
+    },
+    {
+      "name": "Colleagues & Team Presence",
+      "description": "Colleague directory and 30-day Outlook-style office presence calendar"
+    },
+    {
+      "name": "Meeting Rooms",
+      "description": "Whole meeting room reservations and AV scheduling"
+    },
+    {
+      "name": "Defect & Issue Reporting",
+      "description": "Hardware defect ticketing, facility escalations, and resolution tracking"
+    },
+    {
+      "name": "Roster & Governance",
+      "description": "User directory, branch administrator assignments, and permission matrices"
+    },
+    {
+      "name": "Audit & System",
+      "description": "Immutable audit logs and system health telemetry"
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register organization administrator or new user",
+        "operationId": "registerUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Jane Doe"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "jane.doe@acme.corp"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "P@ssw0rd123!"
+                  },
+                  "organizationName": {
+                    "type": "string",
+                    "example": "Acme Corporation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Authenticate user credentials and issue session JWT",
+        "operationId": "loginUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "admin@acme.corp"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "Password123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get currently authenticated user profile and tenant scope",
+        "operationId": "getCurrentUser",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/organizations": {
+      "get": {
+        "tags": [
+          "Organizations & Tenancy"
+        ],
+        "summary": "List organizations accessible by caller",
+        "operationId": "listOrganizations",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of tenant organizations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Organization"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Organizations & Tenancy"
+        ],
+        "summary": "Create new tenant organization",
+        "operationId": "createOrganization",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Cyberdyne Systems"
+                  },
+                  "operatingMode": {
+                    "type": "string",
+                    "enum": [
+                      "DELEGATED",
+                      "CENTRALIZED"
+                    ],
+                    "default": "DELEGATED"
+                  },
+                  "primaryColor": {
+                    "type": "string",
+                    "example": "#059669"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Organization created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organizations/{id}": {
+      "get": {
+        "tags": [
+          "Organizations & Tenancy"
+        ],
+        "summary": "Get organization details and brand configuration",
+        "operationId": "getOrganization",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Organizations & Tenancy"
+        ],
+        "summary": "Update organization settings, operating mode, or branding",
+        "operationId": "updateOrganization",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "operatingMode": {
+                    "type": "string",
+                    "enum": [
+                      "DELEGATED",
+                      "CENTRALIZED"
+                    ]
+                  },
+                  "primaryColor": {
+                    "type": "string",
+                    "example": "#7c3aed"
+                  },
+                  "accentColor": {
+                    "type": "string",
+                    "example": "#a855f7"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspace/ingest": {
+      "post": {
+        "tags": [
+          "Workspace Ingestion & Hierarchy"
+        ],
+        "summary": "Ingest complete workspace hierarchy via multi-sheet Excel file (.xlsx)",
+        "operationId": "ingestWorkspaceExcel",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Excel workbook containing Branches, Buildings, Floors, Sections, Desks, and MeetingRooms sheets"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Workspace hierarchy ingested successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "branchesCreated": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "buildingsCreated": {
+                          "type": "integer",
+                          "example": 4
+                        },
+                        "floorsCreated": {
+                          "type": "integer",
+                          "example": 8
+                        },
+                        "desksCreated": {
+                          "type": "integer",
+                          "example": 120
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/branches": {
+      "get": {
+        "tags": [
+          "Workspace Ingestion & Hierarchy"
+        ],
+        "summary": "List all branches with nested buildings, floors, and sections",
+        "operationId": "listBranches",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of branches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Branch"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/floor-plans": {
+      "get": {
+        "tags": [
+          "Workstations & Floor Plans"
+        ],
+        "summary": "Retrieve interactive 2D floor plans with real-time workstation availability",
+        "operationId": "getFloorPlans",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "floorId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-09-24"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-10-01"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hierarchy of branches and interactive floor plans with desk statuses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branches": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Branch"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/bookings": {
+      "post": {
+        "tags": [
+          "Reservations & Pod Bookings"
+        ],
+        "summary": "Reserve single workstation across a single day or contiguous multi-day range",
+        "operationId": "createWorkstationBooking",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "deskId",
+                  "slotType"
+                ],
+                "properties": {
+                  "deskId": {
+                    "type": "string",
+                    "example": "desk-101"
+                  },
+                  "slotType": {
+                    "type": "string",
+                    "enum": [
+                      "FULL_DAY",
+                      "MORNING",
+                      "AFTERNOON"
+                    ],
+                    "default": "FULL_DAY"
+                  },
+                  "bookingDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-09-24"
+                  },
+                  "dates": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "example": [
+                      "2026-09-24",
+                      "2026-09-25"
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "example": "Focused sprint development"
+                  },
+                  "bookingForMode": {
+                    "type": "string",
+                    "enum": [
+                      "SELF",
+                      "COLLEAGUE"
+                    ],
+                    "default": "SELF"
+                  },
+                  "colleagueUserId": {
+                    "type": "string",
+                    "example": "usr-colleague-55"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Workstation reservation created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Desk reserved successfully"
+                    },
+                    "booking": {
+                      "$ref": "#/components/schemas/Booking"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/bulk-bookings": {
+      "post": {
+        "tags": [
+          "Reservations & Pod Bookings"
+        ],
+        "summary": "Atomic multi-workstation pod reservation with per-desk teammate allocation",
+        "operationId": "createBulkPodBooking",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "deskIds",
+                  "bookingDate"
+                ],
+                "properties": {
+                  "deskIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "example": [
+                      "desk-01",
+                      "desk-02",
+                      "desk-03"
+                    ]
+                  },
+                  "bookingDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-09-24"
+                  },
+                  "slotType": {
+                    "type": "string",
+                    "enum": [
+                      "FULL_DAY",
+                      "MORNING",
+                      "AFTERNOON"
+                    ],
+                    "default": "FULL_DAY"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "example": "Platform Architecture Pod Session"
+                  },
+                  "allocations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "deskId"
+                      ],
+                      "properties": {
+                        "deskId": {
+                          "type": "string",
+                          "example": "desk-01"
+                        },
+                        "colleagueUserId": {
+                          "type": "string",
+                          "example": "usr-colleague-12"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pod workstations booked atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Successfully reserved 3 workstations for your team"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/my-bookings": {
+      "get": {
+        "tags": [
+          "Reservations & Pod Bookings"
+        ],
+        "summary": "List reservations for caller (or branch reservations if branch admin)",
+        "operationId": "listMyBookings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "active",
+                "past"
+              ],
+              "default": "all"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of reservations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Booking"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/cancel-booking/{id}": {
+      "post": {
+        "tags": [
+          "Cancellations & Bulk Ops"
+        ],
+        "summary": "Cancel individual workstation or room reservation",
+        "operationId": "cancelSingleBooking",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation cancelled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Reservation cancelled"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/bulk-cancel": {
+      "post": {
+        "tags": [
+          "Cancellations & Bulk Ops"
+        ],
+        "summary": "Mass cancel reservations with strict organizational and branch role scoping",
+        "description": "Employees can only cancel reservations they own or booked on proxy.\nBranch administrators can cancel any reservation within their assigned branch.\nGlobal organization administrators can cancel reservations across the entire tenant.\n",
+        "operationId": "bulkCancelBookings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingIds"
+                ],
+                "properties": {
+                  "bookingIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "book-10",
+                      "book-11",
+                      "book-12"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mass cancellation completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 3
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Successfully cancelled 3 reservations"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/colleagues": {
+      "get": {
+        "tags": [
+          "Colleagues & Team Presence"
+        ],
+        "summary": "Search active colleagues for teammate proxy allocation and pod scheduling",
+        "operationId": "searchColleagues",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "Alice"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active colleagues matching criteria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "colleagues": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Colleague"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/employee/presence": {
+      "get": {
+        "tags": [
+          "Colleagues & Team Presence"
+        ],
+        "summary": "Get 30-day Outlook-style office presence calendar for team and self",
+        "operationId": "getOfficePresence",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "2026-09"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily presence and occupancy matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string",
+                            "format": "date"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "IN_OFFICE",
+                              "REMOTE",
+                              false
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues": {
+      "get": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "List reported defect issues filtered by role, branch, and status",
+        "operationId": "listIssues",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "IN_PROGRESS",
+                "RESOLVED"
+              ]
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of reported issues",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssueTicket"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "Submit defect report (workstation hardware, AV equipment, or facility maintenance)",
+        "operationId": "createIssueTicket",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "category",
+                  "severity"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Faulty HDMI adapter and monitor flickering"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "The primary display flashes black intermittently when connected via USB-C."
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "HARDWARE",
+                      "FACILITY",
+                      "SOFTWARE",
+                      "NETWORK",
+                      "OTHER"
+                    ],
+                    "example": "HARDWARE"
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "LOW",
+                      "MEDIUM",
+                      "HIGH",
+                      "CRITICAL"
+                    ],
+                    "example": "MEDIUM"
+                  },
+                  "deskId": {
+                    "type": "string",
+                    "example": "desk-01"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "example": "branch-blr"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Issue ticket registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTicket"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/roster": {
+      "get": {
+        "tags": [
+          "Roster & Governance"
+        ],
+        "summary": "List users and administrators in current organization",
+        "operationId": "listRoster",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users in organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserProfile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Roster & Governance"
+        ],
+        "summary": "Assign or invite branch administrator or user",
+        "operationId": "addRosterMember",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "role"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Robert Vance"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "rvance@acme.corp"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "BRANCH_ADMIN",
+                      "EMPLOYEE"
+                    ],
+                    "example": "BRANCH_ADMIN"
+                  },
+                  "scopedBranchId": {
+                    "type": "string",
+                    "example": "branch-blr"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Member added to organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/roster/permissions": {
+      "get": {
+        "tags": [
+          "Roster & Governance"
+        ],
+        "summary": "Retrieve current operating mode (Centralized vs Delegated) and permission matrix",
+        "operationId": "getPermissionMatrix",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operating mode and privilege toggles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operatingMode": {
+                      "type": "string",
+                      "enum": [
+                        "DELEGATED",
+                        "CENTRALIZED"
+                      ]
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "properties": {
+                        "canManageDesks": {
+                          "type": "boolean"
+                        },
+                        "canManageFloors": {
+                          "type": "boolean"
+                        },
+                        "canOverrideBookings": {
+                          "type": "boolean"
+                        },
+                        "canExportReports": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Roster & Governance"
+        ],
+        "summary": "Update operating mode and branch admin permissions",
+        "operationId": "updatePermissionMatrix",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operatingMode": {
+                    "type": "string",
+                    "enum": [
+                      "DELEGATED",
+                      "CENTRALIZED"
+                    ]
+                  },
+                  "permissions": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permissions updated successfully"
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "tags": [
+          "Audit & System"
+        ],
+        "summary": "Fetch immutable audit log trail",
+        "operationId": "listAuditLogs",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit event logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditLog"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/health": {
+      "get": {
+        "tags": [
+          "Audit & System"
+        ],
+        "summary": "Verify API health, SQLite/PostgreSQL connectivity, and worker status",
+        "operationId": "getSystemHealth",
+        "responses": {
+          "200": {
+            "description": "System operational",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "database": {
+                      "type": "string",
+                      "example": "connected"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Standard Bearer token authentication header"
+      }
+    },
+    "schemas": {
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "usr-9921"
+          },
+          "name": {
+            "type": "string",
+            "example": "Jane Doe"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "jane.doe@acme.corp"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "PLATFORM_ADMIN",
+              "ORG_ADMIN",
+              "BRANCH_ADMIN",
+              "EMPLOYEE"
+            ],
+            "example": "EMPLOYEE"
+          },
+          "organizationId": {
+            "type": "string",
+            "example": "org-acme-1"
+          },
+          "scopedBranchId": {
+            "type": "string",
+            "nullable": true,
+            "example": "branch-blr"
+          },
+          "department": {
+            "type": "string",
+            "nullable": true,
+            "example": "Engineering"
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "org-acme-1"
+          },
+          "name": {
+            "type": "string",
+            "example": "Acme Corporation"
+          },
+          "operatingMode": {
+            "type": "string",
+            "enum": [
+              "DELEGATED",
+              "CENTRALIZED"
+            ],
+            "example": "DELEGATED"
+          },
+          "primaryColor": {
+            "type": "string",
+            "example": "#059669"
+          },
+          "accentColor": {
+            "type": "string",
+            "example": "#10b981"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Branch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "branch-blr"
+          },
+          "name": {
+            "type": "string",
+            "example": "Bengaluru Tech Campus"
+          },
+          "address": {
+            "type": "string",
+            "example": "Electronic City Phase 1"
+          },
+          "buildings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Building"
+            }
+          }
+        }
+      },
+      "Building": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "bld-tower-a"
+          },
+          "name": {
+            "type": "string",
+            "example": "Tower A"
+          },
+          "floors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Floor"
+            }
+          }
+        }
+      },
+      "Floor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "fl-floor-2"
+          },
+          "code": {
+            "type": "string",
+            "example": "FL02"
+          },
+          "floorNumber": {
+            "type": "integer",
+            "example": 2
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            }
+          }
+        }
+      },
+      "Section": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "sec-alpha"
+          },
+          "name": {
+            "type": "string",
+            "example": "Section Alpha"
+          },
+          "desks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Desk"
+            }
+          }
+        }
+      },
+      "Desk": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "dsk-a-101"
+          },
+          "deskCode": {
+            "type": "string",
+            "example": "A-101"
+          },
+          "deskNumber": {
+            "type": "integer",
+            "example": 101
+          },
+          "hasHdmi": {
+            "type": "boolean",
+            "example": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "BOOKED"
+            ],
+            "example": "AVAILABLE"
+          }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "bkg-8891"
+          },
+          "deskId": {
+            "type": "string",
+            "example": "dsk-a-101"
+          },
+          "userId": {
+            "type": "string",
+            "example": "usr-9921"
+          },
+          "slotType": {
+            "type": "string",
+            "enum": [
+              "FULL_DAY",
+              "MORNING",
+              "AFTERNOON"
+            ],
+            "example": "FULL_DAY"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-24T09:00:00.000Z"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-24T18:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "CANCELLED"
+            ],
+            "example": "CONFIRMED"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "example": "Agile Pod Sprint"
+          }
+        }
+      },
+      "Colleague": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "usr-884"
+          },
+          "name": {
+            "type": "string",
+            "example": "Bob Smith"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "bob.smith@acme.corp"
+          },
+          "department": {
+            "type": "string",
+            "example": "DevOps"
+          },
+          "role": {
+            "type": "string",
+            "example": "EMPLOYEE"
+          }
+        }
+      },
+      "IssueTicket": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "iss-502"
+          },
+          "title": {
+            "type": "string",
+            "example": "Monitor HDMI port damaged"
+          },
+          "category": {
+            "type": "string",
+            "example": "HARDWARE"
+          },
+          "severity": {
+            "type": "string",
+            "example": "MEDIUM"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_PROGRESS",
+              "RESOLVED"
+            ],
+            "example": "OPEN"
+          },
+          "reportedBy": {
+            "$ref": "#/components/schemas/UserProfile"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "aud-1099"
+          },
+          "action": {
+            "type": "string",
+            "example": "BULK_RESERVATION_CREATED"
+          },
+          "entity": {
+            "type": "string",
+            "example": "Booking"
+          },
+          "entityId": {
+            "type": "string",
+            "example": "bkg-8891"
+          },
+          "performedBy": {
+            "type": "string",
+            "example": "usr-9921"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request parameters or payload",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "Validation failed"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication required or token expired",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "Unauthorized access"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
