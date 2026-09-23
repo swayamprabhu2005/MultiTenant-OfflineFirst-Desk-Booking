@@ -117,7 +117,8 @@ export async function generateOrgTemplate(orgId: string, orgName: string): Promi
  */
 export async function parseAndValidateWorkspace(
   fileBuffer: Buffer,
-  expectedOrgId: string
+  expectedOrgId: string,
+  expectedOrgName?: string
 ): Promise<ValidationResult> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer as any);
@@ -151,9 +152,29 @@ export async function parseAndValidateWorkspace(
   }
 
   // 1. VALIDATE SHEET 1: Organization
-  const orgIdCell = sheetOrg.getCell('A5').text?.trim();
-  const orgNameCell = sheetOrg.getCell('B5').text?.trim();
+  const orgIdCell = sheetOrg.getCell('A5').text?.trim() || String(sheetOrg.getCell('A5').value || '').trim();
+  const orgNameCell = sheetOrg.getCell('B5').text?.trim() || String(sheetOrg.getCell('B5').value || '').trim();
   const branchCountVal = Number(sheetOrg.getCell('C5').value);
+
+  // Validate Organization Name Match against active tenant organization
+  if (!orgNameCell) {
+    addError('Organization', 5, 'Organization Name is required.');
+  } else if (expectedOrgName && orgNameCell.toLowerCase() !== expectedOrgName.trim().toLowerCase()) {
+    addError(
+      'Organization',
+      5,
+      `Organization mismatch: Uploaded spreadsheet is for organization "${orgNameCell}", but your active organization is "${expectedOrgName}".`
+    );
+  }
+
+  // Validate Organization ID Match if present
+  if (expectedOrgId && orgIdCell && orgIdCell.toLowerCase() !== expectedOrgId.trim().toLowerCase()) {
+    addError(
+      'Organization',
+      5,
+      `Organization ID mismatch: Uploaded spreadsheet belongs to organization ID "${orgIdCell}", but your active organization ID is "${expectedOrgId}".`
+    );
+  }
 
   if (!branchCountVal || isNaN(branchCountVal) || branchCountVal < 1) {
     addError('Organization', 5, 'Number of Branches must be a positive integer greater than 0.');
@@ -1036,42 +1057,49 @@ export async function generateBranchFloorPlanTemplate(
   sheetBranch.views = [{ showGridLines: true }];
 
   const bHeader = sheetBranch.getRow(1);
-  bHeader.values = ['Branch Code', 'Branch Name', 'Number of Buildings'];
+  bHeader.values = ['Organization Name', 'Branch Code', 'Branch Name', 'Number of Buildings'];
   bHeader.height = 26;
   bHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   bHeader.alignment = { horizontal: 'center', vertical: 'middle' };
-  for (let c = 1; c <= 3; c++) {
+  for (let c = 1; c <= 4; c++) {
     bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
     bHeader.getCell(c).border = THIN_BORDER;
   }
 
   const bRow = sheetBranch.getRow(2);
   bRow.height = 24;
-  // Branch Code (Locked Grey)
-  bRow.getCell(1).value = branch.code;
+  // Organization Name (Locked Grey)
+  bRow.getCell(1).value = orgName;
   bRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
   bRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
   bRow.getCell(1).protection = { locked: true };
 
-  // Branch Name (Locked Grey)
-  bRow.getCell(2).value = branch.name;
+  // Branch Code (Locked Grey)
+  bRow.getCell(2).value = branch.code;
   bRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
   bRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
   bRow.getCell(2).protection = { locked: true };
 
-  // Number of Buildings (Editable Yellow)
-  bRow.getCell(3).value = Math.max(1, branch.buildings.length);
-  bRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
-  bRow.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
-  bRow.getCell(3).protection = { locked: false };
+  // Branch Name (Locked Grey)
+  bRow.getCell(3).value = branch.name;
+  bRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(3).protection = { locked: true };
 
-  for (let c = 1; c <= 3; c++) {
+  // Number of Buildings (Editable Yellow)
+  bRow.getCell(4).value = Math.max(1, branch.buildings.length);
+  bRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+  bRow.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+  bRow.getCell(4).protection = { locked: false };
+
+  for (let c = 1; c <= 4; c++) {
     bRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
     bRow.getCell(c).border = THIN_BORDER;
   }
-  sheetBranch.getColumn(1).width = 20;
-  sheetBranch.getColumn(2).width = 30;
-  sheetBranch.getColumn(3).width = 24;
+  sheetBranch.getColumn(1).width = 28;
+  sheetBranch.getColumn(2).width = 20;
+  sheetBranch.getColumn(3).width = 30;
+  sheetBranch.getColumn(4).width = 24;
   await sheetBranch.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 2. Sheet: Buildings
@@ -1100,7 +1128,7 @@ export async function generateBranchFloorPlanTemplate(
 
     // Col A: Building Code (Formula cascading from Branch Info, locked grey)
     r.getCell(1).value = {
-      formula: `IF(ROW()-1 <= 'Branch Info'!$C$2, "BLD" & TEXT(ROW()-1, "000"), "")`,
+      formula: `IF(ROW()-1 <= 'Branch Info'!$D$2, "BLD" & TEXT(ROW()-1, "000"), "")`,
       result: bld.code || `BLD${String(rowNum - 1).padStart(3, '0')}`,
     };
     r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
@@ -1453,7 +1481,8 @@ function getCellNumber(cell: ExcelJS.Cell): number {
  */
 export async function parseAndValidateBranchFloorPlan(
   fileBuffer: Buffer,
-  expectedBranchCode: string
+  expectedBranchCode: string,
+  expectedOrgName?: string
 ): Promise<BranchFloorPlanValidationResult> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer as any);
@@ -1476,9 +1505,32 @@ export async function parseAndValidateBranchFloorPlan(
   }
 
   // 1. Branch Info
+  const headerRow = sheetBranch.getRow(1);
+  const col1Header = getCellString(headerRow.getCell(1)).toLowerCase();
+  const hasOrgCol = col1Header.includes('organization');
+
   const branchRow = sheetBranch.getRow(2);
-  const branchCode = getCellString(branchRow.getCell(1));
-  const branchName = getCellString(branchRow.getCell(2));
+  let excelOrgName = '';
+  let branchCode = '';
+  let branchName = '';
+
+  if (hasOrgCol) {
+    excelOrgName = getCellString(branchRow.getCell(1));
+    branchCode = getCellString(branchRow.getCell(2));
+    branchName = getCellString(branchRow.getCell(3));
+  } else {
+    branchCode = getCellString(branchRow.getCell(1));
+    branchName = getCellString(branchRow.getCell(2));
+  }
+
+  // Validate Organization Name if expectedOrgName is provided and org column exists
+  if (expectedOrgName) {
+    if (excelOrgName && excelOrgName.trim().toLowerCase() !== expectedOrgName.trim().toLowerCase()) {
+      errors.push(
+        `Organization mismatch: Uploaded spreadsheet is for organization "${excelOrgName}", but your active organization is "${expectedOrgName}".`
+      );
+    }
+  }
 
   if (!branchCode) {
     errors.push('Branch Info (Row 2): Branch Code is missing.');

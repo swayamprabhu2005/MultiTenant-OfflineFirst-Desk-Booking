@@ -76,7 +76,7 @@ router.post(
         }
       }
 
-      const validation = await parseAndValidateWorkspace(req.file.buffer, orgId);
+      const validation = await parseAndValidateWorkspace(req.file.buffer, orgId, org.name);
 
       // If validation failed, return the error summary and base64-encoded annotated Excel
       if (!validation.success || !validation.data) {

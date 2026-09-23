@@ -792,7 +792,8 @@ router.post(
         return res.status(400).json({ error: 'Please upload a valid Excel (.xlsx) file.' });
       }
 
-      const validation = await parseAndValidateBranchFloorPlan(req.file.buffer, branch.code);
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      const validation = await parseAndValidateBranchFloorPlan(req.file.buffer, branch.code, org?.name);
       if (!validation.success || !validation.data) {
         return res.status(400).json({
           error: 'Floor plan spreadsheet validation failed.',
