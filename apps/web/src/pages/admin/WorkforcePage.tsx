@@ -63,7 +63,7 @@ export const WorkforcePage: React.FC = () => {
 
   // Corporate Domain & Default Temporary Password configuration
   const defaultDomain = tenant?.subdomain ? `${tenant.subdomain}.com` : 'acme.com';
-  const defaultFallbackPassword = tenant?.name ? `${tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}2026!` : 'Welcome2026!';
+  const defaultFallbackPassword = tenant?.name || 'Welcome123!';
   const [domain, setDomain] = useState(defaultDomain);
   const [defaultPassword, setDefaultPassword] = useState(defaultFallbackPassword);
   const [savingConfig, setSavingConfig] = useState(false);

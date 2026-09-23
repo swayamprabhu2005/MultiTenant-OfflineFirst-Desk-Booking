@@ -25,7 +25,7 @@ export const BranchEmployeeRosterPage: React.FC = () => {
   const activeOrg = user?.organization || tenant;
 
   const defaultDomain = activeOrg?.subdomain ? `${activeOrg.subdomain}.com` : 'acme.com';
-  const defaultFallbackPassword = (activeOrg?.name || 'acme').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const defaultFallbackPassword = activeOrg?.name || 'Welcome123!';
   const [domain, setDomain] = useState(defaultDomain);
 
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
