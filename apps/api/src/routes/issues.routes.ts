@@ -87,7 +87,7 @@ router.post(
       // Fetch user organization details for cross-tenant visibility
       const userOrg = await prisma.organization.findUnique({
         where: { id: user.organizationId },
-        select: { id: true, name: true, subdomain: true, code: true },
+        select: { id: true, name: true, subdomain: true, code: true, operatingMode: true },
       });
 
       if (!userOrg) {
@@ -101,12 +101,36 @@ router.post(
       });
 
       const effectiveBranchId = reporterUser?.scopedBranchId || reporterUser?.baseBranchId || null;
-      let targetLevel = 'BRANCH_ADMIN';
-      if (user.role === Role.BRANCH_ADMIN || !effectiveBranchId) {
-        targetLevel = 'ORGANIZATION_ADMIN';
-      }
+      let targetLevel = 'ORGANIZATION_ADMIN'; // Safe default
+
       if (user.role === Role.ORGANIZATION_ADMIN || user.role === Role.PLATFORM_ADMIN) {
         targetLevel = 'PLATFORM_ADMIN';
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        targetLevel = 'ORGANIZATION_ADMIN';
+      } else {
+        // Employee or Tech Lead reporting
+        if (userOrg.operatingMode === 'DELEGATED' && effectiveBranchId) {
+          // Check if an active branch admin exists for this branch
+          const branchAdmin = await prisma.user.findFirst({
+            where: {
+              organizationId: userOrg.id,
+              role: Role.BRANCH_ADMIN,
+              isActive: true,
+              OR: [
+                { scopedBranchId: effectiveBranchId },
+                { baseBranchId: effectiveBranchId },
+              ],
+            },
+          });
+          if (branchAdmin) {
+            targetLevel = 'BRANCH_ADMIN';
+          } else {
+            targetLevel = 'ORGANIZATION_ADMIN';
+          }
+        } else {
+          // Centralized mode or unassigned branch -> directly to Global Org Admin
+          targetLevel = 'ORGANIZATION_ADMIN';
+        }
       }
 
       // Create issue report in database with clean metadata
@@ -162,20 +186,45 @@ router.post(
   }
 );
 
-// 2. Get Platform Issue Statistics (Superadmin Only)
+// 2. Get Platform Issue Statistics (Scoped per role)
 router.get(
   '/stats',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
-  async (_req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
+      const whereBase: any = {};
+
+      if (user.role === Role.PLATFORM_ADMIN) {
+        whereBase.targetLevel = 'PLATFORM_ADMIN';
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        whereBase.organizationId = user.organizationId;
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        whereBase.organizationId = user.organizationId;
+        const adminUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { baseBranchId: true, scopedBranchId: true },
+        });
+        const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+        if (branchId) {
+          whereBase.OR = [
+            { branchId },
+            { targetLevel: 'BRANCH_ADMIN' },
+            { reporterId: user.id },
+          ];
+        }
+      } else {
+        whereBase.reporterId = user.id;
+      }
+
       const [total, open, inProgress, resolved, critical] = await Promise.all([
-        prisma.issueReport.count(),
-        prisma.issueReport.count({ where: { status: IssueStatus.OPEN } }),
-        prisma.issueReport.count({ where: { status: IssueStatus.IN_PROGRESS } }),
-        prisma.issueReport.count({ where: { status: IssueStatus.RESOLVED } }),
+        prisma.issueReport.count({ where: whereBase }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.OPEN } }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.IN_PROGRESS } }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.RESOLVED } }),
         prisma.issueReport.count({
           where: {
+            ...whereBase,
             priority: IssuePriority.CRITICAL,
             status: { not: IssueStatus.RESOLVED },
           },
@@ -196,7 +245,7 @@ router.get(
   }
 );
 
-// 3. Get All Issue Reports (Superadmin Only with Filtering, Search & Pagination)
+// 3. Get All Issue Reports (Scoped per role with Filtering, Search & Pagination)
 router.get(
   '/',
   authMiddleware,
@@ -220,11 +269,10 @@ router.get(
       const where: any = {};
 
       if (user.role === Role.PLATFORM_ADMIN) {
+        // Platform Admin ONLY sees issues explicitly forwarded/escalated to Platform Admin
+        where.targetLevel = 'PLATFORM_ADMIN';
         if (organizationId && organizationId !== 'ALL') {
           where.organizationId = String(organizationId);
-        }
-        if (targetLevel && targetLevel !== 'ALL') {
-          where.targetLevel = String(targetLevel);
         }
       } else if (user.role === Role.ORGANIZATION_ADMIN) {
         where.organizationId = user.organizationId;
@@ -348,11 +396,22 @@ router.post(
         return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
       }
 
+      const currentDiagnostics = (existing.systemDiagnostics as Record<string, any>) || {};
       const updated = await prisma.issueReport.update({
         where: { id },
         data: {
           targetLevel: 'ORGANIZATION_ADMIN',
           status: IssueStatus.IN_PROGRESS,
+          systemDiagnostics: {
+            ...currentDiagnostics,
+            forwardedByBranch: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
         },
         include: {
           reporter: { select: { id: true, name: true, email: true, role: true } },
@@ -428,11 +487,22 @@ router.post(
         return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
       }
 
+      const currentDiagnostics = (existing.systemDiagnostics as Record<string, any>) || {};
       const updated = await prisma.issueReport.update({
         where: { id },
         data: {
           targetLevel: 'PLATFORM_ADMIN',
           status: IssueStatus.IN_PROGRESS,
+          systemDiagnostics: {
+            ...currentDiagnostics,
+            forwardedBy: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
         },
         include: {
           reporter: { select: { id: true, name: true, email: true, role: true } },

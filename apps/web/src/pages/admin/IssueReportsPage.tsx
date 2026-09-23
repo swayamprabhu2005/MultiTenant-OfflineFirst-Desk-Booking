@@ -13,6 +13,9 @@ import { IssueStatus, IssuePriority, IssueReportDTO, IssueMessageDTO, Role } fro
 
 export const IssueReportsPage: React.FC = () => {
   const { user: currentUser } = useAuth();
+  const isPlatformAdmin = currentUser?.role === Role.PLATFORM_ADMIN;
+  const isOrgAdmin = currentUser?.role === Role.ORGANIZATION_ADMIN;
+  const isBranchAdmin = currentUser?.role === Role.BRANCH_ADMIN;
   const [issues, setIssues] = useState<IssueReportDTO[]>([]);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, open: 0, inProgress: 0, resolved: 0, critical: 0 });
@@ -120,50 +123,60 @@ export const IssueReportsPage: React.FC = () => {
     }
   };
 
-  const handleEscalateToOrg = async () => {
-    if (!selectedIssue) return;
-    const note = prompt('Optional escalation note for Organization Administration:');
+  const handleEscalateIssueToOrg = async (issue: IssueReportDTO) => {
+    const note = prompt('Optional forwarding note for Organization Administration:');
     try {
       setIsUpdating(true);
       const res = await fetchApi<{ success: boolean; issue: IssueReportDTO }>(
-        `/issues/${selectedIssue.id}/escalate-to-org`,
+        `/issues/${issue.id}/escalate-to-org`,
         {
           method: 'POST',
           body: JSON.stringify({ note: note || '' }),
         }
       );
-      showToast('Issue escalated to Global Organization Administration.', 'success');
-      setSelectedIssue(res.issue);
-      if (res.issue.messages) setMessages(res.issue.messages);
+      showToast('Issue forwarded to Global Organization Administration.', 'success');
+      if (selectedIssue && selectedIssue.id === issue.id) {
+        setSelectedIssue(res.issue);
+        if (res.issue.messages) setMessages(res.issue.messages);
+      }
       await loadData();
     } catch (err: any) {
-      showToast(err.message || 'Failed to escalate issue', 'error');
+      showToast(err.message || 'Failed to forward issue', 'error');
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const handleEscalateToPlatform = async () => {
-    if (!selectedIssue) return;
-    const note = prompt('Optional escalation note for Platform Superadmin:');
+  const handleEscalateIssueToPlatform = async (issue: IssueReportDTO) => {
+    const note = prompt('Optional forwarding note for Platform Superadmin:');
     try {
       setIsUpdating(true);
       const res = await fetchApi<{ success: boolean; issue: IssueReportDTO }>(
-        `/issues/${selectedIssue.id}/escalate-to-platform`,
+        `/issues/${issue.id}/escalate-to-platform`,
         {
           method: 'POST',
           body: JSON.stringify({ note: note || '' }),
         }
       );
-      showToast('Issue escalated to Platform Superadmin.', 'success');
-      setSelectedIssue(res.issue);
-      if (res.issue.messages) setMessages(res.issue.messages);
+      showToast('Issue forwarded to Platform Superadmin.', 'success');
+      if (selectedIssue && selectedIssue.id === issue.id) {
+        setSelectedIssue(res.issue);
+        if (res.issue.messages) setMessages(res.issue.messages);
+      }
       await loadData();
     } catch (err: any) {
-      showToast(err.message || 'Failed to escalate issue', 'error');
+      showToast(err.message || 'Failed to forward issue', 'error');
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleEscalateToOrg = () => {
+    if (selectedIssue) handleEscalateIssueToOrg(selectedIssue);
+  };
+
+  const handleEscalateToPlatform = () => {
+    if (selectedIssue) handleEscalateIssueToPlatform(selectedIssue);
   };
 
   const handleUpdateStatus = async () => {
@@ -367,22 +380,24 @@ export const IssueReportsPage: React.FC = () => {
               <option value="LOW">🌱 Low</option>
             </select>
 
-            {/* Tenant Org Filter */}
-            <select
-              value={orgFilter}
-              onChange={(e) => {
-                setOrgFilter(e.target.value);
-                setPage(1);
-              }}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[180px] truncate"
-            >
-              <option value="ALL">All Organizations</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} ({org.subdomain})
-                </option>
-              ))}
-            </select>
+            {/* Tenant Org Filter (Platform Superadmin Only) */}
+            {isPlatformAdmin && (
+              <select
+                value={orgFilter}
+                onChange={(e) => {
+                  setOrgFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[180px] truncate"
+              >
+                <option value="ALL">All Organizations</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name} ({org.subdomain})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -411,7 +426,7 @@ export const IssueReportsPage: React.FC = () => {
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
                   <th className="py-3.5 px-4">Status & Priority</th>
                   <th className="py-3.5 px-4">Issue Details</th>
-                  <th className="py-3.5 px-4">Tenant Org</th>
+                  {isPlatformAdmin && <th className="py-3.5 px-4">Tenant Org</th>}
                   <th className="py-3.5 px-4">Reporter</th>
                   <th className="py-3.5 px-4">Reported</th>
                   <th className="py-3.5 px-4 text-right">Action</th>
@@ -502,36 +517,54 @@ export const IssueReportsPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Tenant Org */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center space-x-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="font-bold text-slate-800">
-                              {issue.organization?.name || 'Unknown'}
+                      {/* Tenant Org (Platform Admin Only) */}
+                      {isPlatformAdmin && (
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-bold text-slate-800">
+                                {issue.organization?.name || 'Unknown'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono font-medium text-slate-500 block">
+                              {issue.organization?.subdomain}.deskbooking.com
                             </span>
                           </div>
-                          <span className="text-[10px] font-mono font-medium text-slate-500 block">
-                            {issue.organization?.subdomain}.deskbooking.com
-                          </span>
-                        </div>
-                      </td>
+                        </td>
+                      )}
 
                       {/* Reporter */}
                       <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center space-x-1.5 font-bold text-slate-800">
-                            <User className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{issue.reporter?.name || 'Anonymous'}</span>
+                        {isPlatformAdmin && (issue as any).systemDiagnostics?.forwardedBy ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-1.5 font-bold text-slate-800">
+                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{(issue as any).systemDiagnostics.forwardedBy.name}</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-[10px] text-slate-500">
+                              <span className="font-mono">{(issue as any).systemDiagnostics.forwardedBy.email}</span>
+                              <span>•</span>
+                              <span className="font-bold text-indigo-600 uppercase">
+                                {(issue as any).systemDiagnostics.forwardedBy.role || 'ORGANIZATION_ADMIN'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-1 text-[10px] text-slate-500">
-                            <span className="font-mono">{issue.reporter?.email}</span>
-                            <span>•</span>
-                            <span className="font-bold text-indigo-600 uppercase">
-                              {issue.reporter?.role}
-                            </span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-1.5 font-bold text-slate-800">
+                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{issue.reporter?.name || 'Anonymous'}</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-[10px] text-slate-500">
+                              <span className="font-mono">{issue.reporter?.email}</span>
+                              <span>•</span>
+                              <span className="font-bold text-indigo-600 uppercase">
+                                {issue.reporter?.role}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </td>
 
                       {/* Reported At */}
@@ -546,16 +579,60 @@ export const IssueReportsPage: React.FC = () => {
 
                       {/* Action */}
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenDetail(issue);
-                          }}
-                          className="px-3 py-1.5 bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white text-slate-700 font-bold rounded-lg transition-all text-xs inline-flex items-center space-x-1"
-                        >
-                          <span>Inspect</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end space-x-2">
+                          {/* Branch Admin forward to Org Admin */}
+                          {isBranchAdmin && issue.targetLevel === 'BRANCH_ADMIN' && issue.status !== IssueStatus.RESOLVED && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEscalateIssueToOrg(issue);
+                              }}
+                              disabled={isUpdating}
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 font-bold rounded-lg transition-all text-[11px] inline-flex items-center space-x-1 cursor-pointer shadow-xs whitespace-nowrap"
+                              title="Forward to organization admin"
+                            >
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                              <span>Forward to Org Admin</span>
+                            </button>
+                          )}
+
+                          {/* Org Admin forward to Platform Admin */}
+                          {isOrgAdmin && issue.targetLevel !== 'PLATFORM_ADMIN' && issue.status !== IssueStatus.RESOLVED && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEscalateIssueToPlatform(issue);
+                              }}
+                              disabled={isUpdating}
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 font-bold rounded-lg transition-all text-[11px] inline-flex items-center space-x-1 cursor-pointer shadow-xs whitespace-nowrap"
+                              title="Forward to platform admin"
+                            >
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                              <span>Forward to Platform Admin</span>
+                            </button>
+                          )}
+
+                          {/* Org Admin badge if already forwarded to Platform Admin */}
+                          {isOrgAdmin && issue.targetLevel === 'PLATFORM_ADMIN' && (
+                            <span className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+                              <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                              <span>Forwarded to Platform</span>
+                            </span>
+                          )}
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDetail(issue);
+                            }}
+                            className="px-3 py-1.5 bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white text-slate-700 font-bold rounded-lg transition-all text-xs inline-flex items-center space-x-1"
+                          >
+                            <span>Inspect</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
