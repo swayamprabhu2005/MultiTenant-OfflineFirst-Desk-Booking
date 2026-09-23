@@ -9,7 +9,7 @@ import { fetchApi } from '../../services/api';
 import { showToast } from '../../components/common/Toast';
 
 export const PermissionsPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { refreshTenant } = useTenant();
   const orgId = user?.organizationId;
 
@@ -83,7 +83,13 @@ export const PermissionsPage: React.FC = () => {
       });
 
       await refreshTenant();
+      if (refreshUser) {
+        await refreshUser();
+      }
       showToast('Governance and branch permissions updated successfully.', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err: any) {
       console.error('Failed to update governance policy:', err);
       showToast(err.message || 'Failed to update governance policy', 'error');
@@ -274,44 +280,6 @@ export const PermissionsPage: React.FC = () => {
                   type="checkbox"
                   checked={allowBranchRosterManagement}
                   onChange={(e) => setAllowBranchRosterManagement(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-
-            {/* 3. Proxy Desk Reservation */}
-            <div className="py-4 flex items-center justify-between">
-              <div className="pr-4">
-                <p className="text-xs font-bold text-slate-900">Staff Proxy Booking (Reserve on Behalf)</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Allows branch administrators to reserve workstations and meeting rooms on behalf of team members or guests.
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={allowBranchProxyBooking}
-                  onChange={(e) => setAllowBranchProxyBooking(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-
-            {/* 4. Local Issue Resolution */}
-            <div className="py-4 flex items-center justify-between">
-              <div className="pr-4">
-                <p className="text-xs font-bold text-slate-900">Local Operational Issue Resolution</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Allows branch administrators to investigate, resolve, and attach appreciation commendations to local workstation issues.
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                <input
-                  type="checkbox"
-                  checked={allowBranchIssueResolution}
-                  onChange={(e) => setAllowBranchIssueResolution(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
