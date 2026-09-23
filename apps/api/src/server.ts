@@ -33,9 +33,13 @@ app.use(
 // Rate Limiting Middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 10000, // Generous ceiling to prevent local multi-tab starvation
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    const p = req.path || '';
+    return p.startsWith('/api/auth') || p.startsWith('/api/health') || req.ip === '127.0.0.1' || req.ip === '::1';
+  },
   message: { error: 'Too many requests, please try again later.' },
 });
 app.use(limiter);
