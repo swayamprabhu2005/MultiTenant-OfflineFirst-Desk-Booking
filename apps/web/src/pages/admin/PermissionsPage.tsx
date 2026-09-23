@@ -53,7 +53,7 @@ export const PermissionsPage: React.FC = () => {
   const handleModeChange = (mode: 'DELEGATED' | 'CENTRALIZED') => {
     setOperatingMode(mode);
     if (mode === 'CENTRALIZED') {
-      // Auto-lock floor plan editing and roster management in Bank Mode
+      // Auto-lock floor plan editing and roster management in Centralized Mode
       setAllowBranchFloorPlanEdit(false);
       setAllowBranchRosterManagement(false);
     } else {
@@ -169,17 +169,17 @@ export const PermissionsPage: React.FC = () => {
                   className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                 />
               </div>
-              <h4 className="text-sm font-bold text-slate-900">Enterprise Mode (Delegated Autonomy)</h4>
+              <h4 className="text-sm font-bold text-slate-900">Delegated Mode</h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Branch administrators operate as autonomous managers. They can customize local floor plans, manage branch rosters, resolve local tickets, and perform proxy bookings.
+                Autonomous branch administration. Branch administrators can customize local floor plans, manage branch rosters, resolve local tickets, and perform proxy bookings.
               </p>
               <div className="mt-4 flex items-center space-x-1.5 text-xs text-emerald-700 font-bold">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Recommended for distributed enterprises</span>
+                <span>Enforces branch operational autonomy</span>
               </div>
             </div>
 
-            {/* Centralized / Bank Mode */}
+            {/* Centralized Mode */}
             <div
               onClick={() => handleModeChange('CENTRALIZED')}
               className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
@@ -200,13 +200,13 @@ export const PermissionsPage: React.FC = () => {
                   className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                 />
               </div>
-              <h4 className="text-sm font-bold text-slate-900">Bank Mode (Strict HQ Centralized)</h4>
+              <h4 className="text-sm font-bold text-slate-900">Centralized Mode</h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                High-compliance regulatory mode. Workstations, floor layouts, and employee rosters are locked down at the branch level. All modifications require central Global Org Admin authority.
+                Strict corporate headquarters governance. Workstations, floor layouts, and employee rosters are locked down at the branch level. All modifications require central Global Org Admin authority.
               </p>
               <div className="mt-4 flex items-center space-x-1.5 text-xs text-amber-700 font-bold">
                 <AlertTriangle className="w-4 h-4" />
-                <span>Enforces strict banking compliance</span>
+                <span>Enforces centralized headquarters compliance</span>
               </div>
             </div>
           </div>
