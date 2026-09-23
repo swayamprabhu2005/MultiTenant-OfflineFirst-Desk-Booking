@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTenant } from '../../context/TenantContext';
 import { fetchApi } from '../../services/api';
 import {
@@ -625,7 +626,7 @@ export const EmployeeRosterPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* MODAL: ASSIGN / EDIT BRANCH ADMINISTRATOR                                 */}
       {/* ========================================================================= */}
-      {showAdminModal && (
+      {showAdminModal && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between border-b pb-3">
@@ -777,13 +778,14 @@ export const EmployeeRosterPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: DELETE / REVOKE BRANCH ADMINISTRATOR CONFIRMATION                  */}
       {/* ========================================================================= */}
-      {deletingAdminItem && (
+      {deletingAdminItem && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
             <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
@@ -821,13 +823,14 @@ export const EmployeeRosterPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: DEFAULT PASSWORD CONFIGURATION                                    */}
       {/* ========================================================================= */}
-      {showDefaultPasswordModal && (
+      {showDefaultPasswordModal && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b">
@@ -903,7 +906,8 @@ export const EmployeeRosterPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
