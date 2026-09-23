@@ -109,6 +109,26 @@ const DelegatedRosterRoute: React.FC = () => {
   return <EmployeeRosterPage />;
 };
 
+const BranchFloorPlanRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (user?.role === 'BRANCH_ADMIN' && activeOrg?.allowBranchFloorPlanEdit === false) {
+    return <Navigate to="/" replace />;
+  }
+  return <FloorPlansPage />;
+};
+
+const BranchEmployeeDirectoryRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (user?.role === 'BRANCH_ADMIN' && (activeOrg?.allowBranchRosterManagement === false || activeOrg?.operatingMode === 'CENTRALIZED')) {
+    return <Navigate to="/" replace />;
+  }
+  return <BranchEmployeeRosterPage />;
+};
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -137,13 +157,13 @@ export const App: React.FC = () => {
                 <Route path="admin/issues" element={<IssueReportsPage />} />
                 <Route path="employee/issues" element={<IssueReportsPage />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
-                <Route path="admin/floor-plans" element={<FloorPlansPage />} />
+                <Route path="admin/floor-plans" element={<BranchFloorPlanRoute />} />
                 <Route path="admin/roster" element={<DelegatedRosterRoute />} />
                 <Route path="admin/workforce" element={<WorkforcePage />} />
                 <Route path="admin/permissions" element={<PermissionsPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
-                <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
+                <Route path="branch/employees" element={<BranchEmployeeDirectoryRoute />} />
                 <Route path="branch/audit" element={<BranchAuditLogsPage />} />
                 <Route path="employee/floor-plan" element={<EmployeeFloorPlanPage />} />
                 <Route path="employee/calendar" element={<OutlookCalendarPage />} />

@@ -74,7 +74,9 @@ export const Sidebar: React.FC = () => {
         ...(activeOrg?.allowBranchFloorPlanEdit !== false && activeOrg?.operatingMode !== 'CENTRALIZED'
           ? [{ name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers }]
           : []),
-        { name: 'Employee Directory', to: '/branch/employees', icon: Users },
+        ...(activeOrg?.allowBranchRosterManagement !== false && activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Employee Directory', to: '/branch/employees', icon: Users }]
+          : []),
         { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
         ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ]
