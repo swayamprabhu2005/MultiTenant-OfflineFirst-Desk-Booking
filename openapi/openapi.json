@@ -490,6 +490,80 @@
         }
       }
     },
+    "/branch-roster/floor-plan-template": {
+      "get": {
+        "tags": [
+          "Workspace Ingestion & Hierarchy"
+        ],
+        "summary": "Download branch-scoped floor plan Excel template with active organization name",
+        "operationId": "getBranchFloorPlanTemplate",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Excel spreadsheet template (.xlsx)",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/branch-roster/floor-plan-import": {
+      "post": {
+        "tags": [
+          "Workspace Ingestion & Hierarchy"
+        ],
+        "summary": "Ingest and validate branch-scoped floor plan spreadsheet",
+        "operationId": "importBranchFloorPlan",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Floor plan hierarchy ingested successfully"
+          }
+        }
+      }
+    },
     "/employee/floor-plans": {
       "get": {
         "tags": [
@@ -1148,14 +1222,214 @@
         },
         "responses": {
           "201": {
-            "description": "Issue ticket registered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssueTicket"
+            "description": "Issue ticket registered"
+          }
+        }
+      }
+    },
+    "/issues/{id}/escalate-to-platform": {
+      "post": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "Forward issue to Platform Superadmin",
+        "operationId": "escalateIssueToPlatform",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "example": "Requires vendor RMA hardware replacement"
+                  }
                 }
               }
             }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Issue forwarded to Platform Superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "issue": {
+                      "$ref": "#/components/schemas/IssueTicket"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues/{id}/escalate-to-org": {
+      "post": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "Forward issue to Global Organization Administration",
+        "operationId": "escalateIssueToOrg",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "example": "Forwarding to corporate facilities team"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Issue forwarded to Organization Administration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "issue": {
+                      "$ref": "#/components/schemas/IssueTicket"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues/{id}/messages": {
+      "get": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "Retrieve threaded discussion messages for an issue",
+        "operationId": "getIssueMessages",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Threaded messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Defect & Issue Reporting"
+        ],
+        "summary": "Post message to issue discussion thread",
+        "operationId": "postIssueMessage",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "message"
+                ],
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message posted successfully"
           }
         }
       }

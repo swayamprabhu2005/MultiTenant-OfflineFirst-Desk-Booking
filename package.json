@@ -3,11 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "description": "Multi-Tenant SaaS Control Plane - Platform Admin & Organization Admin",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "dev": "pnpm --parallel dev",
+    "dev": "turbo run dev",
+    "dev:raw": "pnpm --parallel dev",
     "dev:api": "pnpm --filter api dev",
     "dev:web": "pnpm --filter web dev",
-    "build": "pnpm -r build",
+    "build": "turbo run build",
+    "build:raw": "pnpm -r build",
     "versions": "node scripts/get-versions.js",
     "system:info": "node scripts/get-versions.js",
     "db:up": "docker compose up -d postgres",
@@ -17,6 +20,7 @@
     "db:seed": "pnpm --filter api run prisma:seed"
   },
   "devDependencies": {
+    "turbo": "^2.4.4",
     "typescript": "^5.3.3"
   },
   "pnpm": {
