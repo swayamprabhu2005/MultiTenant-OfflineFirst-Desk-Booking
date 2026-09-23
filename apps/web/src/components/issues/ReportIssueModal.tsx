@@ -220,6 +220,10 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({ isOpen, onCl
 
       onSuccess?.();
       onClose();
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 700);
     } catch (err: any) {
       if (err.message && (err.message.includes('fetch') || err.message.includes('NetworkError') || !isAppOnline())) {
         try {
