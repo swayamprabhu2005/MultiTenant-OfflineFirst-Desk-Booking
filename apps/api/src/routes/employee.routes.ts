@@ -1959,10 +1959,11 @@ router.get('/my-bookings', authMiddleware, async (req: AuthenticatedRequest, res
  * POST /api/employee/bulk-cancel
  * Cancel multiple bookings simultaneously and release all selected desks and meeting rooms
  */
-router.post('/bulk-cancel', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/bulk-cancel', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = req.organizationId!;
-    const userId = req.user!.id;
+    const caller = req.user!;
+    const userId = caller.id;
     const { bookingIds, deskIds } = req.body;
 
     if ((!bookingIds || !bookingIds.length) && (!deskIds || !deskIds.length)) {
@@ -1980,13 +1981,64 @@ router.post('/bulk-cancel', async (req: AuthenticatedRequest, res: Response) => 
       where.deskId = { in: deskIds };
     }
 
+    // Role-based boundary checks
+    if (caller.role === 'EMPLOYEE' || caller.role === 'TECH_LEAD') {
+      where.OR = [
+        { userId: caller.id },
+        { bookedByUserId: caller.id },
+      ];
+    }
+
     const targetBookings = await prisma.booking.findMany({
       where,
-      include: { desk: true, meetingRoom: true },
+      include: {
+        desk: {
+          include: {
+            section: {
+              include: {
+                floor: {
+                  include: {
+                    building: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        meetingRoom: {
+          include: {
+            section: {
+              include: {
+                floor: {
+                  include: {
+                    building: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (targetBookings.length === 0) {
       return res.status(404).json({ error: 'No active confirmed bookings found for the selected IDs' });
+    }
+
+    // If BRANCH_ADMIN, verify all target bookings belong to their branch (or were booked by/for them)
+    if (caller.role === 'BRANCH_ADMIN') {
+      const branchId = caller.scopedBranchId || caller.baseBranchId;
+      if (branchId) {
+        const outsideBranch = targetBookings.filter((b: any) => {
+          const deskBranchId = b.desk?.section?.floor?.building?.branchId;
+          const roomBranchId = b.meetingRoom?.section?.floor?.building?.branchId;
+          const targetBranch = deskBranchId || roomBranchId;
+          return targetBranch && targetBranch !== branchId && b.userId !== caller.id && b.bookedByUserId !== caller.id;
+        });
+        if (outsideBranch.length > 0) {
+          return res.status(403).json({ error: 'Unauthorized: You can only cancel bookings within your assigned branch.' });
+        }
+      }
     }
 
     const targetDeskIds = targetBookings.map((b: any) => b.deskId).filter(Boolean);
