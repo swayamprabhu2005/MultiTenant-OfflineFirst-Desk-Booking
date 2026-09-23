@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Lock, Mail, User, Building, Globe, ArrowRight, Shield } from 'lucide-react';
+import { CorporateBubbleBackdrop } from '../../components/common/CorporateBubbleBackdrop';
 
 export const SignupPage: React.FC = () => {
   const { signup } = useAuth();
@@ -35,9 +36,8 @@ export const SignupPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden">
-      {/* Background Emerald Accents */}
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl"></div>
-      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl"></div>
+      {/* Floating Corporate Ambient Bubble Framework */}
+      <CorporateBubbleBackdrop />
 
       <div className="max-w-lg w-full relative z-10">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xl">
