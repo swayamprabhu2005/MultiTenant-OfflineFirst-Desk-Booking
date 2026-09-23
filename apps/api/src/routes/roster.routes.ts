@@ -373,7 +373,7 @@ router.get(
       }
 
       const defaultDomain = org.defaultDomain || (org.subdomain ? `${org.subdomain}.com` : 'acme.com');
-      const defaultPassword = org.defaultEmployeePassword || `${org.name.toLowerCase().replace(/[^a-z0-9]/g, '')}2026!`;
+      const defaultPassword = org.defaultEmployeePassword || org.name;
 
       return res.json({
         domain: defaultDomain,
@@ -464,7 +464,7 @@ router.get(
       const defaultPassword =
         (req.query.defaultPassword as string)?.trim() ||
         org.defaultEmployeePassword ||
-        org.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        org.name;
 
       const branchPayload = branches.map((b) => ({
         id: b.id,

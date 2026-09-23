@@ -90,8 +90,7 @@ router.get(
 
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
       const orgDomain = `${org?.subdomain || 'company'}.com`;
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
-      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       return res.json({
         branch: {
@@ -131,8 +130,7 @@ router.get(
 
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
       const orgDomain = `${org?.subdomain || 'company'}.com`;
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
-      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       return res.json({
         branch: {
@@ -442,8 +440,7 @@ router.get(
       const queryDomain = (req.query.domain as string)?.trim();
       const corporateDomain = queryDomain || `${org?.subdomain || 'company'}.com`;
       const queryPassword = (req.query.defaultPassword as string)?.trim();
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : corporateDomain;
-      const defaultPassword = queryPassword || branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = queryPassword || branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       const buffer = await generateBranchEmployeeTemplate(
         corporateDomain,
