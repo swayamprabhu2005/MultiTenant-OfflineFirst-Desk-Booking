@@ -20,7 +20,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     if (user?.role === 'PLATFORM_ADMIN') {
       resetDefaultTheme();
     } else {
-      const activeColor = tenant?.themeColor || (user as any)?.organization?.themeColor;
+      const activeColor = (user as any)?.organization?.themeColor || tenant?.themeColor || '#16a34a';
       if (activeColor) {
         applyThemeColor(activeColor);
       } else {

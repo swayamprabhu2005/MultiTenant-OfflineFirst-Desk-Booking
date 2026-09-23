@@ -378,7 +378,7 @@ export const EmployeeRosterPage: React.FC = () => {
 
           {totalBranches > 0 && (
             <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
-              <Shield className="w-4 h-4 text-purple-600" />
+              <Shield className="w-4 h-4 text-emerald-600" />
               <span>Assigned:</span>
               <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
                 assignedCount === totalBranches ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
@@ -447,7 +447,7 @@ export const EmployeeRosterPage: React.FC = () => {
                 placeholder="Search by branch name or administrator..."
                 value={adminSearch}
                 onChange={e => setAdminSearch(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
               />
             </div>
 
@@ -479,9 +479,9 @@ export const EmployeeRosterPage: React.FC = () => {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingExcel}
-                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 shadow-xs flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 shadow-xs flex items-center space-x-1.5 transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
                 >
-                  <Upload className="w-3.5 h-3.5 text-purple-600" />
+                  <Upload className="w-3.5 h-3.5 text-emerald-600" />
                   <span>{uploadingExcel ? 'Importing...' : 'Upload Completed Roster'}</span>
                 </button>
               </div>
@@ -529,12 +529,12 @@ export const EmployeeRosterPage: React.FC = () => {
                         <td className="py-4 px-6">
                           {hasAdmin ? (
                             <div className="flex items-center space-x-2.5">
-                              <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 font-black text-xs flex items-center justify-center border border-purple-200">
+                              <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center border border-emerald-200">
                                 {item.admin!.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-800">{item.admin!.name}</span>
-                                <div className="text-[10px] text-purple-600 font-semibold flex items-center space-x-1">
+                                <div className="text-[10px] text-emerald-600 font-semibold flex items-center space-x-1">
                                   <Shield className="w-2.5 h-2.5" />
                                   <span>Branch Admin</span>
                                 </div>
@@ -631,7 +631,7 @@ export const EmployeeRosterPage: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
-                <Shield className="w-5 h-5 text-purple-600" />
+                <Shield className="w-5 h-5 text-emerald-600" />
                 <span>{adminModalMode === 'edit' ? 'Edit Branch Administrator' : 'Assign Branch Administrator'}</span>
               </h3>
               <button
@@ -653,7 +653,7 @@ export const EmployeeRosterPage: React.FC = () => {
                   value={selectedBranchId}
                   onChange={e => setSelectedBranchId(e.target.value)}
                   disabled={adminModalMode === 'edit'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   {branchAdmins.map(b => (
                     <option key={b.branchId} value={b.branchId}>
@@ -683,7 +683,7 @@ export const EmployeeRosterPage: React.FC = () => {
                   placeholder="e.g. Sarah Jenkins"
                   className={`w-full bg-slate-50 border ${
                     nameValidationError ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200'
-                  } rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none`}
+                  } rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none`}
                 />
                 {nameValidationError && (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center space-x-1">
@@ -710,7 +710,7 @@ export const EmployeeRosterPage: React.FC = () => {
                   placeholder="sjenkins@company.com"
                   className={`w-full bg-slate-50 border ${
                     emailValidationError ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200'
-                  } rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none`}
+                  } rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none`}
                 />
                 {emailValidationError ? (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center space-x-1">
@@ -741,8 +741,8 @@ export const EmployeeRosterPage: React.FC = () => {
                       value={modalAdminPassword}
                       onChange={e => setModalAdminPassword(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleSaveAdmin(); }}
-                      placeholder="Leave empty for default: DeskBook$2026#BranchOps"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      placeholder="Leave empty for default"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     />
                     <button
                       type="button"
@@ -754,7 +754,7 @@ export const EmployeeRosterPage: React.FC = () => {
                     </button>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    If left empty, the secure credential <code>DeskBook$2026#BranchOps</code> will be assigned.
+                    If left empty, the organization initial password will be assigned.
                   </p>
                 </div>
               )}
@@ -771,7 +771,7 @@ export const EmployeeRosterPage: React.FC = () => {
                   type="button"
                   onClick={() => handleSaveAdmin()}
                   disabled={savingAdmin}
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {savingAdmin ? 'Saving...' : adminModalMode === 'edit' ? 'Update Administrator' : 'Assign Administrator'}
                 </button>
