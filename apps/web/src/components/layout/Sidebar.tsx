@@ -82,7 +82,9 @@ export const Sidebar: React.FC = () => {
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Workspace Setup', to: '/admin/workspace-setup', icon: FileSpreadsheet },
         { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
-        { name: 'Branch Admins', to: '/admin/roster', icon: Users },
+        ...(activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Branch Admins', to: '/admin/roster', icon: Users }]
+          : []),
         { name: 'Workforce', to: '/admin/workforce', icon: Contact },
         { name: 'Permissions', to: '/admin/permissions', icon: Lock },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },

@@ -4,11 +4,13 @@ import {
   CheckCircle2, AlertTriangle, Save, Loader2, RefreshCw 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
 import { fetchApi } from '../../services/api';
 import { showToast } from '../../components/common/Toast';
 
 export const PermissionsPage: React.FC = () => {
   const { user } = useAuth();
+  const { refreshTenant } = useTenant();
   const orgId = user?.organizationId;
 
   const [loading, setLoading] = useState(true);
@@ -80,6 +82,7 @@ export const PermissionsPage: React.FC = () => {
         }),
       });
 
+      await refreshTenant();
       showToast('Governance and branch permissions updated successfully.', 'success');
     } catch (err: any) {
       console.error('Failed to update governance policy:', err);
@@ -213,7 +216,9 @@ export const PermissionsPage: React.FC = () => {
         </div>
 
         {/* Granular Branch Admin Permissions Matrix */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+        <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5 transition-all ${
+          operatingMode === 'CENTRALIZED' ? 'bg-slate-50/50' : ''
+        }`}>
           <div>
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center space-x-2">
               <Layers className="w-4 h-4 text-indigo-600" />
@@ -224,7 +229,19 @@ export const PermissionsPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="divide-y divide-slate-100">
+          {operatingMode === 'CENTRALIZED' && (
+            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start space-x-2.5 animate-fade-in">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-bold">Privileges Inapplicable in Centralized Mode</p>
+                <p className="text-amber-700 text-[11px] mt-0.5">
+                  Branch administrator roles are deactivated under Centralized Mode. Workstations and employee rosters are managed directly by the Global Organization Admin. These toggles will activate when Delegated Mode is enabled.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className={`divide-y divide-slate-100 ${operatingMode === 'CENTRALIZED' ? 'opacity-50 pointer-events-none select-none' : ''}`}>
             {/* 1. Floor Plan Editing */}
             <div className="py-4 flex items-center justify-between">
               <div className="pr-4">

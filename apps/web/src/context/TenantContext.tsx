@@ -23,6 +23,7 @@ interface TenantContextType {
   isLoading: boolean;
   applyThemeColor: (color: string) => void;
   resetDefaultTheme: () => void;
+  refreshTenant: () => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -162,6 +163,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isLoading,
         applyThemeColor,
         resetDefaultTheme,
+        refreshTenant: loadTenants,
       }}
     >
       {children}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TenantProvider } from './context/TenantContext';
+import { TenantProvider, useTenant } from './context/TenantContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -99,6 +99,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const DelegatedRosterRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (activeOrg?.operatingMode === 'CENTRALIZED') {
+    return <Navigate to="/admin/permissions" replace />;
+  }
+  return <EmployeeRosterPage />;
+};
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -128,7 +138,7 @@ export const App: React.FC = () => {
                 <Route path="employee/issues" element={<IssueReportsPage />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
                 <Route path="admin/floor-plans" element={<FloorPlansPage />} />
-                <Route path="admin/roster" element={<EmployeeRosterPage />} />
+                <Route path="admin/roster" element={<DelegatedRosterRoute />} />
                 <Route path="admin/workforce" element={<WorkforcePage />} />
                 <Route path="admin/permissions" element={<PermissionsPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
