@@ -340,6 +340,13 @@ The `run.bat` script will:
 5. Start the API server on `http://localhost:4000` and the web frontend on `http://localhost:3000`.
 6. Auto-launch the web console in your default browser.
 
+### System Diagnostics & Version Inspection
+To inspect and verify all runtime environments, installed browsers, system telemetry, and monorepo component versions:
+```powershell
+.\get-versions.bat
+```
+*(Or via pnpm: `pnpm versions` / `node scripts/get-versions.js`)*
+
 ### Manual Startup
 ```bash
 # Start PostgreSQL (if using Docker)
