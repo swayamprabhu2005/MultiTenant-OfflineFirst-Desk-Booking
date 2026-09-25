@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TenantProvider } from './context/TenantContext';
+import { TenantProvider, useTenant } from './context/TenantContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -23,7 +23,10 @@ import { WorkspaceSetupPage } from './pages/admin/WorkspaceSetupPage';
 import { FloorPlansPage } from './pages/admin/FloorPlansPage';
 import { EmployeeFloorPlanPage } from './pages/employee/EmployeeFloorPlanPage';
 import { MyBookingsPage } from './pages/employee/MyBookingsPage';
+import { OutlookCalendarPage } from './pages/employee/OutlookCalendarPage';
 import { IssueReportsPage } from './pages/admin/IssueReportsPage';
+import { PermissionsPage } from './pages/admin/PermissionsPage';
+import { HomePage } from './pages/home/HomePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +51,32 @@ const DashboardRoute: React.FC = () => {
   return <OrganizationAdminDashboard />;
 };
 
+const PublicOrProtectedHome: React.FC = () => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-xs font-semibold">
+        Loading SaaS Control Plane...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <HomePage />;
+  }
+
+  if (user?.mustChangePassword) {
+    return <Navigate to="/force-password-change" replace />;
+  }
+
+  return (
+    <AppLayout>
+      <DashboardRoute />
+    </AppLayout>
+  );
+};
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -70,6 +99,36 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const DelegatedRosterRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (activeOrg?.operatingMode === 'CENTRALIZED') {
+    return <Navigate to="/admin/permissions" replace />;
+  }
+  return <EmployeeRosterPage />;
+};
+
+const BranchFloorPlanRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (user?.role === 'BRANCH_ADMIN' && activeOrg?.allowBranchFloorPlanEdit === false) {
+    return <Navigate to="/" replace />;
+  }
+  return <FloorPlansPage />;
+};
+
+const BranchEmployeeDirectoryRoute: React.FC = () => {
+  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const activeOrg = user?.organization || tenant;
+  if (user?.role === 'BRANCH_ADMIN' && (activeOrg?.allowBranchRosterManagement === false || activeOrg?.operatingMode === 'CENTRALIZED')) {
+    return <Navigate to="/" replace />;
+  }
+  return <BranchEmployeeRosterPage />;
+};
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -77,34 +136,37 @@ export const App: React.FC = () => {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public Authentication Routes */}
+              {/* Public Landing & Authentication Routes */}
+              <Route path="/" element={<PublicOrProtectedHome />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/register" element={<SignupPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
               <Route path="/change-password" element={<ChangePasswordPage />} />
 
               {/* Protected Administration Routes */}
               <Route
-                path="/"
                 element={
                   <ProtectedRoute>
                     <AppLayout />
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<DashboardRoute />} />
                 <Route path="admin/organizations" element={<Navigate to="/" replace />} />
                 <Route path="admin/issues" element={<IssueReportsPage />} />
+                <Route path="employee/issues" element={<IssueReportsPage />} />
                 <Route path="admin/workspace-setup" element={<WorkspaceSetupPage />} />
-                <Route path="admin/floor-plans" element={<FloorPlansPage />} />
-                <Route path="admin/roster" element={<EmployeeRosterPage />} />
+                <Route path="admin/floor-plans" element={<BranchFloorPlanRoute />} />
+                <Route path="admin/roster" element={<DelegatedRosterRoute />} />
                 <Route path="admin/workforce" element={<WorkforcePage />} />
+                <Route path="admin/permissions" element={<PermissionsPage />} />
                 <Route path="admin/branding" element={<BrandSettingsPage />} />
                 <Route path="admin/audit" element={<AuditLogsPage />} />
-                <Route path="branch/employees" element={<BranchEmployeeRosterPage />} />
+                <Route path="branch/employees" element={<BranchEmployeeDirectoryRoute />} />
                 <Route path="branch/audit" element={<BranchAuditLogsPage />} />
                 <Route path="employee/floor-plan" element={<EmployeeFloorPlanPage />} />
+                <Route path="employee/calendar" element={<OutlookCalendarPage />} />
                 <Route path="employee/my-bookings" element={<MyBookingsPage />} />
               </Route>
 

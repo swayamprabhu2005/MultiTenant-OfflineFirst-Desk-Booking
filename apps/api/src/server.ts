@@ -14,6 +14,7 @@ import buildingRoutes from './routes/buildings.routes';
 import workspaceRoutes from './routes/workspace.routes';
 import branchRosterRoutes from './routes/branch-roster.routes';
 import employeeRoutes from './routes/employee.routes';
+import notificationRoutes from './routes/notification.routes';
 import issuesRoutes from './routes/issues.routes';
 import systemRoutes from './routes/system.routes';
 
@@ -23,14 +24,22 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Helmet Security Headers
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // Rate Limiting Middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 10000, // Generous ceiling to prevent local multi-tab starvation
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    const p = req.path || '';
+    return p.startsWith('/api/auth') || p.startsWith('/api/health') || req.ip === '127.0.0.1' || req.ip === '::1';
+  },
   message: { error: 'Too many requests, please try again later.' },
 });
 app.use(limiter);
@@ -42,6 +51,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Serve static uploaded screenshots and media
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -71,6 +83,7 @@ app.use('/api/buildings', buildingRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/branch-roster', branchRosterRoutes);
 app.use('/api/employee', employeeRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/issues', issuesRoutes);
 app.use('/api/system', systemRoutes);
 

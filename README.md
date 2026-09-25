@@ -8,7 +8,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
 ![Express](https://img.shields.io/badge/Express.js-4.x-000000?style=flat-square&logo=express&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat-square&logo=prisma&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Offline--First-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![pnpm](https://img.shields.io/badge/pnpm-Monorepo-F69220?style=flat-square&logo=pnpm&logoColor=white)
 
 ---
@@ -40,8 +40,11 @@ flowchart TD
 
     subgraph Tier3["Tier 3 - Branch Administrator (e.g. Goa HQ / Pune HQ)"]
         BA["Branch Administrator\n(Scoped via scopedBranchId)"]:::branch
-        BA -->|"Floor Plan Re-Ingestion"| FP_EXP["Export & Import Floor Plan"]:::branch
+        BA -->|"Floor Plan Management"| FP_EXP["Floor Plan Editor (Layout Only)"]:::branch
         BA -->|"In-UI Workstation Creation"| ADD_CUB["+ Add Cubicle Modal"]:::branch
+        BA -->|"Spatial Workstation Booking"| BA_RES["Reserve Workstation (Floor Plan)"]:::branch
+        BA -->|"Calendar Orchestration"| BA_CAL["Outlook Workspace Calendar"]:::branch
+        BA -->|"Personal & Proxy History"| BA_BK["My Bookings Hub"]:::branch
         BA -->|"Direct Inline Hub"| PWD_HUB["Default Temporary Password Hub"]:::branch
         BA -->|"3-Column Dynamic Template"| BATCH["Formula Excel Ingestion"]:::branch
         BA -->|"Facility-Scoped Access"| BA_AUDIT["Branch Audit Logs"]:::branch
@@ -90,12 +93,14 @@ flowchart TD
 
 ---
 
-### 3. 🏗️ Branch Admin Floor Plan Tools & In-UI Cubicle Creation
+### 3. 🏗️ Branch Admin Floor Plan Editor & Layout Tools
+- **Strict Separation of Concerns**: `/admin/floor-plans` is purely an administrative layout editor and facility manager for Branch Admins and Organization Admins — eliminating conflicting booking overlays from layout management.
 - **Branch-Scoped Floor Plan Export & Re-Ingest**:
   - `GET /api/branch-roster/floor-plan-template`: Branch-specific workbook pre-populated with buildings, floors, sections, and workstations.
   - `POST /api/branch-roster/floor-plan-import`: Validates and synchronizes workstation data from spreadsheet uploads.
 - **In-UI `+ Add Cubicle` Modal**: Direct workstation creation from the Branch Floor Plans UI with real-time pod recalculation, dynamic zoom adjustment, and symmetrical HDMI redistribution.
-- **Clickable Conference Pod Seats**: Meeting room seats (M-01 to M-10) are independently bookable from the employee floor plan explorer.
+- **View-Only Workstation Inspector**: Inspect desk code, amenities (HDMI included), current active reservations, and 7-day occupancy strip without booking form clutter.
+- **Dedicated Desk Management**: Direct authority to view and release dedicated executive desk assignments.
 
 ---
 
@@ -111,23 +116,49 @@ flowchart TD
 
 ---
 
-### 5. 👨‍💼 Employee Self-Service Workplace Portal
-- **Employee Dashboard** (`/` for Role `EMPLOYEE`):
+### 5. 👨‍💼 Employee & Branch Admin Workspace Portal
+- **Role-Unified Booking Access**: Both Employees and Branch Admins enjoy full access to Reserve Workstation, Outlook Calendar, and My Bookings.
+- **Employee Dashboard** (`/`):
   - Personalized greeting with facility metrics (Total Desks, Available Desks, HDMI Monitors, Meeting Rooms).
   - Active Booking Hero Card with desk code, slot window, location hierarchy, and instant **Release Workstation** action.
 - **Workstation Reservation** (`/employee/floor-plan`):
-  - **3 Time Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
-  - **Multi-Day Availability Matrix**: View and select booking dates across a weekly grid.
-  - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live `hasActiveBookingToday` indicator.
-- **Team Pod Mode (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click with an atomic sprint batch confirmation.
+  - **3 Shift Window Slots**: Full Day (09:00–18:00), Morning (09:00–13:30), Afternoon (13:30–18:00).
+  - **30-Day Range Reservations**: Flexible date range booking mode allowing up to 30 consecutive days in a single action, complete with quick-select chips (`+7d`, `+14d`, `+30d`) and a `Weekdays Only (Mon-Fri)` filter.
+  - **Smart Skip Conflict Resolution**: Real-time conflict engine that detects existing reservations across the range. When conflicts occur, the user or branch admin is prompted whether to perform a **Smart Skip** to automatically book all remaining conflict-free days or adjust dates.
+  - **Whole Meeting Room Booking**: Reserve entire conference rooms with start time, duration in hours & minutes (minimum 15m enforced), title, and attendee headcount.
+  - **Workstation Inspector Drawer**: Book for Myself or proxy-book on behalf of a colleague with live directory search.
+- **Team Pod Mode & Assignee Allocation (Bulk Multi-Desk Booking)**: Select up to 8 desks simultaneously or reserve entire 4-desk pod clusters in one click. The mass workstation booking modal allows designating each desk individually to `[ Myself ]` or assigning to a specific `[ Colleague / Teammate ]` with live branch directory search, department tags, and conflict detection across a sliding 7-day window.
 - **My Bookings History** (`/employee/my-bookings`):
   - Tabbed filtering: `ALL`, `CONFIRMED`, `PAST`, `CANCELLED`.
-  - **Cancel Selected**: Checkbox-based multi-select for selective cancellation.
-  - **Bulk Cancel**: One-click cancellation of all future confirmed bookings.
+  - **Cancel Selected**: Checkbox-based multi-select for selective mass cancellation.
+  - **Role-Scoped Mass Cancellation (`POST /api/employee/bulk-cancel`)**: Secured with JWT authentication middleware and multi-tenant scoping. Employees can only cancel their own or proxy-booked reservations; Branch Admins can cancel any booking across their branch; Global Organization Admins retain tenant-wide cancellation authority.
 
 ---
 
-### 6. 📝 Audit Logs & Security Governance
+### 6. 📅 Outlook Workspace Calendar & Dynamic Cascade Booking Engine
+- **Streamlined Outlook Ribbon**:
+  - Clean calendar navigation with Month/Year picker arrows (`< Month Year >`).
+  - Resource type toggles (`All` | `Cubicles` | `Meeting Rooms`).
+  - Live filter search across event codes, colleague names, meeting titles, and buildings.
+  - Non-overlapping sticky layout ensuring ribbon controls remain neatly underneath the navigation bar.
+- **Date-Click Multi-Day Reservation Modal**:
+  - Clicking any date cell in the Month view opens a focused reservation modal with choice of **Single Day** or **Date Range (Up to 30 Days)**.
+  - **Horizontal Cascade Bar**: `[ Building ▾ ]  [ Floor ▾ ]  [ Section ▾ ]` with intelligent defaults.
+  - **Dynamic Availability Filtering**:
+    - **Cubicles Dropdown**: Displays **ONLY** cubicles with zero confirmed bookings on that clicked date. If completely booked, an informative alert is displayed: `"No cubicles available in this section on [Date]"`.
+    - **Meeting Rooms Dropdown**: Displays available conference rooms with capacity and HDMI specifications, or warns if already booked on that date.
+  - **Multi-Day Horizon & Smart Skip**:
+    - Choose arbitrary multi-day ranges up to 30 days with `Weekdays Only` toggle.
+    - Live conflict checking across the range with prompted Smart Skip confirmation to reserve conflict-free dates seamlessly.
+  - **Shift Slots & Durations**:
+    - Cubicle slots: `Full Day (09:00 - 18:00)`, `Morning Half (09:00 - 13:30)`, `Evening Half (13:30 - 18:00)`.
+    - Meeting room reservations: Start time picker + numeric hours & minutes duration (strictly requiring at least 15 minutes).
+  - **Beneficiary Selection**: Seamlessly choose `For Myself` or `On Behalf of Colleague` with live directory search.
+  - **Single Event Inspector**: Clicking an event chip reveals full reservation details, proxy attribution, and provides instant single-click cancellation authority for personal or branch bookings.
+
+---
+
+### 7. 📝 Audit Logs & Security Governance
 
 | Audit Event | Description |
 |---|---|
@@ -137,6 +168,91 @@ flowchart TD
 | `CANCEL_BOOKING` | Workstation release with optional cancellation reason |
 | `ADD_CUBICLE` | Manual workstation addition by a branch admin |
 | `IMPORT_WORKFORCE_ROSTER` | Multi-branch bulk employee onboarding event |
+| `RELEASE_DESK` | Branch admin direct desk release with audit trail |
+| `UPLOAD_BRANCH_FLOOR_PLAN` | Branch floor plan re-ingestion from spreadsheet |
+
+---
+
+### 8. 📡 Offline-First Engine & Background Sync
+- **Role-Gated Offline Support**: Offline capabilities are exclusively available to **Employee** and **Branch Admin** roles. Platform and Organization Admins remain strictly online for governance integrity.
+- **IndexedDB Outbox Queue**: Desk reservations and cancellations made while offline are queued in an IndexedDB `outbox_queue` store with FIFO replay upon reconnection.
+- **Floor Plan Cache**: Complete workspace hierarchies are cached in IndexedDB `floorplan_cache`, enabling desk browsing without network connectivity.
+- **Network Status Indicator**: A real-time connectivity pill in the header shows Online/Offline/Syncing states with pending operation count badges.
+- **Automatic Background Sync**: On network restoration, queued operations are automatically replayed via standard HTTP POST to the API server.
+
+---
+
+### 9. 🔔 In-App Notification Center
+- **Event-Derived Activity Stream**: Notifications are dynamically projected from `Booking` and `AuditLog` tables — no dedicated notification storage table required.
+- **Bell Icon with Unread Badge**: Real-time unread count badge with 25-second polling interval.
+- **Domain-Categorized Notifications**: Visual categorization with dedicated icons for booking confirmations, proxy reservations, cancellations, and admin broadcasts.
+- **Mark Read & Clear Actions**: One-click mark-all-as-read and clear notification history.
+
+---
+
+### 10. 👥 Branch-Scoped Office Presence ("Who is in Office")
+- **Software-Inferred Presence**: Derives real-time office occupancy from confirmed desk bookings for the current day — no hardware badges or RFID required.
+- **Branch Isolation**: Employees and Branch Admins can only see presence within their assigned branch.
+- **Searchable Colleague Directory**: Instant client-side search across name, email, department, and desk code with department-level count groupings.
+- **Identity Attribution**: Current user "YOU" badge and proxy booking attribution ("Proxy by: Lead Name").
+
+---
+
+### 11. 🔐 Enterprise Single Sign-On (Microsoft Entra ID) & Hybrid Auth
+- **Dual Authentication Modes**: Seamless coexistence of traditional corporate email + password login and enterprise Single Sign-On (SSO) via Microsoft Entra ID (OIDC / OAuth 2.0).
+- **Microsoft Entra ID Integration**:
+  - One-click **"Sign in with Microsoft (Entra SSO)"** button with official branding.
+  - Multi-tenant application registration (`common` endpoint) supporting both corporate enterprise tenants and personal Microsoft test accounts.
+- **Zero-Password Footprint for SSO**: SSO users authenticate against their corporate directory; no user passwords are stored or hashed for SSO logins.
+- **Strict Authorization Safeguard**: Microsoft authentication strictly establishes identity; entry into the SaaS requires that the verified email is pre-registered in an organization's employee roster.
+- **Dynamic Scoping on Sign-In**: Automatically assigns tenant `organizationId`, branch `scopedBranchId`, and role upon callback, steering users to their designated platform console.
+- **SSO Sandbox Tester**: Built-in developer/demo simulation tool to test and demonstrate SSO sign-in flows with any registered corporate email without requiring external IdP sessions.
+
+---
+
+### 12. 🛡️ 3-Tier Enterprise Issue Governance & Threaded Resolution
+- **Hierarchical Escalation Pipeline**: Structured resolution flow spanning 3 corporate tiers:
+  1. **Tier 1 (Branch Facility)**: Employee files clean issue ticket (facility, hardware, cleanliness) directly to Branch Administrator without hardware/OS dumps.
+  2. **Tier 2 (Global Organization)**: Branch Admin escalates unresolved or cross-facility incidents to Organization Global Administration.
+  3. **Tier 3 (Platform Superadmin)**: Global Organization Admin escalates platform-level, infrastructure, or critical SaaS issues directly to Platform Superadmin (`system`).
+- **Bi-Directional Resolution Threads**: Real-time two-way messaging between reporting employees and handling administrators with role badges and audit timestamps.
+- **Commendation & Appreciation Notes**: Resolving administrators can attach a formal commendation note acknowledging employee cooperation upon closing the issue.
+- **Dynamic Navigation Link**: The "Issue Reports" sidebar navigation link dynamically displays only when active, non-closed issues exist in the user's scope.
+- **Offline Outbox Support**: Issues reported while offline are automatically queued in IndexedDB and synchronized once connectivity resumes.
+
+---
+
+### 13. ⚙️ Dual-Mode Governance Policy Architecture (Bank Mode vs Enterprise Mode)
+- **Centralized "Bank Mode"**: Designed for financial institutions and regulated corporate headquarters. Enforces strict global administrative governance:
+  - Dynamically hides the **Branch Admins** module from the global navigation sidebar.
+  - Locks and disables granular branch privilege toggles on the Permissions console (`/admin/permissions`) with an advisory notice.
+  - Secures the `/admin/roster` route with a reactive guard that redirects callers to `/admin/permissions`.
+- **Delegated "Enterprise Mode"**: Grants branch managers operational autonomy over local floor plans, rapid employee roster ingestion, and facility issue resolutions. The **Branch Admins** module is accessible in the sidebar, and granular privilege toggles (`allowBranchFloorPlanEdit`, `allowBranchRosterManagement`, `allowBranchProxyBooking`, `allowBranchIssueResolution`) can be configured by the global organization administrator.
+
+---
+
+### 14. 🌐 Modern Corporate SaaS Landing Page & Subdomain-Aware Root Routing
+- **Corporate Landing Experience** (`/`): High-performance SaaS landing page powered by Framer Motion animations with enterprise architectural pillars, operational telemetry stats, and zero-trust security trust indicators.
+- **Subdomain-Aware Navigation**:
+  - Root unauthenticated visitors arrive at the public landing page with "Sign In" and "Create Organization" call-to-action paths.
+  - Authenticated sessions dynamically route directly to the user's role-scoped dashboard (Platform Admin, Org Admin, Branch Admin, or Employee).
+  - Explicit `/login`, `/register`, and `/signup` routes ensure smooth multi-tenant onboarding.
+
+---
+
+### 15. 🎨 Multi-Tenant Isolated Brand Theming Engine
+- **Strict Tenant Style Isolation**: Organization brand colors are dynamically mapped to CSS tokens (`--brand-primary`, `--brand-subtle`, `--brand-light`, `--brand-border`, `--brand-text`) exclusively within that organization's authenticated session.
+- **Platform Superadmin & Public Immunity**: The Platform Superadmin portal, public landing page, login page, and organization creation pages strictly retain the default corporate slate/indigo theme and are never tainted by tenant customizations.
+- **Zero-Reload Live Propagation**: Theme color changes applied in `/admin/branding` take effect instantly across active components without browser reload.
+
+---
+
+### 16. 📖 OpenAPI 3.0 Platform Specification
+- **Contract-First Standardization**: The entire REST API surface is formally defined using OpenAPI 3.0.3 standards, located in the [`openapi/`](openapi/) directory.
+- **Artifacts Provided**:
+  - [`openapi/openapi.yaml`](openapi/openapi.yaml) — Human-readable master OpenAPI 3.0 specification.
+  - [`openapi/openapi.json`](openapi/openapi.json) — Formatted JSON schema for Swagger UI, Redoc, Postman, and automated SDK generation.
+  - [`openapi/README.md`](openapi/README.md) — Documentation covering local Swagger preview, Docker execution, and collection imports.
 
 ---
 
@@ -144,31 +260,47 @@ flowchart TD
 
 ```
 MultiTenant-OfflineFirst-DeskBooking/
+├── ADR/                               # Architecture Decision Records
 ├── apps/
-│   ├── api/                          # Express.js + Prisma ORM Backend
+│   ├── api/                           # Express.js + Prisma ORM Backend
 │   │   ├── prisma/
-│   │   │   └── schema.prisma         # Multi-tenant schema
+│   │   │   └── schema.prisma          # Multi-tenant relational schema
 │   │   └── src/
-│   │       ├── routes/               # Modular API endpoints
+│   │       ├── routes/                # Modular API endpoints
 │   │       │   ├── auth.routes.ts
 │   │       │   ├── audit.routes.ts
+│   │       │   ├── branches.routes.ts
+│   │       │   ├── buildings.routes.ts
 │   │       │   ├── employee.routes.ts
+│   │       │   ├── issues.routes.ts
+│   │       │   ├── notification.routes.ts
+│   │       │   ├── organizations.routes.ts
 │   │       │   ├── roster.routes.ts
 │   │       │   ├── branch-roster.routes.ts
+│   │       │   ├── system.routes.ts
 │   │       │   └── workspace.routes.ts
-│   │       └── services/             # Excel engines, hashing, auth services
-│   └── web/                          # React 18 + Vite + Tailwind CSS Frontend
+│   │       └── services/              # Excel engines, hashing, auth services
+│   └── web/                           # React 18 + Vite + Tailwind CSS Frontend
 │       └── src/
 │           ├── components/
-│           │   ├── dashboard/        # Role-specific dashboards
-│           │   └── layout/           # Navbar, Sidebar, ProtectedRoute
+│           │   ├── dashboard/         # Role-specific dashboards
+│           │   ├── layout/            # Header, Sidebar, AppLayout, ProtectedRoute
+│           │   ├── NetworkStatusIndicator.tsx
+│           │   ├── NotificationBell.tsx
+│           │   └── OfficePresenceModal.tsx
 │           ├── pages/
-│           │   ├── admin/            # FloorPlans, Workforce, BranchAdmins, AuditLogs
-│           │   ├── branch/           # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
-│           │   └── employee/         # EmployeeFloorPlanPage, MyBookingsPage, Dashboard
-│           └── services/             # Centralized fetchApi client
+│           │   ├── admin/             # FloorPlans, Workforce, BranchAdmins, AuditLogs, Permissions
+│           │   ├── branch/            # BranchEmployeeRoster, BranchAuditLogs, FloorPlans
+│           │   └── employee/          # EmployeeFloorPlanPage, OutlookCalendarPage, MyBookingsPage, Dashboard
+│           └── services/
+│               ├── api.ts             # Centralized fetchApi client with retry
+│               └── offlineStore.ts    # IndexedDB outbox queue & floor plan cache
+├── openapi/                           # OpenAPI 3.0 REST contracts & documentation
+│   ├── openapi.yaml
+│   ├── openapi.json
+│   └── README.md
 └── packages/
-    └── shared/                       # Shared TypeScript interfaces, Role & Slot enums
+    └── shared/                        # Shared TypeScript interfaces, Role & Slot enums
 ```
 
 ---
@@ -179,11 +311,13 @@ MultiTenant-OfflineFirst-DeskBooking/
 |---|---|
 | **Frontend** | React 18, Vite 5, TypeScript 5, Tailwind CSS 3 |
 | **Backend** | Express.js 4, TypeScript, Node.js |
-| **ORM & Database** | Prisma ORM, SQLite (offline-first) |
-| **Auth** | JWT Bearer tokens, bcrypt password hashing |
-| **Excel Engine** | ExcelJS — multi-sheet generation with live column formulas |
+| **ORM & Database** | Prisma ORM, PostgreSQL 16 |
+| **Auth** | JWT Bearer tokens, bcrypt, Microsoft Entra ID (OIDC / OAuth 2.0) |
+| **Excel Engine** | ExcelJS + JSZip — multi-sheet generation with live column formulas |
+| **Offline-First** | IndexedDB (native) — outbox queue & floor plan cache |
+| **Containerization** | Docker Compose — PostgreSQL 16 Alpine |
 | **Monorepo** | pnpm Workspaces |
-| **Build Tooling** | Vite (web), ts-node / tsx (API), pnpm |
+| **Build Tooling** | Vite (web), tsc (API), pnpm |
 
 ---
 
@@ -192,22 +326,37 @@ MultiTenant-OfflineFirst-DeskBooking/
 ### Prerequisites
 - Node.js `>= 18.x`
 - pnpm `>= 8.x` (`npm install -g pnpm`)
+- Docker Desktop (for PostgreSQL) or a local PostgreSQL instance on port 5432
 
 ### One-Click Startup (Windows)
 ```powershell
 .\run.bat
 ```
 The `run.bat` script will:
-1. Verify port availability on `3000` and `4000`.
-2. Generate the Prisma client and run database migrations automatically.
-3. Start the API server on `http://localhost:4000`.
-4. Start the web frontend on `http://localhost:3000`.
-5. Auto-launch the web console in your default browser.
+1. Detect or start PostgreSQL via Docker Compose on port `5432`.
+2. Verify and clean port allocations on `3000` and `4000`.
+3. Install pnpm workspace dependencies.
+4. Generate the Prisma client, push the database schema, and seed initial data.
+5. Start the API server on `http://localhost:4000` and the web frontend on `http://localhost:3000`.
+6. Auto-launch the web console in your default browser.
+
+### System Diagnostics & Version Inspection
+To inspect and verify all runtime environments, installed browsers, system telemetry, and monorepo component versions:
+```powershell
+.\get-versions.bat
+```
+*(Or via pnpm: `pnpm versions` / `node scripts/get-versions.js`)*
 
 ### Manual Startup
 ```bash
+# Start PostgreSQL (if using Docker)
+docker compose up -d postgres
+
 # Install all dependencies
 pnpm install
+
+# Generate Prisma client & push schema
+pnpm db:generate && pnpm db:push && pnpm db:seed
 
 # Run both API and web concurrently
 pnpm dev
@@ -216,31 +365,84 @@ pnpm dev
 ### Environment Configuration
 Copy `.env.example` to `.env` and configure:
 ```env
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-secret-key"
+PORT=4000
+DATABASE_URL="postgresql://postgres:postgrespassword@localhost:5432/deskbooking_db?schema=public"
+JWT_SECRET="super-secret-jwt-key-for-multi-tenant-desk-booking-saas"
+VITE_API_BASE_URL="http://localhost:4000/api"
+
+# Microsoft Entra ID (SSO) Configuration
+AZURE_CLIENT_ID="6ae9e86b-7736-4966-a459-708953128955"
+AZURE_CLIENT_SECRET="your-azure-client-secret-value"
+AZURE_TENANT_ID="common"
+AZURE_REDIRECT_URI="http://localhost:3000/api/auth/sso/callback"
 ```
 
 ---
 
 ## 📋 API Endpoints Overview
 
+> 📖 **OpenAPI 3.0 Documentation**: The complete interactive REST schema, request/response models, and auth security schemes are specified in [`openapi/openapi.yaml`](openapi/openapi.yaml) and [`openapi/openapi.json`](openapi/openapi.json). See [`openapi/README.md`](openapi/README.md) for Swagger UI, Redoc, and Postman import instructions.
+
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/auth/login` | Authenticate and receive JWT |
+| `POST` | `/api/auth/login` | Authenticate with email + password and receive JWT |
+| `GET` | `/api/auth/sso/microsoft` | Initiate Microsoft Entra ID OIDC login redirect |
+| `GET` | `/api/auth/sso/callback` | Microsoft OAuth callback, token exchange, and JWT issue |
+| `POST` | `/api/auth/sso/sandbox` | Quick developer/demo SSO simulation for registered emails |
+| `POST` | `/api/auth/signup` | Register new organization with admin |
+| `GET` | `/api/workspace/hierarchy` | Fetch full facility hierarchy with live bookings |
 | `GET` | `/api/roster/multi-branch-template` | Download multi-branch Excel roster |
 | `POST` | `/api/roster/multi-branch-import` | Bulk import employee roster |
 | `GET` | `/api/branch-roster/floor-plan-template` | Download branch floor plan workbook |
 | `POST` | `/api/branch-roster/floor-plan-import` | Import branch floor plan changes |
 | `POST` | `/api/branch-roster/cubicle` | Add a new workstation in-UI |
 | `GET` | `/api/employee/dashboard-summary` | Employee dashboard stats |
-| `POST` | `/api/employee/bookings` | Create a desk reservation |
+| `GET` | `/api/employee/presence` | Branch-scoped office presence |
+| `GET` | `/api/employee/calendar-bookings` | Fetch month bookings for Outlook calendar |
+| `POST` | `/api/employee/bookings` | Create a workstation or meeting room reservation |
 | `POST` | `/api/employee/bulk-bookings` | Bulk pod reservation |
+| `POST` | `/api/employee/mass-booking` | Multi-day / multi-desk booking (Max 30d) |
 | `POST` | `/api/employee/cancel-booking` | Cancel a single booking |
 | `POST` | `/api/employee/cancel-selected` | Cancel selected bookings |
 | `POST` | `/api/employee/bulk-cancel` | Bulk cancel all future bookings |
+| `GET` | `/api/notifications` | Fetch notification activity stream |
+| `POST` | `/api/notifications/mark-read` | Mark all notifications as read |
+| `POST` | `/api/notifications/clear` | Clear notification history |
+| `GET` | `/api/issues` | Fetch issue reports scoped by role and active tenant |
+| `POST` | `/api/issues` | Submit a new clean issue report |
+| `POST` | `/api/issues/:id/escalate` | Escalate issue up hierarchy (Branch -> Org -> Platform) |
+| `POST` | `/api/issues/:id/resolve` | Resolve an issue with an optional commendation note |
+| `GET` | `/api/issues/:id/messages` | Fetch threaded discussion messages for an issue |
+| `POST` | `/api/issues/:id/messages` | Send a new message in an issue discussion thread |
+| `GET` | `/api/organizations/:id/permissions` | Fetch organization governance and permission policies |
+| `PATCH` | `/api/organizations/:id/permissions` | Update centralized/delegated policies and branch permissions |
+| `PATCH` | `/api/organizations/:id/branding` | Update white-label brand colors and corporate logo |
 | `GET` | `/api/audit` | Fetch organization audit logs |
 | `GET` | `/api/health` | API health check |
 
 ---
 
+## 📐 Architecture Decision Records
+
+All significant architectural decisions are documented as ADRs in the [`ADR/`](ADR/) directory.
+
+| ADR | Decision |
+|-----|----------|
+| [001](ADR/001-use-pnpm-monorepo-architecture.md) | pnpm Monorepo Architecture |
+| [002](ADR/002-adopt-multi-tenant-subdomain-isolation.md) | Multi-Tenant Subdomain Isolation |
+| [003](ADR/003-use-postgresql-with-prisma-orm.md) | PostgreSQL with Prisma ORM |
+| [004](ADR/004-implement-four-tier-rbac-hierarchy.md) | Four-Tier RBAC Hierarchy |
+| [005](ADR/005-use-jwt-bearer-token-authentication.md) | JWT Bearer Token Authentication |
+| [006](ADR/006-render-floor-plans-with-zero-svg-css.md) | Zero-SVG CSS Floor Plans |
+| [007](ADR/007-use-excel-driven-workspace-ingestion.md) | Excel-Driven Workspace Ingestion |
+| [008](ADR/008-implement-offline-first-indexeddb-outbox.md) | Offline-First IndexedDB Outbox |
+| [009](ADR/009-use-react-vite-tailwind-frontend.md) | React + Vite + Tailwind Frontend |
+| [010](ADR/010-use-expressjs-rest-api-backend.md) | Express.js REST API Backend |
+| [011](ADR/011-derive-notifications-from-domain-events.md) | Event-Derived Notifications |
+| [012](ADR/012-implement-branch-scoped-office-presence.md) | Branch-Scoped Office Presence |
+| [013](ADR/013-implement-microsoft-entra-sso.md) | Implement Hybrid Authentication with Microsoft Entra ID SSO |
+
+---
+
 *Built with care — Multi-Tenant Offline-First Desk Booking Platform*
+

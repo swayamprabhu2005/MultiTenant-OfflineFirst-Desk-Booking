@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../services/api';
 import { Mail, Lock, Shield, CheckCircle2, ArrowRight, ArrowLeft, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { CorporateBubbleBackdrop } from '../../components/common/CorporateBubbleBackdrop';
 
 export const ForgotPasswordPage: React.FC = () => {
   const navigate = useNavigate();
@@ -52,9 +53,8 @@ export const ForgotPasswordPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden">
-      {/* Background Emerald Accents */}
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl" />
+      {/* Floating Corporate Ambient Bubble Framework */}
+      <CorporateBubbleBackdrop />
 
       <div className="max-w-md w-full relative z-10 animate-fade-in">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">

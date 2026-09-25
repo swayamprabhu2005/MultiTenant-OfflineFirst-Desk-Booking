@@ -109,6 +109,106 @@ router.patch('/:id/branding', authMiddleware, requireRole([Role.PLATFORM_ADMIN, 
   }
 });
 
+// Organization Admin Get Governance & Permissions Configuration
+router.get('/:id/governance', authMiddleware, requireRole([Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user?.organizationId !== id) {
+      return res.status(403).json({ error: 'Forbidden: Cannot view governance of another organization' });
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        operatingMode: true,
+        allowBranchFloorPlanEdit: true,
+        allowBranchRosterManagement: true,
+        allowBranchProxyBooking: true,
+        allowBranchIssueResolution: true,
+      },
+    });
+
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    return res.json(org);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Organization Admin Update Governance & Permissions Policy
+router.patch('/:id/governance', authMiddleware, requireRole([Role.ORGANIZATION_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user?.organizationId !== id) {
+      return res.status(403).json({ error: 'Forbidden: Cannot edit governance of another organization' });
+    }
+
+    const {
+      operatingMode,
+      allowBranchFloorPlanEdit,
+      allowBranchRosterManagement,
+      allowBranchProxyBooking,
+      allowBranchIssueResolution,
+    } = req.body;
+
+    if (operatingMode && !['CENTRALIZED', 'DELEGATED'].includes(operatingMode)) {
+      return res.status(400).json({ error: 'Operating mode must be CENTRALIZED or DELEGATED' });
+    }
+
+    const updateData: any = {};
+    if (operatingMode !== undefined) updateData.operatingMode = operatingMode;
+    if (allowBranchFloorPlanEdit !== undefined) updateData.allowBranchFloorPlanEdit = Boolean(allowBranchFloorPlanEdit);
+    if (allowBranchRosterManagement !== undefined) updateData.allowBranchRosterManagement = Boolean(allowBranchRosterManagement);
+    if (allowBranchProxyBooking !== undefined) updateData.allowBranchProxyBooking = Boolean(allowBranchProxyBooking);
+    if (allowBranchIssueResolution !== undefined) updateData.allowBranchIssueResolution = Boolean(allowBranchIssueResolution);
+
+    // If switched to CENTRALIZED (Bank Mode), auto-restrict local overrides unless explicitly kept
+    if (operatingMode === 'CENTRALIZED') {
+      if (allowBranchFloorPlanEdit === undefined) updateData.allowBranchFloorPlanEdit = false;
+      if (allowBranchRosterManagement === undefined) updateData.allowBranchRosterManagement = false;
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        operatingMode: true,
+        allowBranchFloorPlanEdit: true,
+        allowBranchRosterManagement: true,
+        allowBranchProxyBooking: true,
+        allowBranchIssueResolution: true,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: id,
+        actorUserId: req.user!.id,
+        action: 'UPDATE_GOVERNANCE_PERMISSIONS',
+        entityType: 'Organization',
+        entityId: id,
+        metadata: updateData,
+      },
+    });
+
+    return res.json(updated);
+  } catch (error: any) {
+    console.error('Failed to update governance permissions:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Platform Admin Delete Organization (with full cascade purge)
 router.delete('/:id', authMiddleware, requireRole([Role.PLATFORM_ADMIN]), async (req: AuthenticatedRequest, res: Response) => {
   try {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Lock, Mail, User, Building, Globe, ArrowRight, Shield } from 'lucide-react';
+import { CorporateBubbleBackdrop } from '../../components/common/CorporateBubbleBackdrop';
 
 export const SignupPage: React.FC = () => {
   const { signup } = useAuth();
@@ -35,9 +36,8 @@ export const SignupPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden">
-      {/* Background Emerald Accents */}
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl"></div>
-      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl"></div>
+      {/* Floating Corporate Ambient Bubble Framework */}
+      <CorporateBubbleBackdrop />
 
       <div className="max-w-lg w-full relative z-10">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xl">
@@ -46,7 +46,7 @@ export const SignupPage: React.FC = () => {
               S
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Register Organization Tenant
+              Create Organization
             </h1>
             <p className="text-slate-500 text-xs mt-1">
               Set up your dedicated multi-tenant workspace and organization administrator account
@@ -170,13 +170,13 @@ export const SignupPage: React.FC = () => {
               disabled={loading}
               className="w-full mt-4 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
             >
-              <span>{loading ? 'Registering Workspace...' : 'Register Workspace & Admin'}</span>
+              <span>{loading ? 'Setting up Organization...' : 'Create Organization & Workspace'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
           <div className="mt-5 text-center text-xs text-slate-500">
-            Already have an organization?{' '}
+            Already have an organization workspace?{' '}
             <Link to="/login" className="font-bold text-emerald-600 hover:text-emerald-500 transition-colors">
               Sign In
             </Link>

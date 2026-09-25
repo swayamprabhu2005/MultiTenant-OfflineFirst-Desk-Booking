@@ -43,6 +43,11 @@ model Organization {
   defaultBranchAdminPassword  String?
   defaultEmployeePassword     String?
   defaultDomain               String?
+  operatingMode               String       @default("DELEGATED") // "CENTRALIZED" | "DELEGATED"
+  allowBranchFloorPlanEdit    Boolean      @default(true)
+  allowBranchRosterManagement Boolean      @default(true)
+  allowBranchProxyBooking     Boolean      @default(true)
+  allowBranchIssueResolution  Boolean      @default(true)
   createdAt                   DateTime     @default(now())
   updatedAt                   DateTime     @updatedAt
   branches                    Branch[]
@@ -115,6 +120,7 @@ model User {
   proxyBookingsMade  Booking[]    @relation("BookedByProxy")
   issueReports       IssueReport[] @relation("IssueReporter")
   resolvedIssues     IssueReport[] @relation("IssueResolver")
+  issueMessages      IssueMessage[]
 }
 
 model AuditLog {
@@ -190,43 +196,57 @@ model MeetingRoom {
   hdmiCount      Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  bookings       Booking[]
 }
 
 model Booking {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  deskId         String
-  desk           Desk         @relation(fields: [deskId], references: [id], onDelete: Cascade)
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookedByUserId String?
-  bookedByUser   User?        @relation("BookedByProxy", fields: [bookedByUserId], references: [id], onDelete: SetNull)
-  slotType       String       @default("FULL_DAY") // FULL_DAY, MORNING, AFTERNOON
-  startTime      DateTime
-  endTime        DateTime
-  status         String       @default("CONFIRMED") // CONFIRMED, CANCELLED, RELEASED
-  notes          String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deskId          String?
+  desk            Desk?        @relation(fields: [deskId], references: [id], onDelete: Cascade)
+  meetingRoomId   String?
+  meetingRoom     MeetingRoom? @relation(fields: [meetingRoomId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookedByUserId  String?
+  bookedByUser    User?        @relation("BookedByProxy", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+  resourceType    String       @default("DESK") // "DESK" | "MEETING_ROOM"
+  sessionType     String       @default("FULL_DAY") // "SESSION_1", "SESSION_2", "FULL_DAY", "CUSTOM"
+  slotType        String       @default("FULL_DAY") // FULL_DAY, MORNING, AFTERNOON, CUSTOM
+  title           String?      // Meeting Title / Purpose
+  attendeesCount  Int?         // For meeting room reservations
+  durationMinutes Int?         // Custom duration in minutes (e.g. 15, 30, 60, etc.)
+  startTime       DateTime
+  endTime         DateTime
+  status          String       @default("CONFIRMED") // CONFIRMED, CANCELLED, RELEASED
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([deskId, startTime, endTime, status])
+  @@index([meetingRoomId, startTime, endTime, status])
   @@index([userId, status, startTime])
   @@index([organizationId, createdAt])
+  @@index([resourceType, startTime, endTime])
 }
 
 model IssueReport {
-  id             String        @id @default(uuid())
-  title          String
-  description    String
-  category       String?       @default("GENERAL")
-  priority       IssuePriority @default(MEDIUM)
-  screenshotUrl  String?
-  clientVersion  String?       @default("1.0.0")
-  deviceInfo     String?
-  systemDiagnostics Json?
-  status         IssueStatus   @default(OPEN)
-  resolutionNote String?
+  id                 String        @id @default(uuid())
+  title              String
+  description        String
+  category           String?       @default("GENERAL")
+  priority           IssuePriority @default(MEDIUM)
+  screenshotUrl      String?
+  clientVersion      String?       @default("1.0.0")
+  deviceInfo         String?
+  systemDiagnostics  Json?
+  status             IssueStatus   @default(OPEN)
+  targetLevel        String        @default("BRANCH_ADMIN") // "BRANCH_ADMIN" | "ORGANIZATION_ADMIN" | "PLATFORM_ADMIN"
+  branchId           String?
+  resolutionNote     String?
+  commendationNote   String?
+  commendationAuthor String?
 
   reporterId     String
   reporter       User          @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Cascade)
@@ -237,11 +257,28 @@ model IssueReport {
   resolvedById   String?
   resolvedBy     User?         @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
+  messages       IssueMessage[]
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([organizationId, status])
   @@index([reporterId])
   @@index([status, createdAt])
+  @@index([targetLevel])
+}
+
+model IssueMessage {
+  id            String       @id @default(uuid())
+  issueReportId String
+  issueReport   IssueReport  @relation(fields: [issueReportId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderName    String
+  senderRole    String
+  message       String
+  createdAt     DateTime     @default(now())
+
+  @@index([issueReportId, createdAt])
 }
 

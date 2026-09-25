@@ -90,8 +90,7 @@ router.get(
 
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
       const orgDomain = `${org?.subdomain || 'company'}.com`;
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
-      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       return res.json({
         branch: {
@@ -131,8 +130,7 @@ router.get(
 
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
       const orgDomain = `${org?.subdomain || 'company'}.com`;
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : orgDomain;
-      const defaultPassword = branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       return res.json({
         branch: {
@@ -442,8 +440,7 @@ router.get(
       const queryDomain = (req.query.domain as string)?.trim();
       const corporateDomain = queryDomain || `${org?.subdomain || 'company'}.com`;
       const queryPassword = (req.query.defaultPassword as string)?.trim();
-      const orgNameClean = org?.name ? org.name.toLowerCase().replace(/[^a-z0-9]/g, '') : corporateDomain;
-      const defaultPassword = queryPassword || branch.defaultEmployeePassword || orgNameClean;
+      const defaultPassword = queryPassword || branch.defaultEmployeePassword || org?.name || 'Welcome123!';
 
       const buffer = await generateBranchEmployeeTemplate(
         corporateDomain,
@@ -795,7 +792,8 @@ router.post(
         return res.status(400).json({ error: 'Please upload a valid Excel (.xlsx) file.' });
       }
 
-      const validation = await parseAndValidateBranchFloorPlan(req.file.buffer, branch.code);
+      const org = await prisma.organization.findUnique({ where: { id: orgId } });
+      const validation = await parseAndValidateBranchFloorPlan(req.file.buffer, branch.code, org?.name);
       if (!validation.success || !validation.data) {
         return res.status(400).json({
           error: 'Floor plan spreadsheet validation failed.',
@@ -1101,6 +1099,161 @@ router.post(
       });
     } catch (error: any) {
       console.error('Failed to create cubicle:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/branch-roster/assign-dedicated
+ * Assign or release a permanent dedicated workstation for executive/director
+ */
+router.post(
+  '/assign-dedicated',
+  authMiddleware,
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+      const user = req.user!;
+      const { deskId, employeeId, notes, release } = req.body;
+
+      if (!deskId) {
+        return res.status(400).json({ error: 'deskId is required.' });
+      }
+
+      const desk = await prisma.desk.findFirst({
+        where: { id: deskId, organizationId: orgId },
+        include: {
+          section: {
+            include: {
+              floor: {
+                include: {
+                  building: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!desk) {
+        return res.status(404).json({ error: 'Desk not found.' });
+      }
+
+      // Branch admin check
+      if (user.role === Role.BRANCH_ADMIN && user.scopedBranchId) {
+        if (desk.section.floor.building.branchId !== user.scopedBranchId) {
+          return res.status(403).json({ error: 'Cannot assign desks outside your assigned branch.' });
+        }
+      }
+
+      if (release) {
+        // Cancel all DEDICATED bookings for this desk
+        await prisma.booking.updateMany({
+          where: {
+            deskId,
+            status: 'CONFIRMED',
+            slotType: 'DEDICATED',
+          },
+          data: {
+            status: 'CANCELLED',
+          },
+        });
+
+        // Set desk status to AVAILABLE if no other bookings
+        await prisma.desk.update({
+          where: { id: deskId },
+          data: { status: 'AVAILABLE' },
+        });
+
+        await prisma.auditLog.create({
+          data: {
+            organizationId: orgId,
+            actorUserId: user.id,
+            action: 'RELEASE_DEDICATED_DESK',
+            entityType: 'Desk',
+            entityId: deskId,
+            metadata: { deskCode: desk.deskCode },
+          },
+        });
+
+        return res.json({
+          success: true,
+          message: `Dedicated desk assignment for ${desk.deskCode} released successfully.`,
+        });
+      }
+
+      if (!employeeId) {
+        return res.status(400).json({ error: 'employeeId is required to assign dedicated desk.' });
+      }
+
+      const targetEmployee = await prisma.user.findFirst({
+        where: { id: employeeId, organizationId: orgId, isActive: true },
+      });
+
+      if (!targetEmployee) {
+        return res.status(404).json({ error: 'Target employee/executive not found.' });
+      }
+
+      // Cancel existing dedicated booking on this desk if any
+      await prisma.booking.updateMany({
+        where: {
+          deskId,
+          status: 'CONFIRMED',
+          slotType: 'DEDICATED',
+        },
+        data: {
+          status: 'CANCELLED',
+        },
+      });
+
+      // Create permanent dedicated booking (1 year duration)
+      const now = new Date();
+      const oneYearAhead = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+      const dedicatedBooking = await prisma.booking.create({
+        data: {
+          organizationId: orgId,
+          deskId,
+          userId: targetEmployee.id,
+          bookedByUserId: user.id,
+          slotType: 'DEDICATED',
+          startTime: now,
+          endTime: oneYearAhead,
+          status: 'CONFIRMED',
+          notes: notes || `Permanent Dedicated Executive Station: ${targetEmployee.name}`,
+        },
+      });
+
+      await prisma.desk.update({
+        where: { id: deskId },
+        data: { status: 'BOOKED' },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: orgId,
+          actorUserId: user.id,
+          action: 'ASSIGN_DEDICATED_DESK',
+          entityType: 'Desk',
+          entityId: deskId,
+          metadata: {
+            deskCode: desk.deskCode,
+            assignedToUserId: targetEmployee.id,
+            assignedToName: targetEmployee.name,
+            notes,
+          },
+        },
+      });
+
+      return res.json({
+        success: true,
+        booking: dedicatedBooking,
+        message: `Workstation ${desk.deskCode} permanently dedicated to ${targetEmployee.name}.`,
+      });
+    } catch (error: any) {
+      console.error('Failed to assign dedicated desk:', error);
       return res.status(500).json({ error: error.message });
     }
   }

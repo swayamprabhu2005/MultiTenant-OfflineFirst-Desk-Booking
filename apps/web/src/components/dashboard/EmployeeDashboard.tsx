@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTenant } from "../../context/TenantContext";
 import { fetchApi } from "../../services/api";
+import { OfficePresenceModal } from "../OfficePresenceModal";
 import {
   Monitor,
   Calendar,
@@ -84,7 +85,8 @@ export const EmployeeDashboard: React.FC = () => {
   const [releasing, setReleasing] = useState(false);
   const [actionNotice, setActionNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const orgColor = tenant?.themeColor || "#16a34a";
+  const activeOrg = user?.organization || tenant;
+  const orgColor = activeOrg?.themeColor || "#16a34a";
 
   const loadSummary = async () => {
     try {
@@ -195,6 +197,7 @@ export const EmployeeDashboard: React.FC = () => {
 
         {/* Quick CTA Actions */}
         <div className="flex flex-wrap items-center gap-3">
+          <OfficePresenceModal branchId={data?.branch?.id} triggerVariant="button" />
           <Link
             to="/employee/floor-plan"
             style={{ backgroundColor: orgColor }}
@@ -374,15 +377,15 @@ export const EmployeeDashboard: React.FC = () => {
               </div>
 
               {/* Meeting Rooms */}
-              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200">
-                <div className="text-[10px] font-bold text-purple-800 uppercase flex items-center gap-1">
-                  <Users className="w-3 h-3" />
+              <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                <div className="text-[10px] font-bold text-emerald-800 uppercase flex items-center gap-1">
+                  <Users className="w-3 h-3 text-emerald-700" />
                   <span>Rooms</span>
                 </div>
-                <div className="text-2xl font-black text-purple-900 mt-0.5">
+                <div className="text-2xl font-black text-emerald-900 mt-0.5">
                   {stats?.meetingRoomsCount ?? 0}
                 </div>
-                <div className="text-[9px] text-purple-700 font-semibold mt-0.5">
+                <div className="text-[9px] text-emerald-700 font-semibold mt-0.5">
                   Conference pods
                 </div>
               </div>

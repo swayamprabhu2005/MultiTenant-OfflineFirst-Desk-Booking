@@ -21,7 +21,7 @@ export const ForcePasswordChangePage: React.FC = () => {
   const navigate = useNavigate();
 
   const activeOrg = user?.organization || tenant;
-  const orgColor = activeOrg?.themeColor || '#a855f7'; // Matches dynamic brand or fallback
+  const orgColor = activeOrg?.themeColor || '#16a34a'; // Matches dynamic brand or fallback
   const isDark = isColorDark(orgColor);
 
   const [newPassword, setNewPassword] = useState('');

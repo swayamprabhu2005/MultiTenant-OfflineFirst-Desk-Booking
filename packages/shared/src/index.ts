@@ -17,6 +17,11 @@ export interface OrganizationDTO {
   status: string;
   workspaceSetupAt?: string | null;
   defaultBranchAdminPassword?: string | null;
+  operatingMode?: 'CENTRALIZED' | 'DELEGATED';
+  allowBranchFloorPlanEdit?: boolean;
+  allowBranchRosterManagement?: boolean;
+  allowBranchProxyBooking?: boolean;
+  allowBranchIssueResolution?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +142,43 @@ export interface MeetingRoomDTO {
   hdmiCount: number;
 }
 
+export enum SessionType {
+  SESSION_1 = 'SESSION_1', // Morning: 09:00 - 13:30
+  SESSION_2 = 'SESSION_2', // Afternoon: 13:30 - 18:00
+  FULL_DAY = 'FULL_DAY',   // All Sessions: 09:00 - 18:00
+  CUSTOM = 'CUSTOM',       // Custom user-defined hours and minutes
+}
+
+export enum ResourceType {
+  DESK = 'DESK',
+  MEETING_ROOM = 'MEETING_ROOM',
+}
+
+export interface BookingDTO {
+  id: string;
+  organizationId: string;
+  resourceType: ResourceType;
+  deskId?: string | null;
+  desk?: DeskDTO | null;
+  meetingRoomId?: string | null;
+  meetingRoom?: MeetingRoomDTO | null;
+  userId: string;
+  user?: { id: string; name: string; email: string; department?: string | null } | null;
+  bookedByUserId?: string | null;
+  bookedByUser?: { id: string; name: string; email: string } | null;
+  sessionType: SessionType;
+  slotType: string;
+  title?: string | null;
+  attendeesCount?: number | null;
+  durationMinutes?: number | null;
+  startTime: string;
+  endTime: string;
+  status: 'CONFIRMED' | 'CANCELLED' | 'RELEASED';
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export enum IssueStatus {
   OPEN = 'OPEN',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -150,6 +192,16 @@ export enum IssuePriority {
   CRITICAL = 'CRITICAL',
 }
 
+export interface IssueMessageDTO {
+  id: string;
+  issueReportId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  message: string;
+  createdAt: string;
+}
+
 export interface IssueReportDTO {
   id: string;
   title: string;
@@ -161,7 +213,11 @@ export interface IssueReportDTO {
   deviceInfo?: string | null;
   systemDiagnostics?: Record<string, any> | null;
   status: IssueStatus;
+  targetLevel?: string | null; // "BRANCH_ADMIN" | "ORGANIZATION_ADMIN" | "PLATFORM_ADMIN"
+  branchId?: string | null;
   resolutionNote?: string | null;
+  commendationNote?: string | null;
+  commendationAuthor?: string | null;
   reporterId: string;
   reporter?: {
     id: string;
@@ -182,6 +238,7 @@ export interface IssueReportDTO {
     name: string;
     email: string;
   } | null;
+  messages?: IssueMessageDTO[];
   createdAt: string;
   updatedAt: string;
 }

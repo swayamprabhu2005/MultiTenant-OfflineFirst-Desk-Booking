@@ -117,7 +117,8 @@ export async function generateOrgTemplate(orgId: string, orgName: string): Promi
  */
 export async function parseAndValidateWorkspace(
   fileBuffer: Buffer,
-  expectedOrgId: string
+  expectedOrgId: string,
+  expectedOrgName?: string
 ): Promise<ValidationResult> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer as any);
@@ -151,9 +152,29 @@ export async function parseAndValidateWorkspace(
   }
 
   // 1. VALIDATE SHEET 1: Organization
-  const orgIdCell = sheetOrg.getCell('A5').text?.trim();
-  const orgNameCell = sheetOrg.getCell('B5').text?.trim();
+  const orgIdCell = sheetOrg.getCell('A5').text?.trim() || String(sheetOrg.getCell('A5').value || '').trim();
+  const orgNameCell = sheetOrg.getCell('B5').text?.trim() || String(sheetOrg.getCell('B5').value || '').trim();
   const branchCountVal = Number(sheetOrg.getCell('C5').value);
+
+  // Validate Organization Name Match against active tenant organization
+  if (!orgNameCell) {
+    addError('Organization', 5, 'Organization Name is required.');
+  } else if (expectedOrgName && orgNameCell.toLowerCase() !== expectedOrgName.trim().toLowerCase()) {
+    addError(
+      'Organization',
+      5,
+      `Organization mismatch: Uploaded spreadsheet is for organization "${orgNameCell}", but your active organization is "${expectedOrgName}".`
+    );
+  }
+
+  // Validate Organization ID Match if present
+  if (expectedOrgId && orgIdCell && orgIdCell.toLowerCase() !== expectedOrgId.trim().toLowerCase()) {
+    addError(
+      'Organization',
+      5,
+      `Organization ID mismatch: Uploaded spreadsheet belongs to organization ID "${orgIdCell}", but your active organization ID is "${expectedOrgId}".`
+    );
+  }
 
   if (!branchCountVal || isNaN(branchCountVal) || branchCountVal < 1) {
     addError('Organization', 5, 'Number of Branches must be a positive integer greater than 0.');
@@ -1018,37 +1039,68 @@ export async function generateBranchFloorPlanTemplate(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'MultiTenant DeskBooking Platform';
 
+  // Color Palette Constants
+  const HEADER_FILL = 'FF1F4E79'; // Deep Navy Blue
+  const SUBHEADER_FILL = 'FF2F5597'; // Royal Slate Blue
+  const GREY_LOCKED_FILL = 'FFF1F5F9'; // Slate-100 Read-Only Protected
+  const YELLOW_INPUT_FILL = 'FFFFF2CC'; // Pale Warm Yellow (Active user input)
+  const DISABLED_GREY_FILL = 'FFE2E8F0'; // Slate-200 Lockout Fill
+  const THIN_BORDER = {
+    top: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
+  };
+
   // 1. Sheet: Branch Info
   const sheetBranch = workbook.addWorksheet('Branch Info');
   sheetBranch.views = [{ showGridLines: true }];
 
   const bHeader = sheetBranch.getRow(1);
-  bHeader.values = ['Branch Code', 'Branch Name', 'Number of Buildings'];
+  bHeader.values = ['Organization Name', 'Branch Code', 'Branch Name', 'Number of Buildings'];
   bHeader.height = 26;
   bHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   bHeader.alignment = { horizontal: 'center', vertical: 'middle' };
-  for (let c = 1; c <= 3; c++) {
-    bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
+  for (let c = 1; c <= 4; c++) {
+    bHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
+    bHeader.getCell(c).border = THIN_BORDER;
   }
 
   const bRow = sheetBranch.getRow(2);
-  bRow.height = 22;
-  bRow.getCell(1).value = branch.code;
-  bRow.getCell(2).value = branch.name;
-  bRow.getCell(3).value = Math.max(1, branch.buildings.length);
-  for (let c = 1; c <= 3; c++) {
-    bRow.getCell(c).font = { name: 'Segoe UI', size: 10 };
+  bRow.height = 24;
+  // Organization Name (Locked Grey)
+  bRow.getCell(1).value = orgName;
+  bRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(1).protection = { locked: true };
+
+  // Branch Code (Locked Grey)
+  bRow.getCell(2).value = branch.code;
+  bRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(2).protection = { locked: true };
+
+  // Branch Name (Locked Grey)
+  bRow.getCell(3).value = branch.name;
+  bRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+  bRow.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+  bRow.getCell(3).protection = { locked: true };
+
+  // Number of Buildings (Editable Yellow)
+  bRow.getCell(4).value = Math.max(1, branch.buildings.length);
+  bRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+  bRow.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+  bRow.getCell(4).protection = { locked: false };
+
+  for (let c = 1; c <= 4; c++) {
     bRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-    bRow.getCell(c).border = {
-      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-    };
+    bRow.getCell(c).border = THIN_BORDER;
   }
-  sheetBranch.getColumn(1).width = 20;
-  sheetBranch.getColumn(2).width = 30;
-  sheetBranch.getColumn(3).width = 24;
+  sheetBranch.getColumn(1).width = 28;
+  sheetBranch.getColumn(2).width = 20;
+  sheetBranch.getColumn(3).width = 30;
+  sheetBranch.getColumn(4).width = 24;
+  await sheetBranch.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 2. Sheet: Buildings
   const sheetBuildings = workbook.addWorksheet('Buildings');
@@ -1060,7 +1112,8 @@ export async function generateBranchFloorPlanTemplate(
   bldHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   bldHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 3; c++) {
-    bldHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    bldHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    bldHeader.getCell(c).border = THIN_BORDER;
   }
 
   const buildingsData =
@@ -1069,25 +1122,40 @@ export async function generateBranchFloorPlanTemplate(
       : [{ code: 'BLD001', name: 'Main Tower', floors: [] }];
 
   buildingsData.forEach((bld, idx) => {
-    const r = sheetBuildings.getRow(idx + 2);
-    r.height = 22;
-    r.getCell(1).value = bld.code;
+    const rowNum = idx + 2;
+    const r = sheetBuildings.getRow(rowNum);
+    r.height = 24;
+
+    // Col A: Building Code (Formula cascading from Branch Info, locked grey)
+    r.getCell(1).value = {
+      formula: `IF(ROW()-1 <= 'Branch Info'!$D$2, "BLD" & TEXT(ROW()-1, "000"), "")`,
+      result: bld.code || `BLD${String(rowNum - 1).padStart(3, '0')}`,
+    };
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+    r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+    r.getCell(1).protection = { locked: true };
+
+    // Col B: Building Name (Editable Yellow)
     r.getCell(2).value = bld.name;
+    r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+    r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    r.getCell(2).protection = { locked: false };
+
+    // Col C: Number of Floors (Editable Yellow)
     r.getCell(3).value = Math.max(1, bld.floors.length);
+    r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+    r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    r.getCell(3).protection = { locked: false };
+
     for (let c = 1; c <= 3; c++) {
-      r.getCell(c).font = { name: 'Segoe UI', size: 10 };
       r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-      r.getCell(c).border = {
-        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      };
+      r.getCell(c).border = THIN_BORDER;
     }
   });
   sheetBuildings.getColumn(1).width = 20;
   sheetBuildings.getColumn(2).width = 30;
   sheetBuildings.getColumn(3).width = 22;
+  await sheetBuildings.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 3. Sheet: Floors
   const sheetFloors = workbook.addWorksheet('Floors');
@@ -1099,46 +1167,69 @@ export async function generateBranchFloorPlanTemplate(
   flHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   flHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 4; c++) {
-    flHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    flHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    flHeader.getCell(c).border = THIN_BORDER;
   }
 
   let flRowIdx = 2;
-  buildingsData.forEach((bld) => {
+  buildingsData.forEach((bld, bldIdx) => {
     const floorsData =
       bld.floors.length > 0
         ? bld.floors
         : [
             {
-              code: '1-FL01',
+              code: `${bldIdx + 1}-FL01`,
               name: 'Floor 1',
               floorNumber: 1,
               sections: [],
             },
           ];
 
-    floorsData.forEach((fl) => {
-      const r = sheetFloors.getRow(flRowIdx++);
-      r.height = 22;
-      r.getCell(1).value = bld.name;
-      r.getCell(2).value = fl.code;
-      r.getCell(3).value = fl.name;
+    floorsData.forEach((fl, flIdx) => {
+      const rowNum = flRowIdx++;
+      const r = sheetFloors.getRow(rowNum);
+      r.height = 24;
+
+      // Col A: Building Name (Formula linking to Buildings sheet, locked grey)
+      const bldRowNum = bldIdx + 2;
+      r.getCell(1).value = {
+        formula: `Buildings!B${bldRowNum}`,
+        result: bld.name,
+      };
+      r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+      r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+      r.getCell(1).protection = { locked: true };
+
+      // Col B: Floor Code (Building-scoped code e.g. 1-FL01, locked grey)
+      r.getCell(2).value = fl.code || `${bldIdx + 1}-FL${String(flIdx + 1).padStart(2, '0')}`;
+      r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+      r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+      r.getCell(2).protection = { locked: true };
+
+      // Col C: Floor Name (Editable Yellow)
+      r.getCell(3).value = fl.name || `Floor ${flIdx + 1}`;
+      r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+      r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+      r.getCell(3).protection = { locked: false };
+
+      // Col D: Number of Sections (Editable Yellow)
       r.getCell(4).value = Math.max(1, fl.sections.length);
+      r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+      r.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+      r.getCell(4).protection = { locked: false };
+
       for (let c = 1; c <= 4; c++) {
-        r.getCell(c).font = { name: 'Segoe UI', size: 10 };
         r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-        r.getCell(c).border = {
-          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        };
+        r.getCell(c).border = THIN_BORDER;
       }
     });
   });
+
   sheetFloors.getColumn(1).width = 26;
   sheetFloors.getColumn(2).width = 20;
   sheetFloors.getColumn(3).width = 24;
   sheetFloors.getColumn(4).width = 22;
+  await sheetFloors.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   // 4. Sheet: Sections & Cubicles
   const sheetSections = workbook.addWorksheet('Sections & Cubicles');
@@ -1159,12 +1250,14 @@ export async function generateBranchFloorPlanTemplate(
   secHeader.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   secHeader.alignment = { horizontal: 'center', vertical: 'middle' };
   for (let c = 1; c <= 8; c++) {
-    secHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5597' } };
+    secHeader.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBHEADER_FILL } };
+    secHeader.getCell(c).border = THIN_BORDER;
   }
 
   let secRowIdx = 2;
-  buildingsData.forEach((bld) => {
-    bld.floors.forEach((fl) => {
+  buildingsData.forEach((bld, bldIdx) => {
+    bld.floors.forEach((fl, flIdx) => {
+      const flCodeDefault = fl.code || `${bldIdx + 1}-FL${String(flIdx + 1).padStart(2, '0')}`;
       const sectionsData =
         fl.sections.length > 0
           ? fl.sections
@@ -1181,29 +1274,122 @@ export async function generateBranchFloorPlanTemplate(
             ];
 
       sectionsData.forEach((sec) => {
-        const r = sheetSections.getRow(secRowIdx++);
-        r.height = 22;
-        r.getCell(1).value = fl.code;
+        const rowNum = secRowIdx++;
+        const r = sheetSections.getRow(rowNum);
+        r.height = 24;
+
+        // Col A: Floor Code (Locked Grey)
+        r.getCell(1).value = flCodeDefault;
+        r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREY_LOCKED_FILL } };
+        r.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+        r.getCell(1).protection = { locked: true };
+
+        // Col B: Section Name (Editable Yellow)
         r.getCell(2).value = sec.name;
+        r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(2).protection = { locked: false };
+
+        // Col C: Direction (Yellow Dropdown)
         r.getCell(3).value = sec.direction || 'NORTH';
+        r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(3).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(3).dataValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: ['"NORTH,SOUTH,EAST,WEST"'],
+        };
+        r.getCell(3).protection = { locked: false };
+
+        // Col D: Standard Cubicles (Editable Yellow)
         r.getCell(4).value = sec.standardDeskCount || 16;
+        r.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(4).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(4).protection = { locked: false };
+
+        // Col E: HDMI Cubicles (Editable Yellow)
         r.getCell(5).value = sec.hdmiDeskCount || 8;
-        r.getCell(6).value = sec.hasMeetingRoom ? 'Yes' : 'No';
-        r.getCell(7).value = sec.meetingRoomCapacity || 0;
-        r.getCell(8).value = sec.meetingRoomHdmi || 0;
+        r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(5).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(5).protection = { locked: false };
+
+        // Col F: Has Meeting Room (Yellow Dropdown)
+        const hasMrStr = sec.hasMeetingRoom ? 'Yes' : 'No';
+        r.getCell(6).value = hasMrStr;
+        r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW_INPUT_FILL } };
+        r.getCell(6).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        r.getCell(6).dataValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: ['"Yes,No"'],
+        };
+        r.getCell(6).protection = { locked: false };
+
+        // Col G: Meeting Room Capacity (Dynamic Yellow when Yes, Lockout Grey when No)
+        r.getCell(7).value = sec.hasMeetingRoom ? (sec.meetingRoomCapacity || 8) : 0;
+        r.getCell(7).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: sec.hasMeetingRoom ? YELLOW_INPUT_FILL : DISABLED_GREY_FILL },
+        };
+        r.getCell(7).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: sec.hasMeetingRoom ? 'FF0F172A' : 'FF94A3B8' } };
+        r.getCell(7).protection = { locked: false };
+
+        // Col H: Meeting Room HDMI (Dynamic Yellow when Yes, Lockout Grey when No)
+        r.getCell(8).value = sec.hasMeetingRoom ? (sec.meetingRoomHdmi || 4) : 0;
+        r.getCell(8).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: sec.hasMeetingRoom ? YELLOW_INPUT_FILL : DISABLED_GREY_FILL },
+        };
+        r.getCell(8).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: sec.hasMeetingRoom ? 'FF0F172A' : 'FF94A3B8' } };
+        r.getCell(8).protection = { locked: false };
 
         for (let c = 1; c <= 8; c++) {
-          r.getCell(c).font = { name: 'Segoe UI', size: 10 };
           r.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-          r.getCell(c).border = {
-            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          };
+          r.getCell(c).border = THIN_BORDER;
         }
       });
     });
+  });
+
+  // Conditional formatting on Sheet 4: Range G2:H401
+  // If Has Meeting Room is "No", grey out cells G and H automatically
+  sheetSections.addConditionalFormatting({
+    ref: 'G2:H401',
+    rules: [
+      {
+        type: 'expression',
+        priority: 1,
+        formulae: ['UPPER(TRIM($F2))="NO"'],
+        style: {
+          fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            bgColor: { argb: DISABLED_GREY_FILL },
+          },
+          font: {
+            color: { argb: 'FF94A3B8' },
+          },
+        },
+      },
+      {
+        type: 'expression',
+        priority: 2,
+        formulae: ['UPPER(TRIM($F2))="YES"'],
+        style: {
+          fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            bgColor: { argb: YELLOW_INPUT_FILL },
+          },
+          font: {
+            color: { argb: 'FF0F172A' },
+            bold: true,
+          },
+        },
+      },
+    ],
   });
 
   sheetSections.getColumn(1).width = 18;
@@ -1214,6 +1400,7 @@ export async function generateBranchFloorPlanTemplate(
   sheetSections.getColumn(6).width = 20;
   sheetSections.getColumn(7).width = 24;
   sheetSections.getColumn(8).width = 22;
+  await sheetSections.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -1249,12 +1436,53 @@ export interface BranchFloorPlanValidationResult {
   data?: ParsedBranchFloorPlan;
 }
 
+function getCellString(cell: ExcelJS.Cell): string {
+  if (!cell) return '';
+  const val = cell.value;
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    if ('result' in val && val.result !== undefined && val.result !== null) {
+      return String(val.result).trim();
+    }
+    if ('text' in val && typeof (val as any).text === 'string') {
+      return (val as any).text.trim();
+    }
+    if ('richText' in val && Array.isArray((val as any).richText)) {
+      return (val as any).richText.map((t: any) => t.text).join('').trim();
+    }
+  }
+  if (cell.text && cell.text.trim()) {
+    return cell.text.trim();
+  }
+  return String(val).trim();
+}
+
+function getCellNumber(cell: ExcelJS.Cell): number {
+  if (!cell) return NaN;
+  const val = cell.value;
+  if (val === null || val === undefined) return NaN;
+  if (typeof val === 'object') {
+    if ('result' in val && val.result !== undefined && val.result !== null) {
+      const resNum = Number(val.result);
+      if (!isNaN(resNum)) return resNum;
+    }
+  }
+  const n = Number(cell.value);
+  if (!isNaN(n)) return n;
+  if (cell.text) {
+    const textNum = Number(cell.text.trim());
+    if (!isNaN(textNum)) return textNum;
+  }
+  return NaN;
+}
+
 /**
  * Validates and parses branch-scoped floor plan Excel template
  */
 export async function parseAndValidateBranchFloorPlan(
   fileBuffer: Buffer,
-  expectedBranchCode: string
+  expectedBranchCode: string,
+  expectedOrgName?: string
 ): Promise<BranchFloorPlanValidationResult> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileBuffer as any);
@@ -1277,9 +1505,32 @@ export async function parseAndValidateBranchFloorPlan(
   }
 
   // 1. Branch Info
+  const headerRow = sheetBranch.getRow(1);
+  const col1Header = getCellString(headerRow.getCell(1)).toLowerCase();
+  const hasOrgCol = col1Header.includes('organization');
+
   const branchRow = sheetBranch.getRow(2);
-  const branchCode = branchRow.getCell(1).text?.trim();
-  const branchName = branchRow.getCell(2).text?.trim();
+  let excelOrgName = '';
+  let branchCode = '';
+  let branchName = '';
+
+  if (hasOrgCol) {
+    excelOrgName = getCellString(branchRow.getCell(1));
+    branchCode = getCellString(branchRow.getCell(2));
+    branchName = getCellString(branchRow.getCell(3));
+  } else {
+    branchCode = getCellString(branchRow.getCell(1));
+    branchName = getCellString(branchRow.getCell(2));
+  }
+
+  // Validate Organization Name if expectedOrgName is provided and org column exists
+  if (expectedOrgName) {
+    if (excelOrgName && excelOrgName.trim().toLowerCase() !== expectedOrgName.trim().toLowerCase()) {
+      errors.push(
+        `Organization mismatch: Uploaded spreadsheet is for organization "${excelOrgName}", but your active organization is "${expectedOrgName}".`
+      );
+    }
+  }
 
   if (!branchCode) {
     errors.push('Branch Info (Row 2): Branch Code is missing.');
@@ -1315,15 +1566,17 @@ export async function parseAndValidateBranchFloorPlan(
 
   for (let r = 2; r <= sheetBuildings.rowCount; r++) {
     const row = sheetBuildings.getRow(r);
-    const bldCode = row.getCell(1).text?.trim();
-    const bldName = row.getCell(2).text?.trim();
-    const floorCountVal = Number(row.getCell(3).value);
+    let bldCode = getCellString(row.getCell(1));
+    const bldName = getCellString(row.getCell(2));
+    const floorCountVal = getCellNumber(row.getCell(3));
 
     if (!bldCode && !bldName) continue;
 
-    if (!bldCode) {
-      errors.push(`Buildings (Row ${r}): Building Code is required.`);
+    // Handle formula fallback if not evaluated
+    if (!bldCode || bldCode.startsWith('=')) {
+      bldCode = `BLD${String(r - 1).padStart(3, '0')}`;
     }
+
     if (!bldName) {
       errors.push(`Buildings (Row ${r}): Building Name is required.`);
     }
@@ -1333,7 +1586,7 @@ export async function parseAndValidateBranchFloorPlan(
 
     if (bldName) {
       buildingsMap.set(bldName.toLowerCase(), {
-        code: bldCode || `BLD-${buildingsMap.size + 1}`,
+        code: bldCode,
         name: bldName,
         floorCount: isNaN(floorCountVal) ? 1 : floorCountVal,
         floors: [],
@@ -1364,17 +1617,24 @@ export async function parseAndValidateBranchFloorPlan(
     }
   >();
 
+  const buildingsList = Array.from(buildingsMap.values());
   for (let r = 2; r <= sheetFloors.rowCount; r++) {
     const row = sheetFloors.getRow(r);
-    const bldName = row.getCell(1).text?.trim();
-    const flCode = row.getCell(2).text?.trim();
-    const flName = row.getCell(3).text?.trim();
+    let bldName = getCellString(row.getCell(1));
+    let flCode = getCellString(row.getCell(2));
+    const flName = getCellString(row.getCell(3));
 
     if (!bldName && !flCode && !flName) continue;
 
-    if (!flCode) {
-      errors.push(`Floors (Row ${r}): Floor Code is required.`);
-      continue;
+    // If formula reference e.g. =Buildings!B2 or =Buildings!$B$2
+    if (bldName.startsWith('=')) {
+      const match = bldName.match(/B(\d+)/i);
+      if (match) {
+        const bldRowIdx = parseInt(match[1], 10) - 2;
+        if (bldRowIdx >= 0 && bldRowIdx < buildingsList.length) {
+          bldName = buildingsList[bldRowIdx].name;
+        }
+      }
     }
 
     let bldEntry = bldName ? buildingsMap.get(bldName.toLowerCase()) : null;
@@ -1387,7 +1647,14 @@ export async function parseAndValidateBranchFloorPlan(
       continue;
     }
 
+    const bldIndex = buildingsList.findIndex((b) => b.code === bldEntry?.code);
     const floorNumber = bldEntry.floors.length + 1;
+
+    // If formula or missing flCode, fallback to building-scoped code
+    if (!flCode || flCode.startsWith('=')) {
+      flCode = `${(bldIndex >= 0 ? bldIndex : 0) + 1}-FL${String(floorNumber).padStart(2, '0')}`;
+    }
+
     const floorObj = {
       code: flCode,
       name: flName || `Floor ${floorNumber}`,
@@ -1400,22 +1667,34 @@ export async function parseAndValidateBranchFloorPlan(
   }
 
   // 4. Sections & Cubicles
+  const floorsList = Array.from(floorsMap.values());
   for (let r = 2; r <= sheetSections.rowCount; r++) {
     const row = sheetSections.getRow(r);
-    const flCode = row.getCell(1).text?.trim();
-    const secName = row.getCell(2).text?.trim();
-    const direction = (row.getCell(3).text?.trim() || 'NORTH').toUpperCase();
-    const standardDeskCount = Number(row.getCell(4).value || 0);
-    const hdmiDeskCount = Number(row.getCell(5).value || 0);
-    const hasMeetingRoomRaw = row.getCell(6).text?.trim()?.toLowerCase();
-    const meetingRoomCapacity = Number(row.getCell(7).value || 0);
-    const meetingRoomHdmi = Number(row.getCell(8).value || 0);
+    let flCode = getCellString(row.getCell(1));
+    const secName = getCellString(row.getCell(2));
+    const direction = (getCellString(row.getCell(3)) || 'NORTH').toUpperCase();
+    const standardDeskCount = getCellNumber(row.getCell(4));
+    const hdmiDeskCount = getCellNumber(row.getCell(5));
+    const hasMeetingRoomRaw = getCellString(row.getCell(6)).toLowerCase();
+    const meetingRoomCapacity = getCellNumber(row.getCell(7));
+    const meetingRoomHdmi = getCellNumber(row.getCell(8));
 
     if (!flCode && !secName) continue;
 
     if (!secName) {
       errors.push(`Sections & Cubicles (Row ${r}): Section Name is required.`);
       continue;
+    }
+
+    // If flCode is formula reference e.g. =Floors!B2
+    if (flCode.startsWith('=')) {
+      const match = flCode.match(/B(\d+)/i);
+      if (match) {
+        const flRowIdx = parseInt(match[1], 10) - 2;
+        if (flRowIdx >= 0 && flRowIdx < floorsList.length) {
+          flCode = floorsList[flRowIdx].code;
+        }
+      }
     }
 
     let floorEntry = flCode ? floorsMap.get(flCode.toLowerCase()) : null;
@@ -1428,28 +1707,51 @@ export async function parseAndValidateBranchFloorPlan(
       continue;
     }
 
+    const stdCount = isNaN(standardDeskCount) ? 0 : standardDeskCount;
+    const hdmiCount = isNaN(hdmiDeskCount) ? 0 : hdmiDeskCount;
+
     if (isNaN(standardDeskCount) || standardDeskCount < 0) {
       errors.push(`Sections & Cubicles (Row ${r}): Standard Cubicles must be a non-negative number.`);
     }
     if (isNaN(hdmiDeskCount) || hdmiDeskCount < 0) {
       errors.push(`Sections & Cubicles (Row ${r}): HDMI Cubicles must be a non-negative number.`);
-    } else if (hdmiDeskCount > standardDeskCount) {
+    } else if (hdmiCount > stdCount) {
       errors.push(
-        `Sections & Cubicles (Row ${r}): HDMI Cubicles (${hdmiDeskCount}) cannot exceed Standard Cubicles (${standardDeskCount}).`
+        `Sections & Cubicles (Row ${r}): HDMI Cubicles (${hdmiCount}) cannot exceed Standard Cubicles (${stdCount}).`
       );
     }
 
     const hasMeetingRoom =
       hasMeetingRoomRaw === 'yes' || hasMeetingRoomRaw === 'true' || hasMeetingRoomRaw === '1';
+    const mrCap = isNaN(meetingRoomCapacity) ? 0 : meetingRoomCapacity;
+    const mrHdmi = isNaN(meetingRoomHdmi) ? 0 : meetingRoomHdmi;
+
+    if (hasMeetingRoom) {
+      if (mrCap <= 0) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room is set to 'Yes', but Meeting Room Capacity is missing or 0. Please specify capacity >= 1.`
+        );
+      } else if (mrHdmi > mrCap) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room HDMI (${mrHdmi}) cannot exceed Meeting Room capacity (${mrCap}).`
+        );
+      }
+    } else {
+      if (mrCap > 0) {
+        errors.push(
+          `Sections & Cubicles (Row ${r}): Meeting Room is 'No', but meeting room capacity (${mrCap}) was entered. Please clear Column G or set Meeting Room to 'Yes'.`
+        );
+      }
+    }
 
     floorEntry.sections.push({
       name: secName,
       direction: ['NORTH', 'SOUTH', 'EAST', 'WEST'].includes(direction) ? direction : 'NORTH',
-      standardDeskCount: Math.max(0, isNaN(standardDeskCount) ? 0 : standardDeskCount),
-      hdmiDeskCount: Math.max(0, isNaN(hdmiDeskCount) ? 0 : hdmiDeskCount),
+      standardDeskCount: Math.max(0, stdCount),
+      hdmiDeskCount: Math.max(0, hdmiCount),
       hasMeetingRoom,
-      meetingRoomCapacity: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomCapacity) ? 0 : meetingRoomCapacity) : 0,
-      meetingRoomHdmi: hasMeetingRoom ? Math.max(0, isNaN(meetingRoomHdmi) ? 0 : meetingRoomHdmi) : 0,
+      meetingRoomCapacity: hasMeetingRoom ? Math.max(0, mrCap) : 0,
+      meetingRoomHdmi: hasMeetingRoom ? Math.max(0, mrHdmi) : 0,
     });
   }
 

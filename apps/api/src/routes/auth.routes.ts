@@ -65,23 +65,9 @@ router.post('/login', async (req: TenantRequest, res: Response) => {
         isActive: user.isActive,
         status: user.status,
         organizationId: user.organizationId,
-        organization: {
-          id: user.organization.id,
-          name: user.organization.name,
-          code: user.organization.code,
-          subdomain: user.organization.subdomain,
-          logoUrl: user.organization.logoUrl,
-          themeColor: user.organization.themeColor,
-        },
+        organization: user.organization,
       },
-      organization: {
-        id: user.organization.id,
-        name: user.organization.name,
-        code: user.organization.code,
-        subdomain: user.organization.subdomain,
-        logoUrl: user.organization.logoUrl,
-        themeColor: user.organization.themeColor,
-      },
+      organization: user.organization,
     });
   } catch (error: any) {
     console.error('Login error:', error);
@@ -246,6 +232,11 @@ router.get('/organizations', async (req: TenantRequest, res: Response) => {
         subdomain: true,
         logoUrl: true,
         themeColor: true,
+        operatingMode: true,
+        allowBranchFloorPlanEdit: true,
+        allowBranchRosterManagement: true,
+        allowBranchProxyBooking: true,
+        allowBranchIssueResolution: true,
       },
     });
     return res.json(orgs);
@@ -413,6 +404,242 @@ router.post('/reset-password', async (req: TenantRequest, res: Response) => {
     return res.json({
       success: true,
       message: 'Password reset successful. Please log in with your new password.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Microsoft Entra ID (SSO) Authentication
+// ==========================================
+
+const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '6ae9e86b-7736-4966-a459-708953128955';
+const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
+const AZURE_TENANT_ID = process.env.AZURE_TENANT_ID || 'common';
+const AZURE_REDIRECT_URI = process.env.AZURE_REDIRECT_URI || 'http://localhost:3000/api/auth/sso/callback';
+
+/**
+ * GET /api/auth/sso/microsoft
+ * Initiates Microsoft Entra ID OIDC / OAuth2 redirect
+ */
+router.get('/sso/microsoft', (req: TenantRequest, res: Response) => {
+  const authorizationEndpoint = `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/authorize`;
+  const params = new URLSearchParams({
+    client_id: AZURE_CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: AZURE_REDIRECT_URI,
+    response_mode: 'query',
+    scope: 'openid profile email User.Read',
+    prompt: 'select_account',
+  });
+
+  return res.redirect(`${authorizationEndpoint}?${params.toString()}`);
+});
+
+/**
+ * GET /api/auth/sso/callback
+ * Microsoft redirects back here with authorization code.
+ * We exchange code for tokens, retrieve user info, find tenant account, and issue app JWT.
+ */
+router.get('/sso/callback', async (req: TenantRequest, res: Response) => {
+  try {
+    const { code, error, error_description } = req.query;
+
+    if (error) {
+      console.warn('Microsoft SSO Error returned:', error, error_description);
+      const msg = encodeURIComponent(String(error_description || error || 'Microsoft login cancelled'));
+      return res.redirect(`/login?error=${msg}`);
+    }
+
+    if (!code || typeof code !== 'string') {
+      return res.redirect('/login?error=Authorization+code+missing+from+Microsoft');
+    }
+
+    // Exchange authorization code for access and ID tokens
+    const tokenEndpoint = `https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token`;
+    const tokenPayload = new URLSearchParams({
+      client_id: AZURE_CLIENT_ID,
+      client_secret: AZURE_CLIENT_SECRET,
+      code,
+      redirect_uri: AZURE_REDIRECT_URI,
+      grant_type: 'authorization_code',
+    });
+
+    const tokenResponse = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: tokenPayload.toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      const errBody = await tokenResponse.text();
+      console.error('Failed to exchange Microsoft token:', errBody);
+      return res.redirect('/login?error=Failed+to+exchange+token+with+Microsoft');
+    }
+
+    const tokenData = (await tokenResponse.json()) as any;
+    let verifiedEmail = '';
+    let displayName = '';
+
+    // Extract email from ID token claims if present
+    if (tokenData.id_token) {
+      try {
+        const payloadBase64 = tokenData.id_token.split('.')[1];
+        const decodedClaims = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
+        verifiedEmail = (decodedClaims.email || decodedClaims.preferred_username || decodedClaims.upn || '').toLowerCase();
+        displayName = decodedClaims.name || '';
+      } catch (err) {
+        console.warn('Could not parse id_token payload directly:', err);
+      }
+    }
+
+    // Fallback: Query Microsoft Graph API /v1.0/me using the access token
+    if (!verifiedEmail && tokenData.access_token) {
+      try {
+        const graphRes = await fetch('https://graph.microsoft.com/v1.0/me', {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+          },
+        });
+        if (graphRes.ok) {
+          const graphData = (await graphRes.json()) as any;
+          verifiedEmail = (graphData.mail || graphData.userPrincipalName || '').toLowerCase();
+          displayName = displayName || graphData.displayName || '';
+        }
+      } catch (graphErr) {
+        console.warn('Microsoft Graph lookup failed:', graphErr);
+      }
+    }
+
+    if (!verifiedEmail) {
+      return res.redirect('/login?error=Could+not+retrieve+a+valid+corporate+email+from+Microsoft');
+    }
+
+    // Locate the user in our Multi-Tenant database by verified corporate email
+    const user = await prisma.user.findFirst({
+      where: { email: verifiedEmail.toLowerCase() },
+      include: {
+        organization: true,
+        scopedBranch: true,
+      },
+    });
+
+    if (!user) {
+      const notFoundMsg = encodeURIComponent(
+        `Access Denied: No employee profile found for "${verifiedEmail}". Please contact your organization administrator to add you to the roster.`
+      );
+      return res.redirect(`/login?error=${notFoundMsg}`);
+    }
+
+    if (user.status !== 'ACTIVE' || user.isActive === false) {
+      return res.redirect(
+        '/login?error=This+account+has+been+deactivated.+Please+contact+your+administrator.'
+      );
+    }
+
+    // Issue our standard application JWT session token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        scopedBranchId: user.scopedBranchId,
+        mustChangePassword: false, // SSO users don't need local force password change
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Audit log the SSO sign-in event
+    await prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        actorUserId: user.id,
+        action: 'SSO_LOGIN_MICROSOFT',
+        entityType: 'User',
+        entityId: user.id,
+        metadata: {
+          email: user.email,
+          provider: 'MICROSOFT_ENTRA_ID',
+          displayName,
+        },
+      },
+    });
+
+    // Redirect to frontend login handler with the signed token
+    return res.redirect(`/login?sso_token=${encodeURIComponent(token)}`);
+  } catch (error: any) {
+    console.error('SSO Callback error:', error);
+    const errMessage = encodeURIComponent(error.message || 'Internal error during Microsoft SSO verification');
+    return res.redirect(`/login?error=${errMessage}`);
+  }
+});
+
+/**
+ * POST /api/auth/sso/sandbox
+ * Developer & demonstration quick SSO simulation for offline or sandbox testing
+ */
+router.post('/sso/sandbox', async (req: TenantRequest, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Corporate email is required for SSO Sandbox authentication' });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { email: email.toLowerCase() },
+      include: {
+        organization: true,
+        scopedBranch: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: `SSO Sandbox Error: No account registered for "${email}". Please add this employee in the Organization Roster first.`,
+      });
+    }
+
+    if (user.status !== 'ACTIVE' || user.isActive === false) {
+      return res.status(403).json({ error: 'This account has been deactivated.' });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        scopedBranchId: user.scopedBranchId,
+        mustChangePassword: false,
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        scopedBranchId: user.scopedBranchId,
+        scopedBranch: user.scopedBranch,
+        mustChangePassword: false,
+        isActive: user.isActive,
+        status: user.status,
+        organizationId: user.organizationId,
+        organization: user.organization,
+      },
+      organization: user.organization,
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

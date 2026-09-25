@@ -8,6 +8,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
+  loginWithSsoSandbox: (email: string) => Promise<void>;
   signup: (name: string, email: string, password: string, orgName: string, orgCode: string, subdomain: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -82,6 +84,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(fullUser);
   };
 
+  const loginWithToken = async (newToken: string) => {
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+    const res = await fetchApi<{ user: UserDTO; organization: any }>('/auth/me');
+    const fullUser = {
+      ...res.user,
+      organization: res.organization || res.user.organization,
+    };
+    if (fullUser.organization?.subdomain) {
+      localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
+    }
+    setUser(fullUser);
+  };
+
+  const loginWithSsoSandbox = async (email: string) => {
+    const res = await fetchApi<{ token: string; user: UserDTO; organization: any }>('/auth/sso/sandbox', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+
+    const fullUser = {
+      ...res.user,
+      organization: res.organization || res.user.organization,
+    };
+
+    localStorage.setItem('token', res.token);
+    if (fullUser.organization?.subdomain) {
+      localStorage.setItem('activeTenantSubdomain', fullUser.organization.subdomain);
+    }
+    setToken(res.token);
+    setUser(fullUser);
+  };
+
   const signup = async (
     name: string,
     email: string,
@@ -133,6 +168,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isLoading,
         login,
+        loginWithToken,
+        loginWithSsoSandbox,
         signup,
         logout,
         refreshUser: initAuth,

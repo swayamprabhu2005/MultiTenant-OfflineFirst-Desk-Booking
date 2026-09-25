@@ -6,7 +6,6 @@ import { prisma } from '../prisma';
 import { authMiddleware, AuthenticatedRequest, requireRole } from '../middleware/auth.middleware';
 import { Role, IssueStatus, IssuePriority } from '@deskbooking/shared';
 import { EmailService } from '../services/email.service';
-import { SystemService } from '../services/system.service';
 
 const router = Router();
 
@@ -80,36 +79,6 @@ router.post(
         }
       }
 
-      // Capture / Merge complete System Diagnostics (Docker, Postgres, OS, Node, Browser)
-      let parsedDiagnostics: any = null;
-      if (systemDiagnostics) {
-        try {
-          parsedDiagnostics = typeof systemDiagnostics === 'string'
-            ? JSON.parse(systemDiagnostics)
-            : systemDiagnostics;
-        } catch {
-          parsedDiagnostics = null;
-        }
-      }
-
-      // If client didn't supply full host manifest, automatically query SystemService
-      if (!parsedDiagnostics || !parsedDiagnostics.runtimes) {
-        try {
-          const manifest = await SystemService.getSystemManifest();
-          parsedDiagnostics = {
-            ...manifest,
-            client: {
-              version: clientVersion || 'v1.0.0',
-              deviceInfo: deviceInfo || null,
-              userAgent: req.headers['user-agent'] || null,
-              ip: req.ip || req.socket.remoteAddress || null,
-            },
-          };
-        } catch (diagErr) {
-          console.warn('⚠️ [SystemService] Failed to auto-gather system manifest for issue report:', diagErr);
-        }
-      }
-
       // Valid priority check
       const validPriority = Object.values(IssuePriority).includes(priority as IssuePriority)
         ? (priority as IssuePriority)
@@ -118,14 +87,53 @@ router.post(
       // Fetch user organization details for cross-tenant visibility
       const userOrg = await prisma.organization.findUnique({
         where: { id: user.organizationId },
-        select: { id: true, name: true, subdomain: true, code: true },
+        select: { id: true, name: true, subdomain: true, code: true, operatingMode: true },
       });
 
       if (!userOrg) {
         return res.status(404).json({ error: 'Organization not found for reporter.' });
       }
 
-      // Create issue report in database with client versions & diagnostics
+      // Fetch reporter branch context for hierarchical escalation
+      const reporterUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { id: true, baseBranchId: true, scopedBranchId: true, role: true },
+      });
+
+      const effectiveBranchId = reporterUser?.scopedBranchId || reporterUser?.baseBranchId || null;
+      let targetLevel = 'ORGANIZATION_ADMIN'; // Safe default
+
+      if (user.role === Role.ORGANIZATION_ADMIN || user.role === Role.PLATFORM_ADMIN) {
+        targetLevel = 'PLATFORM_ADMIN';
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        targetLevel = 'ORGANIZATION_ADMIN';
+      } else {
+        // Employee or Tech Lead reporting
+        if (userOrg.operatingMode === 'DELEGATED' && effectiveBranchId) {
+          // Check if an active branch admin exists for this branch
+          const branchAdmin = await prisma.user.findFirst({
+            where: {
+              organizationId: userOrg.id,
+              role: Role.BRANCH_ADMIN,
+              isActive: true,
+              OR: [
+                { scopedBranchId: effectiveBranchId },
+                { baseBranchId: effectiveBranchId },
+              ],
+            },
+          });
+          if (branchAdmin) {
+            targetLevel = 'BRANCH_ADMIN';
+          } else {
+            targetLevel = 'ORGANIZATION_ADMIN';
+          }
+        } else {
+          // Centralized mode or unassigned branch -> directly to Global Org Admin
+          targetLevel = 'ORGANIZATION_ADMIN';
+        }
+      }
+
+      // Create issue report in database with clean metadata
       const issueReport = await prisma.issueReport.create({
         data: {
           title: title.trim(),
@@ -133,9 +141,8 @@ router.post(
           category: category ? String(category).trim() : 'GENERAL',
           priority: validPriority,
           screenshotUrl,
-          clientVersion: clientVersion ? String(clientVersion).trim() : 'v1.0.0',
-          deviceInfo: deviceInfo ? String(deviceInfo).trim() : null,
-          systemDiagnostics: parsedDiagnostics ?? undefined,
+          targetLevel,
+          branchId: effectiveBranchId,
           status: IssueStatus.OPEN,
           reporterId: user.id,
           organizationId: userOrg.id,
@@ -150,33 +157,6 @@ router.post(
         },
       });
 
-      // Generate and persist diagnostics text file on disk
-      let diagnosticsText: string | null = null;
-      let diagnosticsFileUrl: string | null = null;
-
-      if (parsedDiagnostics) {
-        try {
-          diagnosticsText = SystemService.formatManifestAsText(parsedDiagnostics, parsedDiagnostics.client);
-          const diagFilename = `diagnostics-${issueReport.id}.txt`;
-          const diagFilePath = path.join(uploadDir, diagFilename);
-          fs.writeFileSync(diagFilePath, diagnosticsText, 'utf8');
-          diagnosticsFileUrl = `/uploads/screenshots/${diagFilename}`;
-
-          // Update record with direct downloadable file URL
-          await prisma.issueReport.update({
-            where: { id: issueReport.id },
-            data: {
-              systemDiagnostics: {
-                ...parsedDiagnostics,
-                fileUrl: diagnosticsFileUrl,
-              },
-            },
-          });
-        } catch (diagFileErr) {
-          console.warn('⚠️ Could not write diagnostics text file to disk:', diagFileErr);
-        }
-      }
-
       // Audit Log for the issue submission
       await prisma.auditLog.create({
         data: {
@@ -189,39 +169,15 @@ router.post(
             title: issueReport.title,
             priority: issueReport.priority,
             category: issueReport.category,
-            diagnosticsFileUrl,
+            targetLevel: issueReport.targetLevel,
           },
         },
       });
 
-      // Notify Platform Superadmin via EmailService (real or simulated)
-      EmailService.sendIssueNotification({
-        issueId: issueReport.id,
-        title: issueReport.title,
-        description: issueReport.description,
-        category: issueReport.category,
-        priority: issueReport.priority,
-        reporterName: user.name,
-        reporterEmail: user.email,
-        reporterRole: user.role,
-        organizationName: userOrg.name,
-        organizationSubdomain: userOrg.subdomain,
-        screenshotUrl: issueReport.screenshotUrl,
-        clientVersion: issueReport.clientVersion,
-        deviceInfo: issueReport.deviceInfo,
-        systemDiagnostics: parsedDiagnostics,
-        diagnosticsFileUrl,
-        diagnosticsText,
-        createdAt: issueReport.createdAt,
-      }).catch((err) => console.error('Error dispatching issue notification:', err));
-
       return res.status(201).json({
         success: true,
         message: 'Issue report submitted successfully.',
-        issue: {
-          ...issueReport,
-          diagnosticsFileUrl,
-        },
+        issue: issueReport,
       });
     } catch (error: any) {
       console.error('Failed to submit issue report:', error);
@@ -230,20 +186,45 @@ router.post(
   }
 );
 
-// 2. Get Platform Issue Statistics (Superadmin Only)
+// 2. Get Platform Issue Statistics (Scoped per role)
 router.get(
   '/stats',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
-  async (_req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
+      const whereBase: any = {};
+
+      if (user.role === Role.PLATFORM_ADMIN) {
+        whereBase.targetLevel = 'PLATFORM_ADMIN';
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        whereBase.organizationId = user.organizationId;
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        whereBase.organizationId = user.organizationId;
+        const adminUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { baseBranchId: true, scopedBranchId: true },
+        });
+        const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+        if (branchId) {
+          whereBase.OR = [
+            { branchId },
+            { targetLevel: 'BRANCH_ADMIN' },
+            { reporterId: user.id },
+          ];
+        }
+      } else {
+        whereBase.reporterId = user.id;
+      }
+
       const [total, open, inProgress, resolved, critical] = await Promise.all([
-        prisma.issueReport.count(),
-        prisma.issueReport.count({ where: { status: IssueStatus.OPEN } }),
-        prisma.issueReport.count({ where: { status: IssueStatus.IN_PROGRESS } }),
-        prisma.issueReport.count({ where: { status: IssueStatus.RESOLVED } }),
+        prisma.issueReport.count({ where: whereBase }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.OPEN } }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.IN_PROGRESS } }),
+        prisma.issueReport.count({ where: { ...whereBase, status: IssueStatus.RESOLVED } }),
         prisma.issueReport.count({
           where: {
+            ...whereBase,
             priority: IssuePriority.CRITICAL,
             status: { not: IssueStatus.RESOLVED },
           },
@@ -264,17 +245,18 @@ router.get(
   }
 );
 
-// 3. Get All Issue Reports (Superadmin Only with Filtering, Search & Pagination)
+// 3. Get All Issue Reports (Scoped per role with Filtering, Search & Pagination)
 router.get(
   '/',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
       const {
         status,
         priority,
         organizationId,
+        targetLevel,
         q,
         page = '1',
         limit = '15',
@@ -286,6 +268,36 @@ router.get(
 
       const where: any = {};
 
+      if (user.role === Role.PLATFORM_ADMIN) {
+        // Platform Admin ONLY sees issues explicitly forwarded/escalated to Platform Admin
+        where.targetLevel = 'PLATFORM_ADMIN';
+        if (organizationId && organizationId !== 'ALL') {
+          where.organizationId = String(organizationId);
+        }
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        where.organizationId = user.organizationId;
+        if (targetLevel && targetLevel !== 'ALL') {
+          where.targetLevel = String(targetLevel);
+        }
+      } else if (user.role === Role.BRANCH_ADMIN) {
+        where.organizationId = user.organizationId;
+        const adminUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { baseBranchId: true, scopedBranchId: true },
+        });
+        const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+        if (branchId) {
+          where.OR = [
+            { branchId },
+            { targetLevel: 'BRANCH_ADMIN' },
+            { reporterId: user.id },
+          ];
+        }
+      } else {
+        // EMPLOYEE or TECH_LEAD sees only their submitted reports
+        where.reporterId = user.id;
+      }
+
       if (status && status !== 'ALL') {
         where.status = status;
       }
@@ -294,19 +306,21 @@ router.get(
         where.priority = priority;
       }
 
-      if (organizationId && organizationId !== 'ALL') {
-        where.organizationId = String(organizationId);
-      }
-
       if (q && typeof q === 'string' && q.trim()) {
         const query = q.trim();
-        where.OR = [
+        const searchConditions = [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
           { reporter: { name: { contains: query, mode: 'insensitive' } } },
           { reporter: { email: { contains: query, mode: 'insensitive' } } },
           { organization: { name: { contains: query, mode: 'insensitive' } } },
         ];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+          delete where.OR;
+        } else {
+          where.OR = searchConditions;
+        }
       }
 
       const [totalCount, issues] = await Promise.all([
@@ -328,6 +342,9 @@ router.get(
             },
             resolvedBy: {
               select: { id: true, name: true, email: true },
+            },
+            messages: {
+              orderBy: { createdAt: 'asc' },
             },
           },
         }),
@@ -351,15 +368,322 @@ router.get(
   }
 );
 
-// 4. Update Issue Report Status and Resolution Note (Superadmin Only)
+// 3.5. Escalate Issue from Branch Admin to Global Organization Admin
+router.post(
+  '/:id/escalate-to-org',
+  authMiddleware,
+  requireRole([Role.BRANCH_ADMIN, Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { note } = req.body;
+
+      const existing = await prisma.issueReport.findUnique({
+        where: { id },
+        include: { organization: true },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Issue report not found.' });
+      }
+
+      if (existing.organizationId !== user.organizationId) {
+        return res.status(403).json({ error: 'Unauthorized to escalate issues from other organizations.' });
+      }
+
+      if (existing.status === IssueStatus.RESOLVED) {
+        return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
+      }
+
+      const currentDiagnostics = (existing.systemDiagnostics as Record<string, any>) || {};
+      const updated = await prisma.issueReport.update({
+        where: { id },
+        data: {
+          targetLevel: 'ORGANIZATION_ADMIN',
+          status: IssueStatus.IN_PROGRESS,
+          systemDiagnostics: {
+            ...currentDiagnostics,
+            forwardedByBranch: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
+        },
+        include: {
+          reporter: { select: { id: true, name: true, email: true, role: true } },
+          organization: { select: { id: true, name: true, code: true, subdomain: true } },
+          resolvedBy: { select: { id: true, name: true, email: true } },
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
+      // Add system message capturing escalation
+      const msgContent = note && typeof note === 'string' && note.trim()
+        ? `[Escalated to Global Org Admin] ${note.trim()}`
+        : `[Escalated to Global Organization Administration by Branch Admin ${user.name}]`;
+
+      await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: msgContent,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: user.organizationId,
+          actorUserId: user.id,
+          action: 'ESCALATE_ISSUE_TO_ORG',
+          entityType: 'IssueReport',
+          entityId: id,
+          metadata: { note: msgContent },
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Issue escalated to Global Organization Administration.',
+        issue: updated,
+      });
+    } catch (error: any) {
+      console.error('Failed to escalate issue to organization:', error);
+      return res.status(500).json({ error: error.message || 'Failed to escalate issue.' });
+    }
+  }
+);
+
+// 3.6. Escalate Issue from Global Organization Admin to Platform Superadmin (Exclusive Tenant Gateway)
+router.post(
+  '/:id/escalate-to-platform',
+  authMiddleware,
+  requireRole([Role.ORGANIZATION_ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { note } = req.body;
+
+      const existing = await prisma.issueReport.findUnique({
+        where: { id },
+        include: { organization: true, reporter: true },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Issue report not found.' });
+      }
+
+      if (existing.organizationId !== user.organizationId) {
+        return res.status(403).json({ error: 'Unauthorized to escalate issues from other organizations.' });
+      }
+
+      if (existing.status === IssueStatus.RESOLVED) {
+        return res.status(400).json({ error: 'Cannot escalate a resolved issue.' });
+      }
+
+      const currentDiagnostics = (existing.systemDiagnostics as Record<string, any>) || {};
+      const updated = await prisma.issueReport.update({
+        where: { id },
+        data: {
+          targetLevel: 'PLATFORM_ADMIN',
+          status: IssueStatus.IN_PROGRESS,
+          systemDiagnostics: {
+            ...currentDiagnostics,
+            forwardedBy: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              forwardedAt: new Date().toISOString(),
+            },
+          },
+        },
+        include: {
+          reporter: { select: { id: true, name: true, email: true, role: true } },
+          organization: { select: { id: true, name: true, code: true, subdomain: true } },
+          resolvedBy: { select: { id: true, name: true, email: true } },
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
+      // Add system message documenting platform escalation
+      const msgContent = note && typeof note === 'string' && note.trim()
+        ? `[Escalated to Platform Superadmin] ${note.trim()}`
+        : `[Escalated to Platform Superadmin by Organization Admin ${user.name}]`;
+
+      await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: msgContent,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          organizationId: user.organizationId,
+          actorUserId: user.id,
+          action: 'ESCALATE_ISSUE_TO_PLATFORM',
+          entityType: 'IssueReport',
+          entityId: id,
+          metadata: { note: msgContent },
+        },
+      });
+
+      // Dispatch notification to Platform Superadmin
+      EmailService.sendIssueNotification({
+        issueId: updated.id,
+        title: `[ESCALATED] ${updated.title}`,
+        description: `${msgContent}\n\nOriginal Description:\n${updated.description}`,
+        category: updated.category,
+        priority: updated.priority,
+        reporterName: updated.reporter.name,
+        reporterEmail: updated.reporter.email,
+        reporterRole: updated.reporter.role,
+        organizationName: existing.organization.name,
+        organizationSubdomain: existing.organization.subdomain,
+        screenshotUrl: updated.screenshotUrl,
+        clientVersion: updated.clientVersion,
+        deviceInfo: updated.deviceInfo,
+        systemDiagnostics: null,
+        diagnosticsFileUrl: null,
+        diagnosticsText: null,
+        createdAt: updated.createdAt,
+      }).catch((err) => console.error('Error dispatching platform escalation notification:', err));
+
+      return res.json({
+        success: true,
+        message: 'Issue escalated to Platform Superadmin.',
+        issue: updated,
+      });
+    } catch (error: any) {
+      console.error('Failed to escalate issue to platform superadmin:', error);
+      return res.status(500).json({ error: error.message || 'Failed to escalate issue.' });
+    }
+  }
+);
+
+// Helper to verify issue access permission
+async function verifyIssueAccess(issueId: string, user: { id: string; role: Role; organizationId: string }) {
+  const issue = await prisma.issueReport.findUnique({
+    where: { id: issueId },
+    include: { organization: true },
+  });
+  if (!issue) return { error: 'Issue not found', status: 404, issue: null };
+
+  if (user.role === Role.PLATFORM_ADMIN) return { error: null, issue };
+
+  if (issue.organizationId !== user.organizationId) {
+    return { error: 'Access denied: different organization', status: 403, issue: null };
+  }
+
+  if (user.role === Role.ORGANIZATION_ADMIN) return { error: null, issue };
+
+  if (user.role === Role.BRANCH_ADMIN) {
+    const adminUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { baseBranchId: true, scopedBranchId: true },
+    });
+    const branchId = adminUser?.scopedBranchId || adminUser?.baseBranchId;
+    if (!branchId || issue.branchId === branchId || issue.targetLevel === 'BRANCH_ADMIN' || issue.reporterId === user.id) {
+      return { error: null, issue };
+    }
+    return { error: 'Access denied: issue is outside your branch', status: 403, issue: null };
+  }
+
+  // EMPLOYEE / TECH_LEAD can only access if they are the reporter
+  if (issue.reporterId === user.id) {
+    return { error: null, issue };
+  }
+
+  return { error: 'Access denied to this issue report', status: 403, issue: null };
+}
+
+// 3.7. Get Messages for an Issue (Threaded Discussion)
+router.get(
+  '/:id/messages',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+
+      const { error, status } = await verifyIssueAccess(id, user);
+      if (error) {
+        return res.status(status || 403).json({ error });
+      }
+
+      const messages = await prisma.issueMessage.findMany({
+        where: { issueReportId: id },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      return res.json({ messages });
+    } catch (err: any) {
+      console.error('Failed to fetch issue messages:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch messages' });
+    }
+  }
+);
+
+// 3.8. Post a Message to an Issue Discussion Thread
+router.post(
+  '/:id/messages',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { message } = req.body;
+
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ error: 'Message text is required.' });
+      }
+
+      const { error, status } = await verifyIssueAccess(id, user);
+      if (error) {
+        return res.status(status || 403).json({ error });
+      }
+
+      const newMessage = await prisma.issueMessage.create({
+        data: {
+          issueReportId: id,
+          senderId: user.id,
+          senderName: user.name,
+          senderRole: user.role,
+          message: message.trim(),
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: newMessage,
+      });
+    } catch (err: any) {
+      console.error('Failed to post issue message:', err);
+      return res.status(500).json({ error: err.message || 'Failed to send message' });
+    }
+  }
+);
+
+// 4. Update Issue Report Status, Resolution Note, and Commendation
 router.patch(
   '/:id/status',
   authMiddleware,
-  requireRole([Role.PLATFORM_ADMIN]),
+  requireRole([Role.PLATFORM_ADMIN, Role.ORGANIZATION_ADMIN, Role.BRANCH_ADMIN]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const user = req.user!;
       const { id } = req.params;
-      const { status, resolutionNote } = req.body;
+      const { status, resolutionNote, commendationNote } = req.body;
 
       if (!status || !Object.values(IssueStatus).includes(status)) {
         return res.status(400).json({ error: 'Valid status (OPEN, IN_PROGRESS, RESOLVED) is required.' });
@@ -367,20 +691,40 @@ router.patch(
 
       const existing = await prisma.issueReport.findUnique({
         where: { id },
+        include: { organization: true },
       });
 
       if (!existing) {
         return res.status(404).json({ error: 'Issue report not found.' });
       }
 
+      // Check organization governance and permissions
+      if (user.role === Role.BRANCH_ADMIN) {
+        if (existing.organizationId !== user.organizationId) {
+          return res.status(403).json({ error: 'Access denied: issue belongs to another organization.' });
+        }
+        if (existing.organization.allowBranchIssueResolution === false) {
+          return res.status(403).json({ error: 'Branch issue resolution is disabled by organization governance policy.' });
+        }
+      } else if (user.role === Role.ORGANIZATION_ADMIN) {
+        if (existing.organizationId !== user.organizationId) {
+          return res.status(403).json({ error: 'Access denied: issue belongs to another organization.' });
+        }
+      }
+
       const isResolving = status === IssueStatus.RESOLVED;
+      const trimmedCommendation = commendationNote && typeof commendationNote === 'string' && commendationNote.trim()
+        ? commendationNote.trim()
+        : null;
 
       const updated = await prisma.issueReport.update({
         where: { id },
         data: {
           status,
           resolutionNote: resolutionNote !== undefined ? String(resolutionNote).trim() : existing.resolutionNote,
-          resolvedById: isResolving ? req.user!.id : (status === IssueStatus.OPEN ? null : existing.resolvedById),
+          resolvedById: isResolving ? user.id : (status === IssueStatus.OPEN ? null : existing.resolvedById),
+          commendationNote: isResolving ? (trimmedCommendation || existing.commendationNote) : existing.commendationNote,
+          commendationAuthor: isResolving && trimmedCommendation ? user.name : existing.commendationAuthor,
         },
         include: {
           reporter: {
@@ -392,14 +736,30 @@ router.patch(
           resolvedBy: {
             select: { id: true, name: true, email: true },
           },
+          messages: {
+            orderBy: { createdAt: 'asc' },
+          },
         },
       });
+
+      // If commendation was provided upon resolution, record it in thread as well
+      if (isResolving && trimmedCommendation) {
+        await prisma.issueMessage.create({
+          data: {
+            issueReportId: id,
+            senderId: user.id,
+            senderName: user.name,
+            senderRole: user.role,
+            message: `⭐ [Admin Commendation]: "${trimmedCommendation}"`,
+          },
+        });
+      }
 
       // Audit Log status transition
       await prisma.auditLog.create({
         data: {
           organizationId: updated.organizationId,
-          actorUserId: req.user!.id,
+          actorUserId: user.id,
           action: isResolving ? 'RESOLVE_ISSUE' : 'UPDATE_ISSUE_STATUS',
           entityType: 'IssueReport',
           entityId: updated.id,
@@ -407,6 +767,7 @@ router.patch(
             previousStatus: existing.status,
             newStatus: updated.status,
             resolutionNote: updated.resolutionNote,
+            commendationNote: updated.commendationNote,
           },
         },
       });

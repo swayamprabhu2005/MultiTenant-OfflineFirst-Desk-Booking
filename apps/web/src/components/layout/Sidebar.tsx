@@ -11,13 +11,15 @@ import {
   Palette,
   ShieldCheck,
   Calendar,
+  CalendarDays,
   Menu,
   ChevronLeft,
   ShieldAlert,
-  Cpu,
+  Layers,
+  Lock,
 } from 'lucide-react';
 import { fetchApi } from '../../services/api';
-import { SystemDiagnosticsModal } from '../system/SystemDiagnosticsModal';
+import { NetworkStatusIndicator } from '../NetworkStatusIndicator';
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
@@ -27,45 +29,69 @@ export const Sidebar: React.FC = () => {
 
   const isPlatformAdmin = user?.role === 'PLATFORM_ADMIN';
   const isBranchAdmin = user?.role === 'BRANCH_ADMIN';
-  const isEmployee = user?.role === 'EMPLOYEE';
+  const isEmployee = user?.role === 'EMPLOYEE' || user?.role === 'TECH_LEAD';
+  const showOnlineStatus = isBranchAdmin || isEmployee;
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openIssuesCount, setOpenIssuesCount] = useState<number | null>(null);
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [issueCount, setIssueCount] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     if (isPlatformAdmin) {
       fetchApi<{ open: number }>('/issues/stats')
-        .then(data => setOpenIssuesCount(data.open))
+        .then(data => setIssueCount(data.open))
+        .catch(() => {});
+    } else {
+      fetchApi<{ pagination?: { totalCount?: number } }>('/issues?limit=1')
+        .then(data => {
+          const count = data.pagination?.totalCount ?? 0;
+          setIssueCount(count);
+        })
         .catch(() => {});
     }
-  }, [isPlatformAdmin]);
+  }, [user?.id, user?.role, isPlatformAdmin]);
+
+  const hasIssues = issueCount !== null && issueCount > 0;
 
   const navItems = isPlatformAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: openIssuesCount },
+        { name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount },
       ]
     : isEmployee
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
+        { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
         { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
+        ...(hasIssues ? [{ name: 'Issues', to: '/employee/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ]
     : isBranchAdmin
     ? [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-        { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
-        { name: 'Employee Directory', to: '/branch/employees', icon: Users },
+        { name: 'Reserve Workstation', to: '/employee/floor-plan', icon: MapPin },
+        { name: 'Calendar', to: '/employee/calendar', icon: CalendarDays },
+        { name: 'My Bookings', to: '/employee/my-bookings', icon: Calendar },
+        ...(activeOrg?.allowBranchFloorPlanEdit !== false && activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Floor Plan Editor', to: '/admin/floor-plans', icon: Layers }]
+          : []),
+        ...(activeOrg?.allowBranchRosterManagement !== false && activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Employee Directory', to: '/branch/employees', icon: Users }]
+          : []),
         { name: 'Audit Logs', to: '/branch/audit', icon: ShieldCheck },
+        ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ]
     : [
         { name: 'Dashboard', to: '/', icon: LayoutDashboard },
         { name: 'Workspace Setup', to: '/admin/workspace-setup', icon: FileSpreadsheet },
         { name: 'Floor Plans', to: '/admin/floor-plans', icon: MapPin },
-        { name: 'Branch Admins', to: '/admin/roster', icon: Users },
+        ...(activeOrg?.operatingMode !== 'CENTRALIZED'
+          ? [{ name: 'Branch Admins', to: '/admin/roster', icon: Users }]
+          : []),
         { name: 'Workforce', to: '/admin/workforce', icon: Contact },
+        { name: 'Permissions', to: '/admin/permissions', icon: Lock },
         { name: 'Brand Settings', to: '/admin/branding', icon: Palette },
         { name: 'Audit Logs', to: '/admin/audit', icon: ShieldCheck },
+        ...(hasIssues ? [{ name: 'Issue Reports', to: '/admin/issues', icon: ShieldAlert, badge: issueCount }] : []),
       ];
 
   const headerTitle = isPlatformAdmin
@@ -150,41 +176,26 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Bottom Control Plane & System Diagnostics */}
-      {!isCollapsed ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-2">
-          <div className="font-bold text-slate-700 flex items-center justify-between">
-            <span>Control Plane</span>
-            <span className="flex items-center space-x-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] text-emerald-700 font-bold">ONLINE</span>
-            </span>
+      {/* Bottom Container: Network Status Indicator and Control Plane */}
+      <div className="mt-auto pt-4 space-y-2">
+        {showOnlineStatus && (
+          <div className="px-1">
+            <NetworkStatusIndicator inSidebar isCollapsed={isCollapsed} />
           </div>
-          <button
-            type="button"
-            onClick={() => setIsDiagnosticsOpen(true)}
-            className="w-full py-1.5 px-2 bg-white hover:bg-slate-100 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-700 text-[11px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs group"
-          >
-            <Cpu className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
-            <span>System Diagnostics</span>
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setIsDiagnosticsOpen(true)}
-          className="flex justify-center p-2 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mx-auto" 
-          title="System Diagnostics & Versions"
-        >
-          <Cpu className="w-5 h-5 text-indigo-600" />
-        </button>
-      )}
+        )}
 
-      {/* In-App System Diagnostics Modal */}
-      <SystemDiagnosticsModal
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-      />
+        {/* Bottom Control Plane Indicator */}
+        {!isCollapsed && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-1">
+            <div className="font-bold text-slate-700 flex items-center justify-between">
+              <span>Control Plane</span>
+            </div>
+            <p className="text-[11px] leading-tight text-slate-400">
+              Multi-tenant isolation &amp; dynamic white-label tokens.
+            </p>
+          </div>
+        )}
+      </div>
     </aside>
   );
 };

@@ -15,6 +15,8 @@ packages/*/dist/
 .env
 .env.local
 .env.*.local
+apps/*/.env
+apps/*/.env.local
 !.env.example
 
 # Logs & Diagnostics
@@ -75,6 +77,13 @@ Workspace_FloorPlan_*.xlsx
 
 # Internal Project Planning Documents
 plan.md
+task.md
+Issue.md
+CCI-Code-Crunch_Team_Guide.docx
+*.docx
+*.docx*
+CCI-Code-Crunch_Team-Guide*
 
 # Architectural Visual Assets (Shared Externally)
 schema.svg
+

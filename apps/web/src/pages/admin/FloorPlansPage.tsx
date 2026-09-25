@@ -2,7 +2,44 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Zap } from 'lucide-react';
+import { 
+  enqueueOutboxItem, 
+  isAppOnline, 
+  cacheFloorPlanData, 
+  getCachedFloorPlanData,
+  getPendingOutboxItems,
+} from '../../services/offlineStore';
+import { Plus, Download, Upload, Monitor, Sparkles, X, CheckCircle2, Calendar, Clock, Loader2, Trash2, UserCheck, Lock } from 'lucide-react';
+
+export interface ColleagueItem {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+  hasActiveBookingToday?: boolean;
+  reservedDeskCode?: string | null;
+}
+
+export interface DeskBookingInfo {
+  id: string;
+  userId: string;
+  slotType: string;
+  startTime: string;
+  endTime: string;
+  notes?: string | null;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    department?: string | null;
+  };
+  bookedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
 
 interface DeskItem {
   id: string;
@@ -11,6 +48,7 @@ interface DeskItem {
   hasHdmi: boolean;
   isMeetingRoom?: boolean;
   status: 'AVAILABLE' | 'BOOKED';
+  bookings?: DeskBookingInfo[];
 }
 
 interface MeetingRoomItem {
@@ -76,10 +114,78 @@ function formatFloorDisplayName(fl?: { name?: string; code?: string; floorNumber
   return 'Floor 1';
 }
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dStr: string): Date {
+  const [y, m, d] = dStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function getTodayString(): string {
+  return formatLocalDate(new Date());
+}
+
+function getFutureDateString(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return formatLocalDate(d);
+}
+
+export function getDatesInRange(startStr: string, endStr: string): string[] {
+  const dates: string[] = [];
+  const start = parseLocalDate(startStr);
+  const end = parseLocalDate(endStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return [startStr];
+  }
+  const curr = new Date(start);
+  let limit = 0;
+  while (curr <= end && limit < 31) {
+    dates.push(formatLocalDate(curr));
+    curr.setDate(curr.getDate() + 1);
+    limit++;
+  }
+  return dates.length > 0 ? dates : [startStr];
+}
+
+export function formatDateDisplay(dStr: string): { day: string; date: string; full: string } {
+  try {
+    const d = parseLocalDate(dStr);
+    const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { day, date, full: `${day}, ${date}` };
+  } catch {
+    return { day: '', date: dStr, full: dStr };
+  }
+}
+
+export function get7DaysWindow(baseDateStr: string, weekOffset: number = 0): string[] {
+  const base = parseLocalDate(baseDateStr);
+  base.setDate(base.getDate() + weekOffset * 7);
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    days.push(formatLocalDate(d));
+  }
+  return days;
+}
+
 export const FloorPlansPage: React.FC = () => {
   const { user } = useAuth();
+  const isOrgAdmin = user?.role === 'ORGANIZATION_ADMIN';
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Multi-Day Date Range Selection
+  const [startDate, setStartDate] = useState<string>(getTodayString());
+  const [endDate, setEndDate] = useState<string>(getFutureDateString(7));
+  const [modalWeekOffset, setModalWeekOffset] = useState<number>(0);
 
   // Hierarchy Selection State
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -87,13 +193,12 @@ export const FloorPlansPage: React.FC = () => {
   const [selectedFloorId, setSelectedFloorId] = useState<string>('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
 
-  // Selected Desk for Slide Drawer
+  // Selected Desk for Slide Drawer / Central Workstation Inspector
   const [activeDesk, setActiveDesk] = useState<DeskItem | null>(null);
-  const [bookingLoading, setBookingLoading] = useState(false);
 
-  // Branch Admin Mass Booking Mode State
-  const [isMassBookingMode, setIsMassBookingMode] = useState(false);
-  const [selectedDeskIds, setSelectedDeskIds] = useState<string[]>([]);
+  // Workstation Inspector State
+  const [isCancellingBooking, setIsCancellingBooking] = useState<boolean>(false);
+  const [isAssigningDedicated, setIsAssigningDedicated] = useState<boolean>(false);
 
   // In-UI Manual Cubicle State
   const [isAddCubicleOpen, setIsAddCubicleOpen] = useState(false);
@@ -105,15 +210,75 @@ export const FloorPlansPage: React.FC = () => {
   // Excel Floor Plan Import / Export State
   const [isExportingPlan, setIsExportingPlan] = useState(false);
   const [isImportingPlan, setIsImportingPlan] = useState(false);
-  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const floorPlanInputRef = useRef<HTMLInputElement>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  const [pendingDeskIds, setPendingDeskIds] = useState<string[]>([]);
+
+  const loadPendingDeskIds = async () => {
+    try {
+      const items = await getPendingOutboxItems();
+      const ids: string[] = [];
+      for (const item of items) {
+        if (item.action === 'CREATE_BOOKING' && item.payload?.deskId) {
+          ids.push(item.payload.deskId);
+        } else if (item.action === 'BULK_BOOKING' && Array.isArray(item.payload?.deskIds)) {
+          ids.push(...item.payload.deskIds);
+        }
+      }
+      setPendingDeskIds(ids);
+    } catch {
+      setPendingDeskIds([]);
+    }
+  };
+
+  const initHierarchySelection = (branchList: BranchItem[]) => {
+    if (branchList.length === 0) return;
+    const currBranch = branchList.find((b) => b.id === selectedBranchId) || branchList[0];
+    setSelectedBranchId(currBranch.id);
+
+    if (currBranch.buildings && currBranch.buildings.length > 0) {
+      const currBld = currBranch.buildings.find((bld) => bld.id === selectedBuildingId) || currBranch.buildings[0];
+      setSelectedBuildingId(currBld.id);
+
+      if (currBld.floors && currBld.floors.length > 0) {
+        const currFl = currBld.floors.find((fl) => fl.id === selectedFloorId) || currBld.floors[0];
+        setSelectedFloorId(currFl.id);
+
+        if (currFl.sections && currFl.sections.length > 0) {
+          const currSec = currFl.sections.find((sec) => sec.id === selectedSectionId) || currFl.sections[0];
+          setSelectedSectionId(currSec.id);
+        }
+      }
+    }
+  };
 
   // Load Hierarchy
   const loadHierarchy = async () => {
+    await loadPendingDeskIds();
     try {
       setLoading(true);
-      const data = await fetchApi<BranchItem[]>('/workspace/hierarchy');
+      const cacheKey = `admin_hierarchy_${user?.scopedBranchId || 'all'}`;
+
+      if (!isAppOnline()) {
+        const cached = await getCachedFloorPlanData(cacheKey);
+        if (cached && cached.length > 0) {
+          setBranches(cached);
+          initHierarchySelection(cached);
+          setActionNotice({
+            type: 'info',
+            text: 'Operating in Offline Mode — viewing cached architectural floor plan.',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+      });
+      const data = await fetchApi<BranchItem[]>(`/workspace/hierarchy?${params.toString()}`);
       const allBranches = data || [];
       const scopedBranches =
         user?.role === 'BRANCH_ADMIN' && user?.scopedBranchId
@@ -122,26 +287,22 @@ export const FloorPlansPage: React.FC = () => {
 
       setBranches(scopedBranches);
 
-      if (scopedBranches && scopedBranches.length > 0) {
-        const firstBranch = scopedBranches[0];
-        setSelectedBranchId(firstBranch.id);
-
-        if (firstBranch.buildings.length > 0) {
-          const firstBld = firstBranch.buildings[0];
-          setSelectedBuildingId(firstBld.id);
-
-          if (firstBld.floors.length > 0) {
-            const firstFl = firstBld.floors[0];
-            setSelectedFloorId(firstFl.id);
-
-            if (firstFl.sections.length > 0) {
-              setSelectedSectionId(firstFl.sections[0].id);
-            }
-          }
-        }
+      if (scopedBranches.length > 0) {
+        cacheFloorPlanData(cacheKey, scopedBranches);
+        initHierarchySelection(scopedBranches);
       }
     } catch (err) {
       console.error('Failed to load workspace hierarchy:', err);
+      const cacheKey = `admin_hierarchy_${user?.scopedBranchId || 'all'}`;
+      const cached = await getCachedFloorPlanData(cacheKey);
+      if (cached && cached.length > 0) {
+        setBranches(cached);
+        initHierarchySelection(cached);
+        setActionNotice({
+          type: 'info',
+          text: 'Network offline — loaded cached architectural floor plan.',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -149,103 +310,120 @@ export const FloorPlansPage: React.FC = () => {
 
   useEffect(() => {
     loadHierarchy();
-  }, [user?.role, user?.scopedBranchId]);
+  }, [user?.role, user?.scopedBranchId, startDate, endDate]);
+
+  useEffect(() => {
+    const handleOutboxChange = () => {
+      loadPendingDeskIds();
+    };
+    window.addEventListener('offline-outbox-updated', handleOutboxChange);
+    window.addEventListener('offline-sync-completed', handleOutboxChange);
+    return () => {
+      window.removeEventListener('offline-outbox-updated', handleOutboxChange);
+      window.removeEventListener('offline-sync-completed', handleOutboxChange);
+    };
+  }, []);
 
   const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
   const currentBuilding = currentBranch?.buildings.find(bld => bld.id === selectedBuildingId) || currentBranch?.buildings[0];
   const currentFloor = currentBuilding?.floors.find(fl => fl.id === selectedFloorId) || currentBuilding?.floors[0];
   const currentSection = currentFloor?.sections.find(sec => sec.id === selectedSectionId) || currentFloor?.sections[0];
 
-  // Book Desk Action
-  const handleBookDesk = async (deskId: string) => {
-    try {
-      setBookingLoading(true);
-      await fetchApi('/workspace/book-desk', {
-        method: 'POST',
-        body: JSON.stringify({ deskId }),
-      });
-      // Refresh hierarchy
-      await loadHierarchy();
-      if (activeDesk && activeDesk.id === deskId) {
-        setActiveDesk({ ...activeDesk, status: 'BOOKED' });
-      }
-    } catch (err: any) {
-      alert(err.message || 'Failed to reserve desk');
-    } finally {
-      setBookingLoading(false);
-    }
+  // Open Workstation Inspector modal
+  const openDeskInspector = (desk: DeskItem) => {
+    setActiveDesk(desk);
+    setModalWeekOffset(0);
   };
 
-  // Cancel Booking Action
-  const handleCancelBooking = async (deskId: string) => {
-    try {
-      setBookingLoading(true);
-      await fetchApi('/workspace/cancel-booking', {
-        method: 'POST',
-        body: JSON.stringify({ deskId }),
-      });
-      await loadHierarchy();
-      if (activeDesk && activeDesk.id === deskId) {
-        setActiveDesk({ ...activeDesk, status: 'AVAILABLE' });
-      }
-    } catch (err: any) {
-      alert(err.message || 'Failed to cancel reservation');
-    } finally {
-      setBookingLoading(false);
-    }
-  };
 
-  // Mass Booking Actions for Branch Admin
-  const handleConfirmMassBooking = async () => {
-    if (selectedDeskIds.length === 0) return;
-    try {
-      setBookingLoading(true);
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-bookings', {
-        method: 'POST',
-        body: JSON.stringify({ deskIds: selectedDeskIds }),
+  // Handle Cancellation / Release of Reservation by Branch Admin
+  const handleReleaseReservation = async (bookingId: string) => {
+    if (!isAppOnline()) {
+      await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+        bookingId,
+        reason: 'Released by Branch Administrator (Offline)',
       });
-      await loadHierarchy();
-      const bookedCount = selectedDeskIds.length;
-      setSelectedDeskIds([]);
-      setIsMassBookingMode(false);
       setActionNotice({
         type: 'success',
-        text: res?.message || `Successfully booked ${bookedCount} workstations!`,
+        text: `Offline Mode: Release for Desk ${activeDesk?.deskCode || ''} queued in Outbox. Will sync when reconnected.`,
+      });
+      setTimeout(() => setActionNotice(null), 6000);
+      setActiveDesk(null);
+      return;
+    }
+
+    try {
+      setIsCancellingBooking(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/employee/cancel-booking', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookingId,
+          reason: 'Released by Branch Administrator',
+        }),
+      });
+
+      setActionNotice({
+        type: 'success',
+        text: res?.message || `Reservation for Desk ${activeDesk?.deskCode || ''} successfully released.`,
       });
       setTimeout(() => setActionNotice(null), 5000);
+
+      // Close modal and instantly refresh hierarchy canvas
+      setActiveDesk(null);
+      await loadHierarchy();
     } catch (err: any) {
-      setActionNotice({
-        type: 'error',
-        text: err.message || 'Failed to complete mass booking.',
-      });
+      console.error('Failed to cancel booking:', err);
+      if (!isAppOnline() || (err?.message && err.message.toLowerCase().includes('failed to fetch'))) {
+        await enqueueOutboxItem('CANCEL_BOOKING', '/employee/cancel-booking', {
+          bookingId,
+          reason: 'Released by Branch Administrator (Offline fallback)',
+        });
+        setActionNotice({
+          type: 'success',
+          text: `Connection lost: Desk release saved in Outbox for automatic synchronization.`,
+        });
+        setTimeout(() => setActionNotice(null), 6000);
+        setActiveDesk(null);
+      } else {
+        setActionNotice({
+          type: 'error',
+          text: err.message || 'Failed to release workstation reservation.',
+        });
+        setTimeout(() => setActionNotice(null), 5000);
+      }
     } finally {
-      setBookingLoading(false);
+      setIsCancellingBooking(false);
     }
   };
 
-  const handleReleaseMassBooking = async () => {
-    if (selectedDeskIds.length === 0) return;
+  const handleReleaseDedicated = async () => {
+    if (!activeDesk) return;
     try {
-      setBookingLoading(true);
-      const res = await fetchApi<{ success: boolean; message: string }>('/employee/bulk-cancel', {
+      setIsAssigningDedicated(true);
+      const res = await fetchApi<{ success: boolean; message: string }>('/branch-roster/assign-dedicated', {
         method: 'POST',
-        body: JSON.stringify({ deskIds: selectedDeskIds }),
+        body: JSON.stringify({
+          deskId: activeDesk.id,
+          release: true,
+        }),
       });
-      await loadHierarchy();
-      setSelectedDeskIds([]);
-      setIsMassBookingMode(false);
+
       setActionNotice({
         type: 'success',
-        text: res?.message || 'Successfully released selected workstations.',
+        text: res?.message || `Dedicated assignment for workstation ${activeDesk.deskCode} released successfully.`,
       });
       setTimeout(() => setActionNotice(null), 5000);
+      setActiveDesk(null);
+      await loadHierarchy();
     } catch (err: any) {
+      console.error('Failed to release dedicated desk:', err);
       setActionNotice({
         type: 'error',
-        text: err.message || 'Failed to release selected workstations.',
+        text: err.message || 'Failed to release dedicated workstation.',
       });
+      setTimeout(() => setActionNotice(null), 5000);
     } finally {
-      setBookingLoading(false);
+      setIsAssigningDedicated(false);
     }
   };
 
@@ -479,10 +657,10 @@ export const FloorPlansPage: React.FC = () => {
 
   const deskHeightClass =
     numColumns >= 5
-      ? 'h-11 sm:h-12'
+      ? 'min-h-[58px] sm:min-h-[64px]'
       : numColumns >= 3
-      ? 'h-13 sm:h-14'
-      : 'h-15 sm:h-16';
+      ? 'min-h-[64px] sm:min-h-[70px]'
+      : 'min-h-[70px] sm:min-h-[76px]';
 
   const renderPod = (podIdx: number, title: string) => {
     const podDesks = podClusters[podIdx] || [];
@@ -504,43 +682,90 @@ export const FloorPlansPage: React.FC = () => {
         <div className="grid grid-cols-2 gap-2">
           {podDesks.map((desk, slotIdx) => {
             const hasHdmi = isDeskHdmi(podIdx, slotIdx);
-            const isAvailable = desk.status === 'AVAILABLE';
+            const activeBooking = desk.bookings && desk.bookings.length > 0 ? desk.bookings[0] : null;
+            const hasMyBooking = desk.bookings ? desk.bookings.some(b => b.userId === user?.id) : activeBooking?.userId === user?.id;
+            const dedicatedBooking = desk.bookings?.find(b => b.slotType === 'DEDICATED');
+            const isDedicated = !!dedicatedBooking;
+            const isBooked = !!activeBooking || desk.status === 'BOOKED' || isDedicated;
+            const isPendingSync = pendingDeskIds.includes(desk.id);
+            const isAvailable = !isBooked && !isPendingSync;
+            const isMine = !!hasMyBooking && !isPendingSync;
             const isSelected = activeDesk?.id === desk.id;
-            const isMassSelected = selectedDeskIds.includes(desk.id);
             return (
               <button
                 key={desk.id}
-                onClick={() => {
-                  if (isMassBookingMode) {
-                    if (isMassSelected) {
-                      setSelectedDeskIds(selectedDeskIds.filter((id) => id !== desk.id));
-                    } else {
-                      setSelectedDeskIds([...selectedDeskIds, desk.id]);
-                    }
-                  } else {
-                    setActiveDesk({ ...desk, hasHdmi });
-                  }
-                }}
-                className={`${deskHeightClass} rounded-xl border-2 font-bold p-1 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs ${
-                  isMassSelected
-                    ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
-                    : isSelected
+                onClick={() => openDeskInspector({ ...desk, hasHdmi })}
+                className={`${deskHeightClass} rounded-xl border-2 font-bold p-1.5 flex flex-col items-center justify-between transition-all duration-150 cursor-pointer shadow-xs overflow-hidden min-w-0 ${
+                  isSelected
                     ? 'ring-3 ring-blue-500 scale-105 z-10'
                     : 'hover:scale-102 hover:shadow-sm'
                 } ${
-                  isAvailable
-                    ? isMassSelected ? '' : 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
-                    : isMassSelected ? '' : 'bg-red-100/90 border-red-300 text-red-800'
+                  isDedicated
+                    ? 'bg-amber-50/90 border-amber-500 text-amber-950 hover:bg-amber-100'
+                    : isPendingSync
+                    ? 'bg-amber-100/90 border-amber-400 text-amber-900 hover:bg-amber-200'
+                    : isMine
+                    ? 'bg-blue-100/90 border-blue-500 text-blue-900 hover:bg-blue-200'
+                    : isAvailable
+                    ? 'bg-emerald-100/90 border-emerald-400 text-emerald-900 hover:bg-emerald-200'
+                    : 'bg-red-100/90 border-red-300 text-red-800'
                 }`}
               >
-                <span className="text-[11px] font-black">{desk.deskCode}</span>
-                {hasHdmi ? (
-                  <span className="text-[8.5px] px-1 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono font-bold">
-                    HDMI
+                {/* Line 1: Cubicle Code */}
+                <div className="w-full flex items-center justify-center">
+                  <span className="text-[11px] font-mono font-black tracking-tight text-center truncate">
+                    {desk.deskCode}
                   </span>
-                ) : (
-                  <span className="text-[8.5px] text-slate-400 font-mono">STD</span>
-                )}
+                </div>
+
+                {/* Line 2: PC Station Icon / Standard workstation dot / Sync Pending / Lock */}
+                <div className="flex items-center justify-center h-4 my-0.5">
+                  {isDedicated ? (
+                    <span title={`Fixed Dedicated Workstation: ${dedicatedBooking?.user?.name || 'Executive'}`} className="text-amber-700 flex items-center justify-center">
+                      <Lock className="w-3.5 h-3.5" />
+                    </span>
+                  ) : isPendingSync ? (
+                    <span title="Offline Booking Pending Sync" className="text-amber-600 flex items-center justify-center">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    </span>
+                  ) : hasHdmi ? (
+                    <span
+                      title="PC Station (HDMI Equipped Monitor)"
+                      className="text-emerald-600 flex items-center justify-center"
+                    >
+                      <Monitor className="w-3.5 h-3.5" />
+                    </span>
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  )}
+                </div>
+
+                {/* Line 3: Standardized Status Label */}
+                <div className="w-full flex items-center justify-center">
+                  <span
+                    className={`text-[9px] font-bold tracking-tight uppercase truncate text-center ${
+                      isDedicated
+                        ? 'text-amber-900 font-extrabold'
+                        : isPendingSync
+                        ? 'text-amber-800 font-extrabold'
+                        : isMine
+                        ? 'text-blue-700'
+                        : isAvailable
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
+                    }`}
+                  >
+                    {isDedicated
+                      ? `Fixed ${dedicatedBooking?.user?.name?.split(' ')[0] || 'Exec'}`
+                      : isPendingSync
+                      ? 'Sync Pending'
+                      : isMine
+                      ? 'Your Desk'
+                      : isAvailable
+                      ? 'Free'
+                      : 'Booked'}
+                  </span>
+                </div>
               </button>
             );
           })}
@@ -567,6 +792,8 @@ export const FloorPlansPage: React.FC = () => {
           className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs ${
             actionNotice.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : actionNotice.type === 'info'
+              ? 'bg-amber-50 text-amber-900 border border-amber-200'
               : 'bg-red-50 text-red-800 border border-red-200'
           }`}
         >
@@ -588,16 +815,41 @@ export const FloorPlansPage: React.FC = () => {
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               FACILITY EXPLORER • STRICT NO-SVG ENGINE
             </div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 mt-0.5">
-              <span>Architectural Floor Plan</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                {currentSection?.name || 'Overview'}
-              </span>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">
+              Architectural Floor Plan
             </h1>
           </div>
 
           {/* Action Buttons & Legend (Aligned Right) */}
           <div className="flex flex-wrap items-center justify-end gap-3.5 lg:ml-auto">
+            {/* Multi-Day Date Range Picker */}
+            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+              <div className="flex items-center space-x-1.5 px-2">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase">Range:</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="date"
+                  min={getTodayString()}
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    if (e.target.value > endDate) setEndDate(e.target.value);
+                  }}
+                  className="bg-white text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-400">&rarr;</span>
+                <input
+                  type="date"
+                  min={startDate || getTodayString()}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-white text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                />
+              </div>
+            </div>
+
             {/* Legend */}
             <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <div className="flex items-center gap-1.5">
@@ -606,42 +858,30 @@ export const FloorPlansPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-md bg-red-100 border border-red-300 inline-block" />
-                <span>Reserved</span>
+                <span>Booked</span>
               </div>
+              {!isOrgAdmin && (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-400 inline-block" />
+                    <span>Your Desk</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-md bg-amber-100 border border-amber-400 inline-block" />
+                    <span>Sync Pending</span>
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-1.5">
-                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-900 text-emerald-400 font-mono font-bold">
-                  HDMI
+                <span className="p-0.5 rounded bg-white border border-slate-200 text-slate-700 inline-flex items-center justify-center">
+                  <Monitor className="w-3 h-3 text-emerald-600" />
                 </span>
-                <span>Display</span>
+                <span>PC Station</span>
               </div>
             </div>
 
             {/* Action Buttons for Admins */}
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {user?.role === 'BRANCH_ADMIN' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMassBookingMode(!isMassBookingMode);
-                    setSelectedDeskIds([]);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isMassBookingMode
-                      ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400'
-                      : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'
-                  }`}
-                  title="Toggle mass cubicle selection mode for bulk booking"
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>{isMassBookingMode ? 'Exit Mass Mode' : '⚡ Mass Booking Mode'}</span>
-                  {selectedDeskIds.length > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-white text-purple-700 text-[10px] font-black flex items-center justify-center ml-0.5 shadow-xs">
-                      {selectedDeskIds.length}
-                    </span>
-                  )}
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={handleOpenAddCubicle}
@@ -798,7 +1038,7 @@ export const FloorPlansPage: React.FC = () => {
       {/* 2D ARCHITECTURAL FLOOR PLAN CANVAS (PURE HTML & CSS DIVS - ZERO SVG) */}
       <div className="bg-white rounded-3xl border-4 border-slate-900 p-6 shadow-2xl relative overflow-hidden min-h-[580px] flex flex-col justify-between">
         
-        {/* Floor Plan Header Tag & Zoom Controller */}
+        {/* Floor Plan Header Tag */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-slate-800 pb-3 mb-6">
           <div className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
             LEVEL: {formatFloorDisplayName(currentFloor).toUpperCase()} • {currentSection?.name} • COMPASS: {currentSection?.direction}
@@ -807,47 +1047,11 @@ export const FloorPlansPage: React.FC = () => {
             <div className="text-[10px] font-mono text-slate-500 font-bold">
               TOTAL STATIONS: {desks.length} | PODS: {totalPods} | ROOMS: {meetingRoom ? 1 : 0}
             </div>
-            {/* Dynamic Zoom Controller */}
-            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-300 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setZoomLevel((prev) => Math.max(70, prev - 10))}
-                disabled={zoomLevel <= 70}
-                title="Zoom Out Floor Plan"
-                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
-              >
-                −
-              </button>
-              <span className="font-mono text-[10px] font-bold text-slate-700 px-1 min-w-[38px] text-center">
-                {zoomLevel}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel((prev) => Math.min(130, prev + 10))}
-                disabled={zoomLevel >= 130}
-                title="Zoom In Floor Plan"
-                className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-xs disabled:opacity-40 cursor-pointer"
-              >
-                +
-              </button>
-              {zoomLevel !== 100 && (
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(100)}
-                  className="text-[9px] font-bold text-slate-500 hover:text-slate-900 px-1.5 py-0.5 rounded hover:bg-slate-200 cursor-pointer"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Main Floor Geometry Container with Dynamic Zoom Scale */}
-        <div
-          className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start transition-transform duration-200 origin-top"
-          style={{ transform: `scale(${zoomLevel / 100})` }}
-        >
+        {/* Main Floor Geometry Container */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
           
           {/* Main Open-Plan Desk Clusters Area (Column-Wise Expansion) */}
           <div className="lg:col-span-3">
@@ -945,44 +1149,36 @@ export const FloorPlansPage: React.FC = () => {
                       isMeetingRoom: true,
                       status: 'AVAILABLE',
                     };
-                    const isAvailable = seatDesk.status === 'AVAILABLE';
+                    const hasActiveSeatBooking = seatDesk.bookings && seatDesk.bookings.length > 0;
+                    const isSeatBooked = hasActiveSeatBooking || seatDesk.status === 'BOOKED';
+                    const isAvailable = !isSeatBooked;
                     const isSelected = activeDesk?.id === seatDesk.id;
-                    const isMassSelected = selectedDeskIds.includes(seatDesk.id);
+                    const bookedSeatUser = seatDesk.bookings?.[0]?.user || seatDesk.bookings?.[0]?.bookedByUser;
 
                     return (
                       <button
                         key={seatDesk.id}
                         type="button"
-                        onClick={() => {
-                          if (isMassBookingMode) {
-                            if (isMassSelected) {
-                              setSelectedDeskIds(selectedDeskIds.filter((id) => id !== seatDesk.id));
-                            } else {
-                              setSelectedDeskIds([...selectedDeskIds, seatDesk.id]);
-                            }
-                          } else {
-                            setActiveDesk(seatDesk);
-                          }
-                        }}
+                        onClick={() => openDeskInspector(seatDesk)}
                         className={`h-11 rounded-lg border-2 font-bold text-[10px] flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-xs ${
-                          isMassSelected
-                            ? 'ring-3 ring-purple-600 bg-purple-200 border-purple-600 text-purple-950 scale-105 z-10'
-                            : isSelected
+                          isSelected
                             ? 'ring-3 ring-purple-500 scale-105 z-10'
                             : 'hover:scale-102 hover:shadow-sm'
                         } ${
                           isAvailable
-                            ? isMassSelected
-                              ? ''
-                              : 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-900'
-                            : isMassSelected
-                            ? ''
+                            ? 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-900'
                             : 'bg-red-100/90 border-red-300 text-red-800'
                         }`}
                         title={`Conference Seat ${seatDesk.deskCode} (${isAvailable ? 'Available' : 'Reserved'})`}
                       >
                         <span className="font-black">{seatDesk.deskCode}</span>
-                        {seatDesk.hasHdmi ? (
+                        {bookedSeatUser ? (
+                          <span className="text-[7.5px] font-black text-red-700 truncate max-w-[50px]" title={`Reserved by ${bookedSeatUser.name}`}>
+                            {bookedSeatUser.name.split(' ')[0]}
+                          </span>
+                        ) : isSeatBooked ? (
+                          <span className="text-[7.5px] font-black text-red-700">Booked</span>
+                        ) : seatDesk.hasHdmi ? (
                           <span className="text-[8px] text-purple-700 font-mono font-bold">HDMI</span>
                         ) : (
                           <span className="text-[8px] text-slate-400 font-mono">STD</span>
@@ -1015,116 +1211,6 @@ export const FloorPlansPage: React.FC = () => {
 
       </div>
 
-      {/* Interactive Central Glassmorphic Desk Inspector Modal */}
-      {activeDesk &&
-        createPortal(
-          <div
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setActiveDesk(null);
-            }}
-            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-          >
-            <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/80 p-6 flex flex-col justify-between space-y-6 relative animate-scale-up">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                    {activeDesk.isMeetingRoom || activeDesk.deskCode.startsWith('M-')
-                      ? 'CONFERENCE POD SEAT'
-                      : 'WORKSTATION INSPECTOR'}
-                  </span>
-                  <button
-                    onClick={() => setActiveDesk(null)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Station Badge */}
-                <div className="flex items-center space-x-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shadow-xs ${
-                    activeDesk.status === 'AVAILABLE'
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : 'bg-red-100 text-red-800 border border-red-300'
-                  }`}>
-                    {activeDesk.deskCode}
-                  </div>
-                  <div>
-                    <div className="text-sm font-black text-slate-900">
-                      Desk {activeDesk.deskCode}
-                    </div>
-                    <div className="text-xs font-semibold text-slate-500 flex items-center space-x-1.5 mt-0.5">
-                      <span className={`w-2 h-2 rounded-full ${
-                        activeDesk.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-red-500'
-                      }`} />
-                      <span>{activeDesk.status === 'AVAILABLE' ? 'Ready for Reservation' : 'Occupied / In Use'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hardware & Spec Grid */}
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Location:</span>
-                    <span className="font-bold text-slate-800">
-                      {currentBranch?.name} • {currentBuilding?.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Floor &amp; Section:</span>
-                    <span className="font-bold text-slate-800">
-                      {currentFloor?.code} • {currentSection?.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">HDMI Display:</span>
-                    <span className={`font-bold ${activeDesk.hasHdmi ? 'text-emerald-700' : 'text-slate-600'}`}>
-                      {activeDesk.hasHdmi ? '🖥️ Yes (Display Included)' : 'BYOD (No Monitor)'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-slate-500">Ergonomics:</span>
-                    <span className="font-bold text-slate-800">Standard Height Adjustable</span>
-                  </div>
-                </div>
-
-                {/* Read-Only Admin Notice or Action Buttons */}
-                {user?.role === 'ORGANIZATION_ADMIN' ? (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-[11px] leading-relaxed">
-                    <span className="font-bold text-slate-700 block mb-0.5 uppercase text-[10px] tracking-wider text-center">
-                      Administrative Oversight Mode
-                    </span>
-                    Global Organization Administrators have read-only architectural oversight across all branches. Desk booking is managed directly by branch personnel and branch administrators.
-                  </div>
-                ) : activeDesk.status === 'AVAILABLE' ? (
-                  <button
-                    onClick={() => handleBookDesk(activeDesk.id)}
-                    disabled={bookingLoading}
-                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {bookingLoading ? 'Reserving Desk...' : 'Confirm Desk Booking (8 Hours)'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleCancelBooking(activeDesk.id)}
-                    disabled={bookingLoading}
-                    className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {bookingLoading ? 'Updating Status...' : 'Cancel Reservation (Release Desk)'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setActiveDesk(null)}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all cursor-pointer"
-                >
-                  Close Window
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* Glassmorphic Add Cubicle Modal */}
       {isAddCubicleOpen &&
@@ -1284,43 +1370,282 @@ export const FloorPlansPage: React.FC = () => {
         document.body
       )}
 
-      {/* Floating Mass Booking Action Bar for Branch Admin */}
-      {isMassBookingMode && selectedDeskIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[110] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center space-x-6 animate-fade-in">
-          <div className="flex items-center space-x-2">
-            <span className="w-7 h-7 rounded-xl bg-purple-500 text-white font-black text-xs flex items-center justify-center shadow-xs">
-              {selectedDeskIds.length}
-            </span>
-            <span className="text-xs font-bold">Cubicles Selected</span>
-          </div>
 
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={handleConfirmMassBooking}
-              disabled={bookingLoading}
-              className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{bookingLoading ? 'Reserving...' : `Mass Reserve (${selectedDeskIds.length})`}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleReleaseMassBooking}
-              disabled={bookingLoading}
-              className="py-2 px-3 bg-red-700 hover:bg-red-600 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
-            >
-              Release Desks
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedDeskIds([])}
-              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
-            >
-              Clear
-            </button>
+
+      {/* Central Workstation Inspector Modal with Schedule Matrix */}
+      {activeDesk && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActiveDesk(null);
+          }}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-fade-in"
+        >
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <span className="font-mono text-xs font-black tracking-wider text-slate-500 uppercase">
+                {isOrgAdmin ? 'WORKSTATION INSPECTOR • VIEW ONLY' : 'WORKSTATION INSPECTOR • SCHEDULE MATRIX'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveDesk(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Station Identity Badge */}
+            <div className="flex items-center space-x-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center font-mono font-black text-base shadow-xs ${
+                  !activeDesk.bookings || activeDesk.bookings.length === 0
+                    ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300'
+                    : 'bg-red-100 text-red-800 border-2 border-red-300'
+                }`}
+              >
+                {activeDesk.deskCode}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-slate-900">
+                    Workstation {activeDesk.deskCode}
+                  </h3>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      !activeDesk.bookings || activeDesk.bookings.length === 0
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-red-100 text-red-800 border border-red-200'
+                    }`}
+                  >
+                    {!activeDesk.bookings || activeDesk.bookings.length === 0
+                      ? '100% Free in Range'
+                      : `Reserved (${activeDesk.bookings.length} Booking${activeDesk.bookings.length > 1 ? 's' : ''})`}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {currentBranch?.name} &bull; {currentBuilding?.name} &bull; {formatFloorDisplayName(currentFloor)} &bull; {currentSection?.name}
+                </p>
+                <div className="flex items-center space-x-3 mt-1.5 text-[11px] font-semibold text-slate-600">
+                  <span>Display: {activeDesk.hasHdmi ? '🖥️ HDMI Included' : 'None (Standard)'}</span>
+                  <span>&bull;</span>
+                  <span>Type: {activeDesk.isMeetingRoom ? 'Conference Seat' : 'Individual Workstation'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Reservation Management Banner (Direct Release Authority for Branch Admin) */}
+            {activeDesk.bookings && activeDesk.bookings.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs text-amber-950 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between font-bold text-amber-900 border-b border-amber-200/80 pb-2">
+                  <div className="flex items-center space-x-2">
+                    <UserCheck className="w-4 h-4 text-amber-700" />
+                    <span>Active Reservation(s) on Workstation</span>
+                  </div>
+                  {!isOrgAdmin && (
+                    <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-800">
+                      Admin Release Authority
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {activeDesk.bookings.map((bk) => {
+                    const bookedUser = bk.user;
+                    const proxyUser = bk.bookedByUser;
+                    const startDateDisplay = formatDateDisplay(bk.startTime.split('T')[0]).full;
+                    const endDateDisplay = formatDateDisplay(bk.endTime.split('T')[0]).full;
+                    const isSameDate = bk.startTime.split('T')[0] === bk.endTime.split('T')[0];
+
+                    return (
+                      <div
+                        key={bk.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/90 p-3 rounded-xl border border-amber-200 shadow-2xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-slate-900 text-xs">
+                              {bookedUser?.name || 'Assigned Employee'}
+                            </span>
+                            <span className="text-slate-500 text-[11px]">
+                              ({bookedUser?.email || 'No email'})
+                            </span>
+                            {bookedUser?.department && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
+                                {bookedUser.department}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-slate-600 flex items-center space-x-2">
+                            <span className="font-semibold text-amber-800">
+                              {isSameDate ? startDateDisplay : `${startDateDisplay} – ${endDateDisplay}`}
+                            </span>
+                            <span>&bull;</span>
+                            <span className="capitalize font-medium">
+                              {bk.slotType.replace('_', ' ').toLowerCase()}
+                            </span>
+                            {bk.notes && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="italic text-slate-500 truncate max-w-[200px]" title={bk.notes}>
+                                  "{bk.notes}"
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {proxyUser && proxyUser.id !== bookedUser?.id && (
+                            <div className="text-[10px] text-slate-500">
+                              Booked via proxy by: <span className="font-medium text-slate-700">{proxyUser.name}</span> ({proxyUser.email})
+                            </div>
+                          )}
+                        </div>
+
+                        {!isOrgAdmin && (
+                          <div className="shrink-0 flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleReleaseReservation(bk.id)}
+                              disabled={isCancellingBooking}
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                            >
+                              {isCancellingBooking ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Releasing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Release Desk</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Visual Day-by-Day Strip (7-Day Matrix with Week Navigation) */}
+            {(() => {
+              const modal7Days = get7DaysWindow(startDate, modalWeekOffset);
+              return (
+                <div className="space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Schedule &amp; Availability Matrix
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Green days are available. Red days with cross (<span className="text-red-500 font-bold">&times;</span>) are reserved.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      {/* 7-Day Sliding Window Week Navigator */}
+                      <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setModalWeekOffset((prev) => Math.max(0, prev - 1))}
+                          disabled={modalWeekOffset <= 0}
+                          className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs disabled:opacity-30 cursor-pointer"
+                          title="Previous 7 Days"
+                        >
+                          &larr;
+                        </button>
+                        <span className="text-[10px] font-mono font-bold text-slate-700 px-1 select-none">
+                          {formatDateDisplay(modal7Days[0]).date} – {formatDateDisplay(modal7Days[6]).date}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setModalWeekOffset((prev) => prev + 1)}
+                          className="w-6 h-6 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-black text-xs flex items-center justify-center shadow-2xs cursor-pointer"
+                          title="Next 7 Days"
+                        >
+                          &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Day Strip Horizontal Grid (Read Only) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {modal7Days.map((dStr) => {
+                      const { day, date } = formatDateDisplay(dStr);
+                      const conflictingBooking = activeDesk.bookings?.find((b) => {
+                        const bStart = b.startTime.split('T')[0];
+                        const bEnd = b.endTime.split('T')[0];
+                        return dStr >= bStart && dStr <= bEnd;
+                      });
+
+                      const isBooked = !!conflictingBooking;
+
+                      if (isBooked) {
+                        const bookedPerson = conflictingBooking?.user || conflictingBooking?.bookedByUser;
+                        return (
+                          <div
+                            key={dStr}
+                            className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-red-50/90 border-red-200 text-red-800"
+                            title={`Reserved by ${bookedPerson?.name || 'an employee'} on ${dStr}`}
+                          >
+                            <span className="text-[10px] font-bold uppercase">{day}</span>
+                            <span className="text-xs font-black">{date}</span>
+                            <div className="mt-1 flex items-center space-x-0.5 text-[9px] font-black text-red-600 truncate max-w-full">
+                              <X className="w-3 h-3 text-red-600 shrink-0" />
+                              <span className="truncate">{bookedPerson?.name.split(' ')[0] || 'Booked'}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={dStr}
+                          className="p-2 rounded-xl border flex flex-col items-center justify-center text-center select-none bg-emerald-50/70 border-emerald-300 text-emerald-900 font-bold"
+                        >
+                          <span className="text-[10px] uppercase">{day}</span>
+                          <span className="text-xs">{date}</span>
+                          <div className="mt-1 text-[9px] font-bold text-emerald-700">Free</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+              {user?.role === 'BRANCH_ADMIN' && activeDesk.bookings?.some((b) => b.slotType === 'DEDICATED') ? (
+                <button
+                  type="button"
+                  disabled={isAssigningDedicated}
+                  onClick={handleReleaseDedicated}
+                  className="px-3.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{isAssigningDedicated ? 'Releasing...' : 'Release Dedicated Desk'}</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <button
+                type="button"
+                onClick={() => setActiveDesk(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close Inspector
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

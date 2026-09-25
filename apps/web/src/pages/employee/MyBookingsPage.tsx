@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../context/TenantContext';
+import {
+  cacheMyBookings,
+  getCachedMyBookings,
+  getPendingOutboxItems,
+  isAppOnline,
+  syncOutboxQueue,
+  OutboxItem,
+} from '../../services/offlineStore';
 import {
   Calendar,
   Clock,
@@ -42,15 +51,32 @@ export interface UserSummary {
   email: string;
 }
 
+export interface BookingMeetingRoom {
+  id: string;
+  name: string;
+  capacity: number;
+  sectionName?: string;
+  floorCode?: string;
+  floorName?: string;
+  buildingName?: string;
+  branchName?: string;
+}
+
 export interface BookingRecord {
   id: string;
+  resourceType?: 'DESK' | 'MEETING_ROOM';
+  sessionType?: string;
+  title?: string | null;
+  durationMinutes?: number | null;
+  attendeesCount?: number | null;
   slotType: string;
   startTime: string;
   endTime: string;
   status: 'CONFIRMED' | 'CANCELLED';
   notes?: string | null;
   createdAt: string;
-  desk: BookingDesk;
+  desk?: BookingDesk | null;
+  meetingRoom?: BookingMeetingRoom | null;
   isProxyBooking: boolean;
   user: UserSummary;
   bookedByUser?: UserSummary | null;
@@ -68,9 +94,13 @@ export interface MyBookingsResponse {
 
 export const MyBookingsPage: React.FC = () => {
   const { user } = useAuth();
+  const { tenant } = useTenant();
+  const orgColor = tenant?.themeColor || user?.organization?.themeColor || '#16a34a';
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST' | 'CANCELLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'PAST' | 'QUEUED'>('ALL');
+  const [queuedItems, setQueuedItems] = useState<OutboxItem[]>([]);
+  const [isSyncingQueued, setIsSyncingQueued] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
@@ -89,24 +119,88 @@ export const MyBookingsPage: React.FC = () => {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
+  const loadQueuedItems = async () => {
+    try {
+      const items = await getPendingOutboxItems();
+      const bookingItems = items.filter((i) =>
+        ['CREATE_BOOKING', 'BULK_BOOKING', 'CANCEL_BOOKING'].includes(i.action)
+      );
+      setQueuedItems(bookingItems);
+    } catch {
+      setQueuedItems([]);
+    }
+  };
+
+  const handleSyncQueued = async () => {
+    if (!isAppOnline() || isSyncingQueued) return;
+    try {
+      setIsSyncingQueued(true);
+      const result = await syncOutboxQueue();
+      if (result.synced > 0) {
+        setSuccessNotice(`Successfully synchronized ${result.synced} offline transaction(s) with the server!`);
+        setTimeout(() => setSuccessNotice(null), 5000);
+      }
+      await loadQueuedItems();
+      await loadBookings();
+    } catch (err: any) {
+      console.error('Failed to sync queue:', err);
+      setErrorNotice(err.message || 'Synchronization failed.');
+    } finally {
+      setIsSyncingQueued(false);
+    }
+  };
+
   const loadBookings = async () => {
+    await loadQueuedItems();
+
+    if (!isAppOnline()) {
+      if (user?.id) {
+        const cached = await getCachedMyBookings(user.id);
+        if (cached && cached.length > 0) {
+          setBookings(cached);
+          setTotalCount(cached.length);
+          setTotalPages(1);
+          setErrorNotice(null);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     try {
       setLoading(true);
       setErrorNotice(null);
 
       const params = new URLSearchParams({
-        status: statusFilter,
+        status: statusFilter === 'QUEUED' ? 'ALL' : statusFilter,
         page: page.toString(),
         limit: '10',
       });
 
       const res = await fetchApi<MyBookingsResponse>(`/employee/my-bookings?${params.toString()}`);
-      setBookings(res?.bookings || []);
+      const serverBookings = res?.bookings || [];
+      setBookings(serverBookings);
       setTotalPages(res?.pagination?.totalPages || 1);
       setTotalCount(res?.pagination?.total || 0);
+
+      if (user?.id && serverBookings.length > 0 && statusFilter === 'ALL') {
+        cacheMyBookings(user.id, serverBookings);
+      }
     } catch (err: any) {
       console.error('Failed to load my bookings:', err);
-      setErrorNotice(err.message || 'Unable to load your bookings history.');
+      if (user?.id) {
+        const cached = await getCachedMyBookings(user.id);
+        if (cached && cached.length > 0) {
+          setBookings(cached);
+          setTotalCount(cached.length);
+          setTotalPages(1);
+          setErrorNotice(null);
+        } else {
+          setErrorNotice(err.message || 'Unable to load your bookings history.');
+        }
+      } else {
+        setErrorNotice(err.message || 'Unable to load your bookings history.');
+      }
     } finally {
       setLoading(false);
     }
@@ -116,6 +210,18 @@ export const MyBookingsPage: React.FC = () => {
     setSelectedBookingIds([]);
     loadBookings();
   }, [statusFilter, page]);
+
+  useEffect(() => {
+    const handleOutboxChange = () => {
+      loadQueuedItems();
+    };
+    window.addEventListener('offline-outbox-updated', handleOutboxChange);
+    window.addEventListener('offline-sync-completed', handleOutboxChange);
+    return () => {
+      window.removeEventListener('offline-outbox-updated', handleOutboxChange);
+      window.removeEventListener('offline-sync-completed', handleOutboxChange);
+    };
+  }, []);
 
   // Handle Bulk Multi-Select Cancellation
   const handleBulkCancel = async () => {
@@ -167,7 +273,8 @@ export const MyBookingsPage: React.FC = () => {
       });
 
       setSuccessNotice(
-        res?.message || `Reservation for Desk ${cancellingBooking.desk.deskCode} successfully cancelled.`
+        res?.message ||
+          `Reservation for ${cancellingBooking.desk?.deskCode ? `Desk ${cancellingBooking.desk.deskCode}` : (cancellingBooking.meetingRoom?.name || 'Reservation')} successfully cancelled.`
       );
       setTimeout(() => setSuccessNotice(null), 5000);
 
@@ -186,11 +293,15 @@ export const MyBookingsPage: React.FC = () => {
   const filteredBookings = bookings.filter((b) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
+    const deskCode = b.desk?.deskCode || b.meetingRoom?.name || '';
+    const branchName = b.desk?.branchName || b.meetingRoom?.branchName || '';
+    const buildingName = b.desk?.buildingName || b.meetingRoom?.buildingName || '';
+    const sectionName = b.desk?.sectionName || b.meetingRoom?.sectionName || '';
     return (
-      b.desk.deskCode.toLowerCase().includes(q) ||
-      b.desk.branchName.toLowerCase().includes(q) ||
-      b.desk.buildingName.toLowerCase().includes(q) ||
-      b.desk.sectionName.toLowerCase().includes(q) ||
+      deskCode.toLowerCase().includes(q) ||
+      branchName.toLowerCase().includes(q) ||
+      buildingName.toLowerCase().includes(q) ||
+      sectionName.toLowerCase().includes(q) ||
       b.notes?.toLowerCase().includes(q) ||
       b.user.name.toLowerCase().includes(q)
     );
@@ -211,7 +322,10 @@ export const MyBookingsPage: React.FC = () => {
         <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
         <div className="space-y-2 max-w-2xl relative z-10">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold uppercase tracking-wider text-emerald-300">
+          <div
+            style={{ color: orgColor }}
+            className="inline-flex items-center space-x-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold uppercase tracking-wider"
+          >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Reservation Management</span>
           </div>
@@ -226,7 +340,8 @@ export const MyBookingsPage: React.FC = () => {
         <div className="flex items-center space-x-3 relative z-10">
           <Link
             to="/employee/floor-plan"
-            className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-lg flex items-center space-x-2 transition-all cursor-pointer"
+            style={{ backgroundColor: orgColor }}
+            className="px-5 py-3 rounded-2xl text-white text-xs font-black shadow-lg flex items-center space-x-2 hover:opacity-95 transition-all cursor-pointer"
           >
             <MapPin className="w-4 h-4" />
             <span>New Workstation Booking</span>
@@ -257,6 +372,26 @@ export const MyBookingsPage: React.FC = () => {
           </div>
           <button onClick={() => setErrorNotice(null)} className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer">
             <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Offline Outbox Notice */}
+      {queuedItems.length > 0 && statusFilter !== 'QUEUED' && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between text-xs font-medium animate-fadeIn">
+          <div className="flex items-center space-x-2.5">
+            <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 animate-pulse" />
+            <span>
+              You have <strong>{queuedItems.length}</strong> offline desk reservation action(s) queued in local storage waiting to sync.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('QUEUED')}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center space-x-1"
+          >
+            <span>View Queued</span>
+            <span className="bg-amber-800/60 px-1.5 py-0.2 rounded-full text-[10px]">{queuedItems.length}</span>
           </button>
         </div>
       )}
@@ -310,16 +445,25 @@ export const MyBookingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setStatusFilter('CANCELLED');
+              setStatusFilter('QUEUED');
               setPage(1);
             }}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              statusFilter === 'CANCELLED'
-                ? 'bg-rose-600 text-white shadow-xs'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center space-x-1.5 ${
+              statusFilter === 'QUEUED'
+                ? 'bg-amber-500 text-white shadow-xs'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            Cancelled
+            <span>Queued / Sync Pending</span>
+            {queuedItems.length > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  statusFilter === 'QUEUED' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
+                }`}
+              >
+                {queuedItems.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -332,7 +476,7 @@ export const MyBookingsPage: React.FC = () => {
               placeholder="Search code, branch, note..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-3 py-2 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
           <button
@@ -348,7 +492,107 @@ export const MyBookingsPage: React.FC = () => {
 
       {/* Bookings Table / Card List */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
+        {statusFilter === 'QUEUED' ? (
+          queuedItems.length === 0 ? (
+            <div className="text-center py-20 px-4 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center font-bold">
+                <Clock className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-700">No Pending Offline Reservations</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                All your desk reservations are currently synchronized with the server database.
+              </p>
+            </div>
+          ) : (
+            <div className="p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
+                    <Clock className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-900">
+                      {queuedItems.length} Offline Transaction(s) Queued in Local Storage
+                    </h4>
+                    <p className="text-[11px] text-amber-700">
+                      Created while operating offline. Click Sync Now or reconnect to synchronize.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isAppOnline() || isSyncingQueued}
+                  onClick={handleSyncQueued}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs flex items-center space-x-2 transition-all cursor-pointer ${
+                    !isAppOnline()
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isSyncingQueued ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingQueued ? 'Syncing...' : isAppOnline() ? 'Sync Now' : 'Offline'}</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/75 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3.5 px-5">Action Type</th>
+                      <th className="py-3.5 px-5">Workstation Details</th>
+                      <th className="py-3.5 px-5">Requested Date(s)</th>
+                      <th className="py-3.5 px-5">Queued At</th>
+                      <th className="py-3.5 px-5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {queuedItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-amber-50/40 transition-colors">
+                        <td className="py-4 px-5">
+                          <span className="font-mono text-[11px] font-black px-2.5 py-1 rounded-xl bg-amber-100 text-amber-900 border border-amber-300">
+                            {item.action.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="font-bold text-slate-800">
+                            {item.payload?.deskCode ? `Desk ${item.payload.deskCode}` : item.payload?.deskId ? `Desk ID: ${item.payload.deskId.substring(0, 8)}...` : item.payload?.deskIds ? `${item.payload.deskIds.length} Desks (Bulk)` : 'Reservation'}
+                          </div>
+                          {item.payload?.notes && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              Note: {item.payload.notes}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="flex items-center space-x-1.5 text-slate-600 font-semibold">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span>
+                              {Array.isArray(item.payload?.bookingDates)
+                                ? item.payload.bookingDates.join(', ')
+                                : item.payload?.date || 'Today'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            Slot: {item.payload?.slotType ? item.payload.slotType.replace('_', ' ') : 'Full Day'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-5 text-slate-500 font-mono text-[11px]">
+                          {new Date(item.createdAt).toLocaleTimeString()}
+                        </td>
+                        <td className="py-4 px-5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Sync Pending</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-3">
             <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
             <span className="text-xs font-bold text-slate-500">Retrieving Reservation History...</span>
@@ -437,26 +681,34 @@ export const MyBookingsPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Workstation Desk Code */}
+                      {/* Workstation Desk Code / Meeting Room Name */}
                       <td className="py-4 px-5">
                         <div className="flex items-center space-x-2">
-                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
-                            {b.desk.deskCode}
+                          <span className={`font-mono font-black text-sm px-2.5 py-1 rounded-xl border ${
+                            b.meetingRoom
+                              ? 'text-purple-900 bg-purple-50 border-purple-200'
+                              : 'text-slate-900 bg-slate-100 border-slate-200'
+                          }`}>
+                            {b.meetingRoom ? b.meetingRoom.name : b.desk?.deskCode || 'N/A'}
                           </span>
-                          {b.desk.hasHdmi && (
+                          {b.desk?.hasHdmi && (
                             <span title="HDMI Equipped Monitor" className="p-1 rounded-lg bg-emerald-50 text-emerald-700">
                               <Monitor className="w-3.5 h-3.5" />
                             </span>
                           )}
-                          {b.desk.isMeetingRoom && (
+                          {b.meetingRoom ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">
+                              Meeting Room ({b.meetingRoom.capacity} seats)
+                            </span>
+                          ) : b.desk?.isMeetingRoom ? (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold">
                               Meeting Seat
                             </span>
-                          )}
+                          ) : null}
                         </div>
-                        {b.notes && (
-                          <span className="text-[10px] text-slate-400 block mt-1 truncate max-w-xs" title={b.notes}>
-                            Note: {b.notes}
+                        {(b.title || b.notes) && (
+                          <span className="text-[10px] text-slate-400 block mt-1 truncate max-w-xs" title={b.title || b.notes || undefined}>
+                            {b.title ? `${b.title} ` : ''}{b.notes ? `(${b.notes})` : ''}
                           </span>
                         )}
                       </td>
@@ -465,12 +717,12 @@ export const MyBookingsPage: React.FC = () => {
                       <td className="py-4 px-5">
                         <div className="font-bold text-slate-800 flex items-center space-x-1">
                           <Building2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                          <span>{b.desk.branchName}</span>
+                          <span>{b.desk?.branchName || b.meetingRoom?.branchName || 'Facility'}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5">
                           <Layers className="w-3 h-3 text-slate-300 flex-shrink-0" />
                           <span>
-                            {b.desk.buildingName} &bull; {b.desk.floorName} &bull; {b.desk.sectionName}
+                            {b.desk?.buildingName || b.meetingRoom?.buildingName || ''} &bull; {b.desk?.floorName || b.meetingRoom?.floorName || ''} &bull; {b.desk?.sectionName || b.meetingRoom?.sectionName || ''}
                           </span>
                         </div>
                       </td>
@@ -561,7 +813,7 @@ export const MyBookingsPage: React.FC = () => {
         )}
 
         {/* Pagination Footer */}
-        {totalPages > 1 && (
+        {statusFilter !== 'QUEUED' && totalPages > 1 && (
           <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
             <span className="text-xs text-slate-500">
               Showing page <span className="font-bold text-slate-700">{page}</span> of{' '}
@@ -614,9 +866,11 @@ export const MyBookingsPage: React.FC = () => {
 
             <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-100 space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Desk Code:</span>
+                <span className="text-slate-500 font-semibold">
+                  {cancellingBooking.meetingRoom ? 'Meeting Room:' : 'Desk Code:'}
+                </span>
                 <span className="font-extrabold text-slate-900 font-mono">
-                  {cancellingBooking.desk.deskCode}
+                  {cancellingBooking.meetingRoom ? cancellingBooking.meetingRoom.name : cancellingBooking.desk?.deskCode || 'N/A'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -629,7 +883,7 @@ export const MyBookingsPage: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-slate-500 font-semibold">Branch Facility:</span>
                 <span className="font-extrabold text-slate-800">
-                  {cancellingBooking.desk.branchName}
+                  {cancellingBooking.desk?.branchName || cancellingBooking.meetingRoom?.branchName || 'Facility'}
                 </span>
               </div>
             </div>
